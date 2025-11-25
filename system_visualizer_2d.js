@@ -56,29 +56,38 @@ if (!canvas2d) {
     { label: "generation", color: "#34d399" }
   ];
 
+  function drawRoundedRect(x, y, width, height, radius) {
+    if (ctx2d.roundRect) {
+      ctx2d.roundRect(x, y, width, height, radius);
+      return;
+    }
+
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx2d.beginPath();
+    ctx2d.moveTo(x + r, y);
+    ctx2d.lineTo(x + width - r, y);
+    ctx2d.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx2d.lineTo(x + width, y + height - r);
+    ctx2d.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx2d.lineTo(x + r, y + height);
+    ctx2d.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx2d.lineTo(x, y + r);
+    ctx2d.quadraticCurveTo(x, y, x + r, y);
+  }
+
   function drawCore() {
     const x = w * core.x;
     const y = h * core.y;
 
-    const glow = ctx2d.createRadialGradient(x, y, 0, x, y, core.r * 3.5);
-    glow.addColorStop(0, "rgba(200, 220, 255, 0.55)");
-    glow.addColorStop(0.5, "rgba(100, 150, 255, 0.18)");
-    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-    ctx2d.fillStyle = glow;
+    ctx2d.fillStyle = "rgba(226,232,240,0.92)";
     ctx2d.beginPath();
-    ctx2d.arc(x, y, core.r * 3.5, 0, Math.PI * 2);
+    drawRoundedRect(x - core.r, y - core.r, core.r * 2, core.r * 2, 10);
     ctx2d.fill();
 
-    ctx2d.fillStyle = "rgba(255, 255, 255, 0.94)";
-    ctx2d.beginPath();
-    ctx2d.arc(x, y, core.r, 0, Math.PI * 2);
-    ctx2d.fill();
-
-    ctx2d.strokeStyle = `rgba(100, 200, 255, ${0.35 + 0.35 * Math.sin(t * 0.01)})`;
+    ctx2d.strokeStyle = `rgba(100, 200, 255, ${0.3 + 0.3 * Math.sin(t * 0.01)})`;
     ctx2d.lineWidth = 2;
     ctx2d.beginPath();
-    ctx2d.arc(x, y, core.r * 1.4, 0, Math.PI * 2);
+    drawRoundedRect(x - core.r * 1.4, y - core.r * 1.4, core.r * 2.8, core.r * 2.8, 12);
     ctx2d.stroke();
   }
 
@@ -91,18 +100,9 @@ if (!canvas2d) {
       const x = cx + Math.cos(angle) * (w * n.orbit);
       const y = cy + Math.sin(angle) * (h * n.orbit);
 
-      const nodeGlow = ctx2d.createRadialGradient(x, y, 0, x, y, n.size * 4.5);
-      nodeGlow.addColorStop(0, `hsla(${n.hue}, 100%, 70%, 0.7)`);
-      nodeGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-      ctx2d.fillStyle = nodeGlow;
+      ctx2d.fillStyle = `hsla(${n.hue}, 85%, 70%, 0.9)`;
       ctx2d.beginPath();
-      ctx2d.arc(x, y, n.size * 4.5, 0, Math.PI * 2);
-      ctx2d.fill();
-
-      ctx2d.fillStyle = `hsla(${n.hue}, 95%, 75%, 1)`;
-      ctx2d.beginPath();
-      ctx2d.arc(x, y, n.size, 0, Math.PI * 2);
+      drawRoundedRect(x - n.size, y - n.size, n.size * 2, n.size * 2, 6);
       ctx2d.fill();
 
       if (i % 2 === 0) {
@@ -139,7 +139,8 @@ if (!canvas2d) {
 
     ctx2d.fillStyle = `hsla(${vectorDB.hue}, 90%, 70%, 0.9)`;
     ctx2d.beginPath();
-    ctx2d.arc(x, y, vectorDB.r * 0.6, 0, Math.PI * 2);
+    const vSize = vectorDB.r * 0.6;
+    drawRoundedRect(x - vSize, y - vSize, vSize * 2, vSize * 2, 8);
     ctx2d.fill();
 
     ctx2d.fillStyle = "rgba(148,163,184,0.9)";
@@ -173,7 +174,8 @@ if (!canvas2d) {
 
       ctx2d.fillStyle = channel.color;
       ctx2d.beginPath();
-      ctx2d.arc(x, y, p.size + burst * 0.6, 0, Math.PI * 2);
+      const marker = p.size + burst * 0.6;
+      drawRoundedRect(x - marker, y - marker, marker * 2, marker * 2, 4);
       ctx2d.fill();
     });
   }
@@ -185,7 +187,7 @@ if (!canvas2d) {
     ctx2d.strokeStyle = "rgba(99,102,241,0.4)";
     ctx2d.lineWidth = 1;
     ctx2d.beginPath();
-    ctx2d.roundRect(0, 0, 160, 70, 10);
+    drawRoundedRect(0, 0, 160, 70, 10);
     ctx2d.fill();
     ctx2d.stroke();
 

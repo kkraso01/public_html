@@ -31,6 +31,11 @@
   }
 
   function drawRoundedRect(x, y, w, h, r) {
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, w, h, r);
+      return;
+    }
+
     const rr = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
     ctx.moveTo(x + rr, y);
@@ -173,7 +178,7 @@
       const alpha = 0.8;
       ctx.fillStyle = `rgba(15,23,42,${alpha})`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+      drawRoundedRect(p.x - 12, p.y - 12, 24, 24, 6);
       ctx.fill();
       ctx.strokeStyle = "rgba(148,163,184,0.9)";
       ctx.lineWidth = 1.2;
@@ -204,19 +209,10 @@
       const hy = headAreaY;
       heads.push({ x: hx, y: hy });
 
-      const glow = 0.3 + 0.7 * Math.max(0, Math.sin(time * 2 + h));
+      const alpha = 0.6 + 0.3 * Math.max(0, Math.sin(time * 2 + h));
       ctx.beginPath();
-      ctx.fillStyle = `rgba(96,165,250,${glow})`;
-      ctx.arc(hx, hy, headRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      const haloRadius = headRadius + 6;
-      const gradient = ctx.createRadialGradient(hx, hy, 0, hx, hy, haloRadius);
-      gradient.addColorStop(0, `rgba(96,165,250,${glow * 0.5})`);
-      gradient.addColorStop(1, "rgba(15,23,42,0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(hx, hy, haloRadius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(96,165,250,${alpha})`;
+      drawRoundedRect(hx - headRadius, hy - headRadius, headRadius * 2, headRadius * 2, 5);
       ctx.fill();
     }
 
@@ -284,13 +280,9 @@
         const px = lerp(pts[i].x, pts[i + 1].x, localT);
         const py = lerp(pts[i].y, pts[i + 1].y, localT);
 
-        const pr = 6;
-        const grad = ctx.createRadialGradient(px, py, 0, px, py, pr * 3);
-        grad.addColorStop(0, "rgba(52,211,153,0.9)");
-        grad.addColorStop(1, "rgba(52,211,153,0)");
-        ctx.fillStyle = grad;
+        ctx.fillStyle = "rgba(52,211,153,0.85)";
         ctx.beginPath();
-        ctx.arc(px, py, pr * 3, 0, Math.PI * 2);
+        drawRoundedRect(px - 4, py - 4, 8, 8, 3);
         ctx.fill();
         break;
       }
@@ -313,7 +305,7 @@
     ctx.strokeStyle = "rgba(129,140,248,0.45)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(width - 170, 12, 150, 70, 10);
+    drawRoundedRect(width - 170, 12, 150, 70, 10);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "rgba(226,232,240,0.9)";

@@ -1,7 +1,10 @@
-const canvas = document.getElementById("attentionCanvas");
-if (!canvas) {
-  console.warn("[Attention] canvas not found");
-} else {
+(function () {
+  const canvas = document.getElementById("attentionCanvas");
+  if (!canvas) {
+    console.warn("[Attention] canvas not found");
+    return;
+  }
+
   const ctx = canvas.getContext("2d");
   const bus = window.EventBus;
 
@@ -29,6 +32,25 @@ if (!canvas) {
 
   let heatmap = generateHeatmap();
 
+  function drawRoundedRect(x, y, width, height, radius) {
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, width, height, radius);
+      return;
+    }
+
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
   function generateHeatmap() {
     return Array.from({ length: HEADS }, () =>
       Array.from({ length: TOKENS.length }, () =>
@@ -48,7 +70,7 @@ if (!canvas) {
       ctx.fillText(tk, tokenX[i], tokenY + 22);
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.beginPath();
-      ctx.arc(tokenX[i], tokenY, 10, 0, Math.PI * 2);
+      drawRoundedRect(tokenX[i] - 10, tokenY - 10, 20, 20, 5);
       ctx.fill();
     });
     return { tokenX, tokenY };
@@ -115,7 +137,7 @@ if (!canvas) {
     ctx.strokeStyle = "rgba(129,140,248,0.45)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(startX - 8, startY - 14, HEADS * boxSize + 24, TOKENS.length * boxSize + 28, 8);
+    drawRoundedRect(startX - 8, startY - 14, HEADS * boxSize + 24, TOKENS.length * boxSize + 28, 8);
     ctx.fill();
     ctx.stroke();
 
@@ -175,4 +197,4 @@ if (!canvas) {
   }
 
   draw();
-}
+})();
