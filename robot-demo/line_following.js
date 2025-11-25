@@ -16,7 +16,8 @@
   const track = {
     center: { x: 0, y: 0 },
     radius: 140,
-    width: 18
+    width: 18,
+    path: []
   };
 
   const sensorOffsets = [
@@ -45,6 +46,21 @@
   let dragging = false;
   let lastTime = performance.now();
 
+  function buildTrackPath() {
+    const segments = 260;
+    track.path = [];
+
+    for (let i = 0; i < segments; i++) {
+      const t = (i / segments) * Math.PI * 2;
+      const wobble = 0.18 * Math.sin(t * 2) + 0.12 * Math.cos(t * 3);
+      const radius = track.radius * (1 + wobble);
+      track.path.push({
+        x: track.center.x + Math.cos(t) * radius,
+        y: track.center.y + Math.sin(t) * radius
+      });
+    }
+  }
+
   function resize() {
     const rect = canvas.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
@@ -54,11 +70,13 @@
 
     track.center.x = rect.width / 2;
     track.center.y = rect.height / 2;
-    track.radius = Math.min(rect.width, rect.height) / 2 - 40;
+    track.radius = Math.min(rect.width, rect.height) / 2 - 46;
+    buildTrackPath();
 
     if (state.x === 0 && state.y === 0) {
-      state.x = track.center.x + track.radius;
-      state.y = track.center.y;
+      const start = track.path[0] || { x: track.center.x + track.radius, y: track.center.y };
+      state.x = start.x;
+      state.y = start.y;
     }
   }
 
@@ -83,10 +101,7 @@
   function sampleSensors() {
     const positions = getSensorPositions();
     const readings = positions.map((pos) => {
-      const dx = pos.x - track.center.x;
-      const dy = pos.y - track.center.y;
-      const distFromCenter = Math.hypot(dx, dy);
-      const distToLine = Math.abs(distFromCenter - track.radius);
+      const distToLine = distanceToTrack(pos.x, pos.y);
       const normalized = 1 - clamp(distToLine / (track.width / 2 + 10), 0, 1);
       return Number(normalized.toFixed(2));
     });
@@ -103,25 +118,28 @@
     ctx.fillStyle = "rgba(17, 24, 39, 0.75)";
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = track.width + 10;
-    ctx.beginPath();
-    ctx.arc(track.center.x, track.center.y, track.radius, 0, Math.PI * 2);
-    ctx.stroke();
+    if (track.path.length) {
+      ctx.beginPath();
+      track.path.forEach((pt, idx) => {
+        if (idx === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      });
+      ctx.closePath();
 
-    ctx.strokeStyle = "#0b0b0b";
-    ctx.lineWidth = track.width;
-    ctx.beginPath();
-    ctx.arc(track.center.x, track.center.y, track.radius, 0, Math.PI * 2);
-    ctx.stroke();
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = track.width + 12;
+      ctx.stroke();
 
-    ctx.setLineDash([6, 10]);
-    ctx.strokeStyle = "rgba(129, 140, 248, 0.25)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(track.center.x, track.center.y, track.radius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+      ctx.strokeStyle = "#0b0b0b";
+      ctx.lineWidth = track.width;
+      ctx.stroke();
+
+      ctx.setLineDash([6, 10]);
+      ctx.strokeStyle = "rgba(129, 140, 248, 0.25)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     sensorPositions.forEach((pos, idx) => {
       ctx.beginPath();
@@ -132,7 +150,11 @@
   }
 
   function updatePID(dt, error) {
-    state.integral = clamp(state.integral + error * dt, -18, 18);
+    if (dragging) {
+      state.integral = 0;
+    } else {
+      state.integral = clamp(state.integral + error * dt, -18, 18);
+    }
     const derivative = (error - state.prevError) / dt;
 
     const pTerm = gains.kp * error;
@@ -172,19 +194,44 @@
     return weighted / total;
   }
 
+  function pointToSegmentDistance(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : clamp(((px - ax) * dx + (py - ay) * dy) / lenSq, 0, 1);
+    const projX = ax + t * dx;
+    const projY = ay + t * dy;
+    return Math.hypot(projX - px, projY - py);
+  }
+
+  function distanceToTrack(x, y) {
+    if (!track.path.length) {
+      return Math.abs(Math.hypot(x - track.center.x, y - track.center.y) - track.radius);
+    }
+
+    let minDist = Infinity;
+    for (let i = 0; i < track.path.length; i++) {
+      const a = track.path[i];
+      const b = track.path[(i + 1) % track.path.length];
+      const dist = pointToSegmentDistance(x, y, a.x, a.y, b.x, b.y);
+      if (dist < minDist) minDist = dist;
+    }
+    return minDist;
+  }
+
   function loop(now) {
     const dt = clamp((now - lastTime) / 1000, 0.001, 0.05);
     lastTime = now;
 
     const readings = sampleSensors();
     const positions = getSensorPositions();
+    const error = computeError(readings);
 
     if (!dragging) {
-      const error = computeError(readings);
       const control = updatePID(dt, error);
       updateRobot(dt, control);
     } else {
-      updatePID(dt, state.prevError);
+      updatePID(dt, error);
     }
 
     drawTrack(positions, readings);
@@ -224,12 +271,16 @@
 
     const handlePointerUp = (evt) => {
       dragging = false;
+      lastTime = performance.now();
       robotEl.releasePointerCapture(evt.pointerId);
       robotEl.style.cursor = "grab";
     };
 
     robotEl.addEventListener("pointerdown", (evt) => {
       dragging = true;
+      state.integral = 0;
+      state.prevError = 0;
+      lastTime = performance.now();
       state.speed = 95;
       robotEl.setPointerCapture(evt.pointerId);
       robotEl.style.cursor = "grabbing";

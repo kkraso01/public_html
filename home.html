@@ -117,16 +117,26 @@
     }
 
     .lf-robot-core {
+      position: relative;
       width: 46px;
       height: 46px;
       border-radius: 50%;
-      background: radial-gradient(circle, #1f2937 0%, #111827 60%, #0b1020 100%);
-      display: grid;
-      place-items: center;
-      font-size: 20px;
+      overflow: hidden;
+      background-image: url("line-follower-robot/Line%20Follower/3.JPG");
+      background-size: cover;
+      background-position: center;
       border: 2px solid rgba(129, 140, 248, 0.6);
       box-shadow: 0 0 22px rgba(79, 70, 229, 0.35);
       z-index: 2;
+    }
+
+    .lf-robot-core::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), transparent 45%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.35));
+      mix-blend-mode: multiply;
     }
 
     .lf-robot-ring {
@@ -308,7 +318,7 @@
         <div class="relative">
           <canvas id="line-following-canvas" class="w-full h-[420px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
           <div id="line-following-robot" class="lf-robot" title="Drag me">
-            <div class="lf-robot-core">🤖</div>
+            <div class="lf-robot-core" aria-hidden="true"></div>
             <div class="lf-robot-ring"></div>
           </div>
         </div>
