@@ -1,4 +1,4 @@
-// 3D-Style Neural Galaxy Visualizer (Canvas-based 2.5D)
+// 3D-Style Neural Galaxy Visualizer re-focused on LLM shards and retrieval planes
 function init3DVisualizer() {
   const canvas3d = document.getElementById("viz3d");
   if (!canvas3d) {
@@ -27,95 +27,135 @@ function init3DVisualizer() {
   resize();
   window.addEventListener("resize", resize);
 
-  const clusters = [
-    { label: "retrieval", hue: 200 },
-    { label: "generation", hue: 320 },
-    { label: "routing", hue: 160 }
+  const layers = [
+    { id: "embed", label: "Embedding plane", z: 0.1, color: "#22d3ee" },
+    { id: "attn", label: "Multi-head lattice", z: 0.35, color: "#a78bfa" },
+    { id: "shards", label: "LLM shards", z: 0.6, color: "#38bdf8" },
+    { id: "retrieval", label: "Vector retrieval", z: 0.8, color: "#34d399" }
   ];
 
-  const particles = Array.from({ length: 220 }, (_, i) => {
-    const arm = i % clusters.length;
-    const angle = (i / 120) * Math.PI * 4;
-    const radius = 30 + Math.random() * 180;
-    return {
-      arm,
-      baseAngle: angle,
-      radius,
-      speed: 0.0008 + Math.random() * 0.0012,
-      z: Math.random(),
-      size: 1 + Math.random() * 2,
-      jitter: Math.random() * Math.PI * 2
-    };
+  const nodeGrid = layers.map((layer, i) => {
+    const count = 6 - i; // fewer nodes as we go up
+    const nodes = [];
+    for (let x = 0; x < count; x++) {
+      for (let y = 0; y < count; y++) {
+        nodes.push({
+          x: x / (count - 1),
+          y: y / (count - 1),
+          pulse: Math.random(),
+          jitter: Math.random()
+        });
+      }
+    }
+    return { ...layer, nodes };
   });
 
-  const topics = [
-    { label: "Embeddings", x: 0.26, y: 0.32 },
-    { label: "Latency bands", x: 0.52, y: 0.22 },
-    { label: "Clustered intents", x: 0.68, y: 0.46 }
-  ];
-
-  function drawRoundedRect(x, y, width, height, radius) {
-    if (ctx.roundRect) {
-      ctx.roundRect(x, y, width, height, radius);
-      return;
+  const beams = [];
+  for (let i = 0; i < nodeGrid.length - 1; i++) {
+    const lower = nodeGrid[i].nodes;
+    const upper = nodeGrid[i + 1].nodes;
+    for (let j = 0; j < 12; j++) {
+      beams.push({
+        from: lower[Math.floor(Math.random() * lower.length)],
+        to: upper[Math.floor(Math.random() * upper.length)],
+        startLayer: nodeGrid[i],
+        endLayer: nodeGrid[i + 1],
+        offset: Math.random(),
+        speed: 0.002 + Math.random() * 0.002,
+        hue: nodeGrid[i + 1].color
+      });
     }
+  }
 
-    const r = Math.min(radius, width / 2, height / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + width - r, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-    ctx.lineTo(x + width, y + height - r);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-    ctx.lineTo(x + r, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
+  function project(x, y, z) {
+    const scale = 1 - z * 0.45;
+    const px = w / 2 + (x - 0.5) * w * scale;
+    const py = h * 0.2 + (y - 0.5) * h * 0.5 + z * 160;
+    return { x: px, y: py, scale };
   }
 
   function drawBackground() {
-    const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 1.2);
-    grad.addColorStop(0, "rgba(15,23,42,1)");
-    grad.addColorStop(1, "rgba(2,6,23,0.9)");
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "#0b1224");
+    grad.addColorStop(1, "#050910");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = "rgba(79,70,229,0.35)";
+    ctx.lineWidth = 1;
+    const spacing = 34;
+    ctx.beginPath();
+    for (let x = 0; x < w; x += spacing) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+    }
+    for (let y = 0; y < h; y += spacing) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+    }
+    ctx.stroke();
   }
 
-  function drawParticles() {
-    const cx = w / 2;
-    const cy = h / 2;
+  function drawLayerPlanes() {
+    nodeGrid.forEach((layer) => {
+      const base = project(0.5, 0.5, layer.z);
+      const planeW = w * 0.75 * base.scale;
+      const planeH = h * 0.28 * base.scale;
+      ctx.save();
+      ctx.translate(base.x, base.y);
+      ctx.rotate(-0.06);
+      ctx.fillStyle = "rgba(15,23,42,0.9)";
+      ctx.strokeStyle = `${layer.color}55`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(-planeW / 2, -planeH / 2, planeW, planeH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
 
-    particles.forEach((p, idx) => {
-      if (running) p.baseAngle += p.speed * speed;
-      const spiral = p.baseAngle + Math.sin(t * 0.002 + p.jitter) * 0.02;
-      const r = p.radius * (1 + 0.1 * Math.sin(t * 0.001 + idx)) + highlight * 4;
-      const x = cx + Math.cos(spiral) * r;
-      const y = cy + Math.sin(spiral) * r * 0.6 + Math.sin(p.baseAngle) * 6;
-
-      const cluster = clusters[p.arm];
-      const alpha = 0.55 + p.z * 0.25 + highlight * 0.1;
-      ctx.fillStyle = `hsla(${cluster.hue}, 70%, 70%, ${alpha})`;
-      ctx.fillRect(x - 2, y - 2, 4, 4);
+      ctx.fillStyle = "rgba(226,232,240,0.9)";
+      ctx.font = "11px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(layer.label, base.x, base.y - planeH * 0.55);
     });
   }
 
-  function drawRibbons() {
-    const cx = w / 2;
-    const cy = h / 2;
+  function drawNodes() {
+    nodeGrid.forEach((layer) => {
+      layer.nodes.forEach((n) => {
+        const pr = project(n.x, n.y, layer.z);
+        const alpha = 0.5 + 0.5 * Math.sin(t * 0.01 + n.pulse * 6);
+        const size = 6 * pr.scale + highlight;
+        ctx.fillStyle = `${layer.color}${Math.floor(alpha * 255)
+          .toString(16)
+          .padStart(2, "0")}`;
+        ctx.beginPath();
+        ctx.rect(pr.x - size / 2, pr.y - size / 2, size, size);
+        ctx.fill();
+      });
+    });
+  }
 
-    clusters.forEach((cluster, idx) => {
-      ctx.strokeStyle = `hsla(${cluster.hue}, 90%, 70%, 0.4)`;
-      ctx.lineWidth = 2;
+  function drawBeams() {
+    beams.forEach((b) => {
+      if (running) b.offset = (b.offset + b.speed * speed) % 1;
+      const from = project(b.from.x, b.from.y, b.startLayer.z);
+      const to = project(b.to.x, b.to.y, b.endLayer.z);
+
+      ctx.strokeStyle = `${b.hue}55`;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      for (let angle = 0; angle < Math.PI * 2; angle += 0.12) {
-        const r = 40 + idx * 30 + Math.sin(angle * 2 + t * 0.002 * speed) * 10;
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r * 0.7;
-        if (angle === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
       ctx.stroke();
+
+      // moving packet
+      const px = from.x + (to.x - from.x) * b.offset;
+      const py = from.y + (to.y - from.y) * b.offset;
+      ctx.fillStyle = b.hue;
+      ctx.beginPath();
+      ctx.arc(px, py, 4 + highlight * 0.8, 0, Math.PI * 2);
+      ctx.fill();
     });
   }
 
@@ -126,33 +166,19 @@ function init3DVisualizer() {
     ctx.strokeStyle = "rgba(129,140,248,0.5)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    drawRoundedRect(0, 0, 180, 90, 12);
+    ctx.roundRect(0, 0, 200, 96, 12);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = "rgba(226,232,240,0.92)";
     ctx.font = "11px monospace";
-    ctx.fillText("Neural Galaxy", 12, 20);
+    ctx.fillText("Neural Galaxy (LLM stack)", 12, 20);
     ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.fillText(`speed x${speed.toFixed(2)}`, 12, 36);
-    ctx.fillText(`highlight ${highlight.toFixed(2)}`, 12, 52);
-    ctx.fillText(`particles ${particles.length}`, 12, 68);
+    ctx.fillText(`speed x${speed.toFixed(2)}`, 12, 38);
+    ctx.fillText(`highlight ${highlight.toFixed(2)}`, 12, 54);
+    ctx.fillText(`planes ${layers.length}`, 12, 70);
+    ctx.fillText("drag = orbit • click = spike", 12, 86);
     ctx.restore();
-  }
-
-  function drawTopics() {
-    ctx.fillStyle = "rgba(226,232,240,0.85)";
-    ctx.font = "11px monospace";
-    topics.forEach((tpc) => {
-      const x = tpc.x * w;
-      const y = tpc.y * h;
-      ctx.fillText(tpc.label, x, y);
-      ctx.strokeStyle = "rgba(94,234,212,0.5)";
-      ctx.beginPath();
-      const marker = 6 + highlight * 0.5;
-      drawRoundedRect(x - marker, y - 6 - marker, marker * 2, marker * 2, 5);
-      ctx.stroke();
-    });
   }
 
   function animate() {
@@ -163,9 +189,9 @@ function init3DVisualizer() {
 
     ctx.clearRect(0, 0, w, h);
     drawBackground();
-    drawParticles();
-    drawRibbons();
-    drawTopics();
+    drawLayerPlanes();
+    drawBeams();
+    drawNodes();
     drawHUD();
 
     requestAnimationFrame(animate);

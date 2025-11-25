@@ -6,7 +6,7 @@
   const bus = window.EventBus;
   let width, height, dpr;
 
-  const TOKENS = ["I", "query", "an", "LLM"];
+  const TOKENS = ["<s>", "user", "asks", "LLM"];
   let time = 0;
   let running = true;
   let speed = 1;
@@ -50,21 +50,16 @@
     ctx.closePath();
   }
 
-  function draw() {
-    if (running) {
-      time += 0.015 * speed;
-      loadSpike = Math.max(0, loadSpike - 0.01);
-    }
-
-    ctx.clearRect(0, 0, width, height);
-
-    // background panel / subtle grid
-    ctx.fillStyle = "#020617";
+  function drawBackground() {
+    const grad = ctx.createLinearGradient(0, 0, width, height);
+    grad.addColorStop(0, "#0b1224");
+    grad.addColorStop(1, "#050910");
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = "rgba(30,64,175,0.35)";
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
     ctx.lineWidth = 1;
-    const gridSpacing = 18;
+    const gridSpacing = 22;
     ctx.beginPath();
     for (let x = 0; x < width; x += gridSpacing) {
       ctx.moveTo(x, 0);
@@ -76,15 +71,30 @@
     }
     ctx.stroke();
 
-    // layout positions
+    // highlight band for the transformer trunk
+    ctx.fillStyle = "rgba(15,23,42,0.7)";
+    drawRoundedRect(width * 0.08, height * 0.18, width * 0.84, height * 0.64, 20);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(99,102,241,0.35)";
+    ctx.stroke();
+  }
+
+  function draw() {
+    if (running) {
+      time += 0.015 * speed;
+      loadSpike = Math.max(0, loadSpike - 0.01);
+    }
+
+    ctx.clearRect(0, 0, width, height);
+    drawBackground();
+
     const leftX = width * 0.12;
-    const embedX = width * 0.30;
-    const block1X = width * 0.50;
-    const block2X = width * 0.68;
-    const logitsX = width * 0.85;
+    const embedX = width * 0.28;
+    const block1X = width * 0.48;
+    const block2X = width * 0.66;
+    const logitsX = width * 0.84;
     const centerY = height * 0.52;
 
-    // token positions
     const tokenAreaHeight = height * 0.5;
     const tokenTop = centerY - tokenAreaHeight / 2;
     const tokenSpacing = tokenAreaHeight / (TOKENS.length - 1);
@@ -93,44 +103,42 @@
       y: tokenTop + i * tokenSpacing
     }));
 
-    // heads per block
     const headsPerBlock = 4;
-    const headRadius = 5;
+    const headRadius = 6;
 
-    const blockHeight = 90;
-    const block1Y = centerY - blockHeight - 12;
-    const block2Y = centerY + 12;
+    const blockHeight = 96;
+    const block1Y = centerY - blockHeight - 16;
+    const block2Y = centerY + 8;
 
-    // helper for animated alpha (pulse travelling)
     function pulse(offset) {
       return 0.4 + 0.6 * Math.max(0, Math.sin(time * 2 + offset));
     }
 
-    // ---- Embedding box ----
-    const embedW = 70;
-    const embedH = 60;
+    // Embedding box
+    const embedW = 92;
+    const embedH = 70;
     const embedY = centerY - embedH / 2;
     drawRoundedRect(embedX - embedW / 2, embedY, embedW, embedH, 10);
-    ctx.fillStyle = "rgba(15,23,42,0.9)";
+    ctx.fillStyle = "rgba(15,23,42,0.92)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(129,140,248,0.9)";
+    ctx.strokeStyle = "rgba(56,189,248,0.9)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.font = "10px monospace";
+    ctx.fillStyle = "rgba(226,232,240,0.92)";
+    ctx.font = "11px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("Emb", embedX, embedY + embedH / 2 + 3);
+    ctx.fillText("Embeddings", embedX, embedY + embedH / 2 + 4);
 
-    // ---- Transformer blocks ----
-    function drawBlock(x, y, label, sublabel) {
-      const w = 110;
+    // Transformer blocks
+    function drawBlock(x, y, label, sublabel, accent) {
+      const w = 130;
       const h = blockHeight;
       drawRoundedRect(x - w / 2, y, w, h, 12);
-      ctx.fillStyle = "rgba(15,23,42,0.95)";
+      ctx.fillStyle = "rgba(10,12,24,0.95)";
       ctx.fill();
-      ctx.strokeStyle = "rgba(79,70,229,0.9)";
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1.8;
       ctx.stroke();
 
       ctx.fillStyle = "rgba(226,232,240,0.92)";
@@ -139,46 +147,42 @@
       ctx.fillText(label, x - w / 2 + 10, y + 18);
 
       ctx.fillStyle = "rgba(148,163,184,0.9)";
-      ctx.font = "9px monospace";
-      ctx.fillText(sublabel, x - w / 2 + 10, y + 32);
+      ctx.font = "10px monospace";
+      ctx.fillText(sublabel, x - w / 2 + 10, y + 34);
     }
 
-    drawBlock(block1X, block1Y, "Block 1", "Multi-Head Attention");
-    drawBlock(block2X, block2Y, "Block 2", "FFN + Residual");
+    drawBlock(block1X, block1Y, "Block 1", "Multi-Head Attention", "#a78bfa");
+    drawBlock(block2X, block2Y, "Block 2", "Feed Forward + Residual", "#38bdf8");
 
-    // ---- logits box ----
-    const logitsW = 70;
-    const logitsH = 80;
+    // logits box
+    const logitsW = 90;
+    const logitsH = 90;
     const logitsY = centerY - logitsH / 2;
-    drawRoundedRect(logitsX - logitsW / 2, logitsY, logitsW, logitsH, 10);
-    ctx.fillStyle = "rgba(15,23,42,0.9)";
+    drawRoundedRect(logitsX - logitsW / 2, logitsY, logitsW, logitsH, 12);
+    ctx.fillStyle = "rgba(15,23,42,0.92)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(52,211,153,0.9)";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(34,197,94,0.9)";
+    ctx.lineWidth = 1.6;
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.font = "10px monospace";
+    ctx.fillStyle = "rgba(226,232,240,0.9)";
+    ctx.font = "11px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("Logits", logitsX, logitsY + logitsH / 2 + 3);
+    ctx.fillText("Logits", logitsX, logitsY + logitsH / 2 + 4);
 
-    // tiny bars for logits
-    const barCount = 5;
-    for (let i = 0; i < barCount; i++) {
-      const bx = logitsX - 20 + i * 10;
-      const bh = 10 + 12 * Math.abs(Math.sin(time * 1.3 + i));
-      ctx.fillStyle = `rgba(52,211,153,${0.5 + 0.4 * Math.random()})`;
-      ctx.fillRect(bx, logitsY + logitsH - bh - 8, 6, bh);
+    for (let i = 0; i < 6; i++) {
+      const bx = logitsX - 28 + i * 11;
+      const bh = 12 + 16 * Math.abs(Math.sin(time * 1.5 + i));
+      ctx.fillStyle = `rgba(34,197,94,${0.4 + 0.5 * Math.random()})`;
+      ctx.fillRect(bx, logitsY + logitsH - bh - 10, 7, bh);
     }
 
-    // ---- Draw tokens ----
+    // Tokens
     ctx.font = "12px monospace";
     ctx.textAlign = "center";
     tokenPos.forEach((p, i) => {
-      const alpha = 0.8;
-      ctx.fillStyle = `rgba(15,23,42,${alpha})`;
-      ctx.beginPath();
-      drawRoundedRect(p.x - 12, p.y - 12, 24, 24, 6);
+      drawRoundedRect(p.x - 14, p.y - 14, 28, 28, 6);
+      ctx.fillStyle = "rgba(15,23,42,0.9)";
       ctx.fill();
       ctx.strokeStyle = "rgba(148,163,184,0.9)";
       ctx.lineWidth = 1.2;
@@ -188,35 +192,43 @@
       ctx.fillText(TOKENS[i], p.x, p.y + 4);
     });
 
-    // ---- Lines: Tokens → Embedding ----
+    // token -> embedding
     tokenPos.forEach((p, i) => {
       const alpha = pulse(i * 0.6);
-      ctx.strokeStyle = `rgba(129,140,248,${alpha})`;
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = `rgba(59,130,246,${alpha})`;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(p.x + 12, p.y);
+      ctx.moveTo(p.x + 14, p.y);
       ctx.lineTo(embedX - embedW / 2, lerp(p.y, centerY, 0.4));
       ctx.stroke();
     });
 
-    // ---- Heads in Block 1 (True multi-head attention visual) ----
+    // heads in block1
     const heads = [];
-    const headAreaY = block1Y + 46;
-    const headSpacing = 20;
+    const headAreaY = block1Y + 48;
+    const headSpacing = 22;
 
     for (let h = 0; h < headsPerBlock; h++) {
-      const hx = block1X - 30 + h * headSpacing;
+      const hx = block1X - 34 + h * headSpacing;
       const hy = headAreaY;
       heads.push({ x: hx, y: hy });
 
       const alpha = 0.6 + 0.3 * Math.max(0, Math.sin(time * 2 + h));
       ctx.beginPath();
-      ctx.fillStyle = `rgba(96,165,250,${alpha})`;
+      ctx.fillStyle = `rgba(168,85,247,${alpha})`;
       ctx.arc(hx, hy, headRadius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "rgba(226,232,240,0.6)";
+      ctx.stroke();
     }
 
-    // Tokens → Heads attention lines
+    // Q/K/V marker
+    ctx.fillStyle = "rgba(148,163,184,0.8)";
+    ctx.font = "10px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("Q / K / V projection", block1X - 60, block1Y + 22);
+
+    // token -> heads attention lines
     tokenPos.forEach((tp, ti) => {
       heads.forEach((h, hi) => {
         const phase = time * 2 + ti * 0.5 + hi * 0.7;
@@ -224,33 +236,43 @@
         ctx.strokeStyle = `rgba(129,140,248,${alpha})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(lerp(embedX + embedW / 2, block1X - 55, 0.7), lerp(tp.y, h.y, 0.3));
+        ctx.moveTo(lerp(embedX + embedW / 2, block1X - 60, 0.7), lerp(tp.y, h.y, 0.35));
         ctx.lineTo(h.x, h.y);
         ctx.stroke();
       });
     });
 
-    // Heads → Block 1 output (residual)
+    // heads -> block1 output
     heads.forEach((h, hi) => {
       const alpha = pulse(hi);
       ctx.strokeStyle = `rgba(94,234,212,${alpha})`;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(h.x, h.y);
-      ctx.lineTo(block1X + 45, centerY - 6);
+      ctx.lineTo(block1X + 52, centerY - 4);
       ctx.stroke();
     });
 
-    // Residual stream: Block1 → Block2 → Logits
+    // feed-forward bars inside block2
+    const ffBaseX = block2X - 38;
+    const ffBaseY = block2Y + 30;
+    for (let i = 0; i < 4; i++) {
+      const barW = 18 + 12 * Math.abs(Math.sin(time * 1.8 + i));
+      const barY = ffBaseY + i * 16;
+      ctx.fillStyle = `rgba(56,189,248,${0.6 + 0.3 * Math.sin(time + i)})`;
+      ctx.fillRect(ffBaseX, barY, barW, 8);
+    }
+
+    // residual stream path
     const pts = [
       { x: embedX + embedW / 2, y: centerY },
-      { x: block1X + 55, y: centerY - 6 },
-      { x: block2X - 55, y: centerY + blockHeight / 2 },
-      { x: block2X + 55, y: centerY + blockHeight / 2 },
+      { x: block1X + 60, y: centerY - 6 },
+      { x: block2X - 60, y: centerY + blockHeight / 2 },
+      { x: block2X + 60, y: centerY + blockHeight / 2 },
       { x: logitsX - logitsW / 2, y: centerY }
     ];
 
-    ctx.strokeStyle = "rgba(52,211,153,0.8)";
+    ctx.strokeStyle = "rgba(52,211,153,0.85)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -259,8 +281,7 @@
     }
     ctx.stroke();
 
-    // moving pulse on residual
-    const tWrap = (Math.sin(time * 1.5) + 1) / 2; // 0..1
+    const tWrap = (Math.sin(time * 1.5) + 1) / 2;
     const segCount = pts.length - 1;
     let totalLen = 0;
     const segLen = [];
@@ -280,39 +301,39 @@
         const px = lerp(pts[i].x, pts[i + 1].x, localT);
         const py = lerp(pts[i].y, pts[i + 1].y, localT);
 
-        ctx.fillStyle = "rgba(52,211,153,0.85)";
+        ctx.fillStyle = "rgba(52,211,153,0.9)";
         ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.arc(px, py, 5 + loadSpike * 0.5, 0, Math.PI * 2);
         ctx.fill();
         break;
       }
       acc += segLen[i];
     }
 
-    // small "input / output" labels
+    // labels
     ctx.font = "10px monospace";
     ctx.textAlign = "left";
     ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.fillText("Tokens", leftX - 20, tokenTop - 12);
+    ctx.fillText("Tokens", leftX - 22, tokenTop - 12);
+    ctx.fillText("Attention heads", block1X - 46, block1Y - 10);
+    ctx.fillText("Feed-forward / residual", block2X - 70, block2Y + blockHeight + 18);
+    ctx.fillText("Next-token distribution", logitsX - 48, logitsY - 12);
 
-    ctx.textAlign = "center";
-    ctx.fillText("Heads", block1X, block1Y - 8);
-    ctx.fillText("Residual Stream", (block1X + block2X) / 2, centerY + blockHeight + 18);
-    ctx.fillText("Next-token distribution", logitsX, logitsY - 10);
-
-    // HUD inset
+    // HUD
     ctx.fillStyle = "rgba(15,23,42,0.82)";
     ctx.strokeStyle = "rgba(129,140,248,0.45)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    drawRoundedRect(width - 170, 12, 150, 70, 10);
+    drawRoundedRect(width - 180, 12, 160, 86, 12);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "rgba(226,232,240,0.9)";
     ctx.font = "10px monospace";
-    ctx.fillText(`speed x${speed.toFixed(2)}`, width - 160, 36);
+    ctx.fillText(`speed x${speed.toFixed(2)}`, width - 168, 36);
     ctx.fillStyle = "rgba(52,211,153,0.9)";
-    ctx.fillText(`load ${loadSpike.toFixed(2)}`, width - 160, 52);
+    ctx.fillText(`load ${loadSpike.toFixed(2)}`, width - 168, 54);
+    ctx.fillStyle = "rgba(148,163,184,0.85)";
+    ctx.fillText("click canvas = spike", width - 168, 72);
 
     requestAnimationFrame(draw);
   }
