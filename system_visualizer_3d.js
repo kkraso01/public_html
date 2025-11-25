@@ -54,6 +54,25 @@ function init3DVisualizer() {
     { label: "Clustered intents", x: 0.68, y: 0.46 }
   ];
 
+  function drawRoundedRect(x, y, width, height, radius) {
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, width, height, radius);
+      return;
+    }
+
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
   function drawBackground() {
     const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 1.2);
     grad.addColorStop(0, "rgba(15,23,42,1)");
@@ -74,11 +93,9 @@ function init3DVisualizer() {
       const y = cy + Math.sin(spiral) * r * 0.6 + Math.sin(p.baseAngle) * 6;
 
       const cluster = clusters[p.arm];
-      const alpha = 0.35 + p.z * 0.4 + highlight * 0.1;
-      ctx.fillStyle = `hsla(${cluster.hue}, 90%, 70%, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(x, y, p.size + p.z * 2, 0, Math.PI * 2);
-      ctx.fill();
+      const alpha = 0.55 + p.z * 0.25 + highlight * 0.1;
+      ctx.fillStyle = `hsla(${cluster.hue}, 70%, 70%, ${alpha})`;
+      ctx.fillRect(x - 2, y - 2, 4, 4);
     });
   }
 
@@ -109,7 +126,7 @@ function init3DVisualizer() {
     ctx.strokeStyle = "rgba(129,140,248,0.5)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.roundRect(0, 0, 180, 90, 12);
+    drawRoundedRect(0, 0, 180, 90, 12);
     ctx.fill();
     ctx.stroke();
 

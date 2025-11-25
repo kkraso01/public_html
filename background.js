@@ -77,24 +77,14 @@
       }
     }
 
-    // Draw nodes
+    // Draw nodes as subtle squares (no glow)
     nodes.forEach((n) => {
-      const size = 1.2 + n.z * 2.5;
-      const glow = 0.4 + n.z * 0.8;
-
-      ctx.beginPath();
-      ctx.fillStyle = "rgba(224, 231, 255," + glow + ")";
-      ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
-      ctx.fill();
-
-      const halo = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, size * 4);
-      halo.addColorStop(0, "rgba(129, 140, 248,0.65)");
-      halo.addColorStop(1, "rgba(129, 140, 248,0)");
-      ctx.fillStyle = halo;
-
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, size * 4, 0, Math.PI * 2);
-      ctx.fill();
+      const size = 2 + n.z * 2;
+      ctx.fillStyle = "rgba(226,232,240,0.7)";
+      ctx.fillRect(n.x - size / 2, n.y - size / 2, size, size);
+      ctx.strokeStyle = "rgba(148,163,184,0.6)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(n.x - size / 2, n.y - size / 2, size, size);
     });
 
     // Move nodes
