@@ -37,6 +37,10 @@
   let isRunning = false;
   let intersectionObserver = null;
 
+  // Viewport observer for performance
+  const control = { isRunning: true };
+  window.ViewportObserver.observe(canvas, control, 0.1);
+
   const track = {
     center: { x: 0, y: 0 },
     radius: 140,
@@ -334,6 +338,11 @@
   }
 
   function loop(now) {
+    if (!control.isRunning) {
+      requestAnimationFrame(loop);
+      return;
+    }
+
     const dt = clamp((now - lastTime) / 1000, 0.001, 0.05);
     lastTime = now;
 
@@ -342,10 +351,10 @@
     const { error, hasSignal } = computeError(readings);
 
     if (!dragging) {
-      const control = updatePID(dt, error, hasSignal);
+      const pidControl = updatePID(dt, error, hasSignal);
       // Track last error sign for recovery
       if (hasSignal && error !== 0) lastErrorSign = error;
-      updateRobot(dt, control, hasSignal);
+      updateRobot(dt, pidControl, hasSignal);
     } else {
       updatePID(dt, error, hasSignal);
     }

@@ -51,6 +51,10 @@ if (!ragCanvas) {
   resizeRAG();
   window.addEventListener("resize", resizeRAG);
 
+  // Viewport observer for performance
+  const control = { isRunning: true };
+  window.ViewportObserver.observe(ragCanvas, control, 0.1);
+
   function lerp(a, b, p) {
     return a + (b - a) * p;
   }
@@ -173,16 +177,18 @@ if (!ragCanvas) {
   }
 
   function draw() {
-    if (running) {
-      t += 16;
-      spikeLevel = Math.max(0, spikeLevel - 0.01);
-    }
+    if (control.isRunning) {
+      if (running) {
+        t += 16;
+        spikeLevel = Math.max(0, spikeLevel - 0.01);
+      }
 
-    ctx.clearRect(0, 0, w, h);
-    drawBackground();
-    edges.forEach(drawEdge);
-    nodes.forEach(drawNode);
-    drawRetrievals();
+      ctx.clearRect(0, 0, w, h);
+      drawBackground();
+      edges.forEach(drawEdge);
+      nodes.forEach(drawNode);
+      drawRetrievals();
+    }
 
     requestAnimationFrame(draw);
   }

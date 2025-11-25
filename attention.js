@@ -27,6 +27,10 @@
   resize();
   window.addEventListener("resize", resize);
 
+  // Viewport observer for performance
+  const control = { isRunning: true };
+  window.ViewportObserver.observe(canvas, control, 0.1);
+
   const TOKENS = ["query", "retrieval", "route", "logits", "answer"];
   const HEADS = 6;
 
@@ -156,10 +160,12 @@
   }
 
   function draw() {
-    if (running) {
-      time += 1 * speed;
-      entropySpike = Math.max(0, entropySpike - 0.01);
-      if (time % 80 === 0) heatmap = generateHeatmap();
+    if (control.isRunning) {
+      if (running) {
+        time += 1 * speed;
+        entropySpike = Math.max(0, entropySpike - 0.01);
+        if (time % 80 === 0) heatmap = generateHeatmap();
+      }
     }
 
     ctx.clearRect(0, 0, W, H);

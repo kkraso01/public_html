@@ -26,6 +26,10 @@
   window.addEventListener("resize", resize);
   resize();
 
+  // Viewport observer for performance
+  const control = { isRunning: true };
+  window.ViewportObserver.observe(canvas, control, 0.1);
+
   function lerp(a, b, t) {
     return a + (b - a) * t;
   }
@@ -80,9 +84,11 @@
   }
 
   function draw() {
-    if (running) {
-      time += 0.015 * speed;
-      loadSpike = Math.max(0, loadSpike - 0.01);
+    if (control.isRunning) {
+      if (running) {
+        time += 0.015 * speed;
+        loadSpike = Math.max(0, loadSpike - 0.01);
+      }
     }
 
     ctx.clearRect(0, 0, width, height);

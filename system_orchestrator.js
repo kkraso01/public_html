@@ -29,6 +29,10 @@
   resize();
   window.addEventListener("resize", resize);
 
+  // Viewport observer for performance
+  const control = { isRunning: true };
+  window.ViewportObserver.observe(canvas, control, 0.1);
+
   // Layout model - normalized coordinates (0-1)
   const layout = {
     client: { x: 0.10, y: 0.50, w: 80, h: 40, label: "Client" },
@@ -203,9 +207,11 @@
 
   // Main animation loop
   function drawScene() {
-    if (running) {
-      t += 1 * speed;
-      spike = Math.max(0, spike - 0.01);
+    if (control.isRunning) {
+      if (running) {
+        t += 1 * speed;
+        spike = Math.max(0, spike - 0.01);
+      }
     }
     const route = currentRouteWithMetrics();
 

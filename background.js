@@ -41,7 +41,15 @@
   window.addEventListener("resize", resize);
   initNodes();
 
+  // Viewport observer for performance
+  const control = { isRunning: true };
+  window.ViewportObserver.observe(canvas, control, 0.1);
+
   function draw() {
+    if (!control.isRunning) {
+      requestAnimationFrame(draw);
+      return;
+    }
     ctx.clearRect(0, 0, width, height);
 
     const gradient = ctx.createRadialGradient(
