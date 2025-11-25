@@ -21,32 +21,32 @@
   };
 
   const sensorOffsets = [
-    { angle: -0.42, distance: 34 },
-    { angle: -0.36, distance: 36 },
-    { angle: -0.31, distance: 38 },
-    { angle: -0.26, distance: 40 },
-    { angle: -0.21, distance: 42 },
-    { angle: -0.16, distance: 44 },
-    { angle: -0.11, distance: 46 },
-    { angle: -0.06, distance: 48 },
-    { angle: 0.06, distance: 48 },
-    { angle: 0.11, distance: 46 },
-    { angle: 0.16, distance: 44 },
-    { angle: 0.21, distance: 42 },
-    { angle: 0.26, distance: 40 },
-    { angle: 0.31, distance: 38 },
-    { angle: 0.36, distance: 36 },
-    { angle: 0.42, distance: 34 }
+    { angle: -0.3, distance: 44 },
+    { angle: -0.26, distance: 45 },
+    { angle: -0.22, distance: 46 },
+    { angle: -0.18, distance: 47 },
+    { angle: -0.14, distance: 48 },
+    { angle: -0.1, distance: 49 },
+    { angle: -0.06, distance: 50 },
+    { angle: -0.02, distance: 51 },
+    { angle: 0.02, distance: 51 },
+    { angle: 0.06, distance: 50 },
+    { angle: 0.1, distance: 49 },
+    { angle: 0.14, distance: 48 },
+    { angle: 0.18, distance: 47 },
+    { angle: 0.22, distance: 46 },
+    { angle: 0.26, distance: 45 },
+    { angle: 0.3, distance: 44 }
   ];
 
   const weights = [-7.5, -6.5, -5.5, -4.5, -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
-  const gains = { kp: 1.6, ki: 0.55, kd: 0.42 };
+  const gains = { kp: 1.3, ki: 0.42, kd: 0.32 };
 
   const state = {
     x: 0,
     y: 0,
     angle: -Math.PI / 2,
-    speed: 95,
+    speed: 90,
     integral: 0,
     prevError: 0
   };
@@ -60,8 +60,8 @@
 
     for (let i = 0; i < segments; i++) {
       const t = (i / segments) * Math.PI * 2;
-      const wobble = 0.18 * Math.sin(t * 1.4 + 0.6) + 0.14 * Math.cos(t * 2.2) + 0.1 * Math.sin(t * 4.4 + 1.2);
-      const squiggle = 12 * Math.sin(t * 3.1) + 8 * Math.cos(t * 5.3);
+      const wobble = 0.1 * Math.sin(t * 1.4 + 0.6) + 0.08 * Math.cos(t * 2.2) + 0.06 * Math.sin(t * 4.4 + 1.2);
+      const squiggle = 7 * Math.sin(t * 3.1) + 5 * Math.cos(t * 5.3);
       const radius = track.radius * (1 + wobble) + squiggle;
       track.path.push({
         x: track.center.x + Math.cos(t) * radius,
@@ -152,24 +152,27 @@
 
     sensorPositions.forEach((pos, idx) => {
       ctx.beginPath();
-      ctx.fillStyle = `rgba(79,70,229,${0.25 + readings[idx] * 0.6})`;
-      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(79,70,229,${0.3 + readings[idx] * 0.5})`;
+      ctx.arc(pos.x, pos.y, 3.5, 0, Math.PI * 2);
       ctx.fill();
     });
   }
 
-  function updatePID(dt, error) {
+  function updatePID(dt, error, hasSignal) {
     if (dragging) {
       state.integral = 0;
+    } else if (hasSignal) {
+      state.integral = clamp(state.integral + error * dt, -14, 14);
     } else {
-      state.integral = clamp(state.integral + error * dt, -18, 18);
+      state.integral *= 0.8;
     }
+
     const derivative = (error - state.prevError) / dt;
 
     const pTerm = gains.kp * error;
     const iTerm = gains.ki * state.integral;
     const dTerm = gains.kd * derivative;
-    const control = pTerm + iTerm + dTerm;
+    const control = clamp(pTerm + iTerm + dTerm, -3.2, 3.2);
 
     state.prevError = error;
 
@@ -198,9 +201,9 @@
 
   function computeError(readings) {
     const total = readings.reduce((sum, r) => sum + r, 0);
-    if (total === 0) return state.prevError * 0.8;
+    if (total === 0) return { error: state.prevError * 0.7, hasSignal: false };
     const weighted = readings.reduce((sum, r, idx) => sum + r * weights[idx], 0);
-    return weighted / total;
+    return { error: weighted / total, hasSignal: true };
   }
 
   function pointToSegmentDistance(px, py, ax, ay, bx, by) {
@@ -234,13 +237,13 @@
 
     const readings = sampleSensors();
     const positions = getSensorPositions();
-    const error = computeError(readings);
+    const { error, hasSignal } = computeError(readings);
 
     if (!dragging) {
-      const control = updatePID(dt, error);
+      const control = updatePID(dt, error, hasSignal);
       updateRobot(dt, control);
     } else {
-      updatePID(dt, error);
+      updatePID(dt, error, hasSignal);
     }
 
     drawTrack(positions, readings);
