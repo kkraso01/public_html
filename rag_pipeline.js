@@ -55,6 +55,25 @@ if (!ragCanvas) {
     return a + (b - a) * p;
   }
 
+  function drawRoundedRect(x, y, width, height, radius) {
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, width, height, radius);
+      return;
+    }
+
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
   function drawBackground() {
     ctx.fillStyle = "rgba(2,6,23,0.92)";
     ctx.fillRect(0, 0, w, h);
@@ -97,12 +116,9 @@ if (!ragCanvas) {
 
     const px = lerp(from.x, to.x, pulse);
     const py = lerp(from.y, to.y, pulse);
-    const grad = ctx.createRadialGradient(px, py, 0, px, py, 12 + spikeLevel * 4);
-    grad.addColorStop(0, `hsla(${hue}, 90%, 70%, 0.9)`);
-    grad.addColorStop(1, "rgba(15,23,42,0)");
-    ctx.fillStyle = grad;
+    ctx.fillStyle = `hsla(${hue}, 85%, 75%, ${0.65 + spikeLevel * 0.1})`;
     ctx.beginPath();
-    ctx.arc(px, py, 12 + spikeLevel * 2, 0, Math.PI * 2);
+    ctx.arc(px, py, 5 + spikeLevel * 0.8, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "rgba(148,163,184,0.9)";
@@ -115,19 +131,11 @@ if (!ragCanvas) {
     const x = node.x * w;
     const y = node.y * h;
 
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, 40 + spikeLevel * 6);
-    glow.addColorStop(0, `hsla(${node.hue}, 90%, 70%, ${0.35 + spikeLevel * 0.1})`);
-    glow.addColorStop(1, "rgba(15,23,42,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, 40 + spikeLevel * 2, 0, Math.PI * 2);
-    ctx.fill();
-
     ctx.fillStyle = highlightNode === node.id ? "rgba(52,211,153,0.95)" : `hsla(${node.hue}, 95%, 75%, 0.95)`;
     ctx.strokeStyle = "rgba(226,232,240,0.4)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(x - 50, y - 22, 100, 44, 10);
+    drawRoundedRect(x - 50, y - 22, 100, 44, 10);
     ctx.fill();
     ctx.stroke();
 
@@ -147,7 +155,7 @@ if (!ragCanvas) {
     ctx.strokeStyle = "rgba(129,140,248,0.5)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.roundRect(0, 0, 170, 90, 10);
+    drawRoundedRect(0, 0, 170, 90, 10);
     ctx.fill();
     ctx.stroke();
 
