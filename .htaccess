@@ -1,0 +1,13 @@
+# --- Default page order ---
+# When someone visits  https://students.cs.ucy.ac.cy/~kkraso01/
+# (with no filename), Apache will look for these in order.
+DirectoryIndex home.html index.html
+
+# --- Optional: force the directory root to show home.html even if index.html exists ---
+# Uncomment the next two lines if you want to *always* show home.html
+# #RewriteEngine On
+# #RewriteRule ^$ home.html [L]
+
+Options +ExecCGI
+AddHandler cgi-script .py .sh
+

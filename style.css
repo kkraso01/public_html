@@ -1,0 +1,72 @@
+body {
+    margin: 0;
+    font-family: "Montserrat", sans-serif;
+    background: #04070a;
+    color: #dff9ff;
+    overflow-x: hidden;
+}
+
+/* Background Particles */
+#background {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 50% 50%, #0d2b3a, #000);
+    z-index: -1;
+}
+
+/* Header */
+header {
+    text-align: center;
+    padding: 40px 20px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+header h1 {
+    color: #7ddfff;
+    font-size: 32px;
+}
+
+/* Module Buttons */
+.modules {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 30px;
+}
+
+.module {
+    border: 1px solid #66e0ff;
+    padding: 14px 22px;
+    border-radius: 10px;
+    cursor: pointer;
+    background: rgba(10, 20, 30, 0.4);
+    backdrop-filter: blur(6px);
+    transition: 0.3s;
+}
+
+.module:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px #66e0ff;
+}
+
+/* Panels */
+.panel {
+    display: none;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 25px;
+    background: rgba(20, 35, 45, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid #7ddfff;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.panel h2 {
+    margin-top: 0;
+    color: #7ddfff;
+    letter-spacing: 1px;
+}

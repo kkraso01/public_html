@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Dream Reconstructor</title>
+  <link rel="stylesheet" href="hallucination.css">
+</head>
+<body>
+  <canvas id="dream-core" class="absolute inset-0 z-0"></canvas>
+  <div id="hud" class="absolute top-4 left-4 text-sm text-green-300 font-mono z-10">
+    <p>RECONSTRUCTING MEMORY STACK...</p>
+    <p>Token entropy: <span id="entropy">0.98</span></p>
+    <p>Depth: <span id="depth">0</span></p>
+  </div>
+  <script src="dream.js"></script>
+</body>
+</html>

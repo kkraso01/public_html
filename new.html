@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Konstantin Krasovitskiy | AI Research Interface</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* Background canvas */
+    #nn-bg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -2;
+      background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #020617 100%);
+      pointer-events: none;
+    }
+
+    /* Boot screen */
+    #boot-screen {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at top, #020617 0, #020617 60%, #000 100%);
+      color: #e5e7eb;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    #boot-screen.hidden {
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 700ms ease-out;
+    }
+
+    /* Small scanline effect */
+    #boot-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(
+        rgba(15,23,42,0.18) 1px,
+        rgba(15,23,42,0) 1px
+      );
+      background-size: 100% 3px;
+      mix-blend-mode: soft-light;
+    }
+
+    /* Side nav glass */
+    .nav-glass {
+      backdrop-filter: blur(14px);
+      background: linear-gradient(to bottom, rgba(15,23,42,0.92), rgba(15,23,42,0.85));
+      border-right: 1px solid rgba(55,65,81,0.8);
+    }
+
+    /* Scrollbar subtle */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(31,41,55,0.9);
+      border-radius: 9999px;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans">
+
+  <!-- Background Neural Field -->
+  <canvas id="nn-bg"></canvas>
+
+  <!-- System Dashboard Overlay (top-right HUD) -->
+  <div id="sys-dashboard"
+       class="fixed top-4 right-4 bg-gray-900/70 backdrop-blur-lg px-6 py-4 rounded-2xl border border-gray-700 shadow-lg z-40">
+    <h3 class="text-indigo-300 text-xs mb-2 tracking-[0.25em]">SYSTEM STATUS</h3>
+    <div class="space-y-1 text-gray-200 text-xs font-mono">
+      <p>Node: <span id="hud-node" class="text-green-400">ACTIVE</span></p>
+      <p>Latency: <span id="hud-lat">0</span>ms</p>
+      <p>Token/s: <span id="hud-tps">0</span></p>
+      <p>GPU Load: <span id="hud-gpu">0</span>%</p>
+      <p>Vector Ops: <span id="hud-vops">0</span>/s</p>
+    </div>
+  </div>
+
+  <!-- Boot Sequence Overlay -->
+  <div id="boot-screen">
+    <div class="relative w-full max-w-2xl px-6">
+      <div id="boot-overlay"></div>
+      <div class="border border-indigo-500/70 rounded-xl bg-black/70 p-5 shadow-xl relative">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs text-indigo-300 tracking-[0.3em] uppercase">
+            KRC-LLM NODE • BOOT SEQUENCE
+          </span>
+          <span class="text-[10px] text-gray-500">v0.1.0 • research interface</span>
+        </div>
+        <pre id="boot-log" class="text-[11px] leading-5 text-gray-200 whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Layout: Side Navigation + Content -->
+  <div class="min-h-screen flex">
+
+    <!-- Side Navigation Panel -->
+    <aside class="hidden md:flex md:flex-col nav-glass w-72 px-5 py-6 z-20">
+      <div class="mb-8">
+        <p class="text-[10px]()
+        <p class="text-[10px] text-indigo-300 tracking-[0.35em] uppercase opacity-80">
+          AI RESEARCH INTERFACE
+        </p>
+        <h1 class="text-xl font-semibold mt-1">Konstantin Krasovitskiy</h1>
+        <p class="text-xs text-gray-400">MSc Artificial Intelligence</p>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="flex-1 space-y-4 text-sm font-mono">
+        <a href="#orchestrator" class="block text-gray-300 hover:text-indigo-400">> Orchestrator</a>
+        <a href="#rag" class="block text-gray-300 hover:text-indigo-400">> RAG Pipeline</a>
+        <a href="#system2d" class="block text-gray-300 hover:text-indigo-400">> System Visualizer 2D</a>
+        <a href="#system3d" class="block text-gray-300 hover:text-indigo-400">> Neural Galaxy 3D</a>
+        <a href="#transformer" class="block text-gray-300 hover:text-indigo-400">> Transformer Internals</a>
+        <a href="#attention" class="block text-gray-300 hover:text-indigo-400">> Attention Heads</a>
+        <a href="#about" class="block text-gray-300 hover:text-indigo-400">> About</a>
+        <a href="#skills" class="block text-gray-300 hover:text-indigo-400">> Skills</a>
+        <a href="#experience" class="block text-gray-300 hover:text-indigo-400">> Experience</a>
+        <a href="#projects" class="block text-gray-300 hover:text-indigo-400">> Projects</a>
+        <a href="#contact" class="block text-gray-300 hover:text-indigo-400">> Contact</a>
+      </nav>
+
+      <div class="mt-10 text-xs text-gray-500">
+        © 2025 KK Research Node
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto px-6 md:px-12 py-10">
+
+      <!-- ============================ -->
+      <!-- HERO = ORCHESTRATOR CANVAS   -->
+      <!-- ============================ -->
+      <section id="orchestrator" class="mb-24">
+        <h2 class="text-3xl font-bold mb-4">LLM-MS Orchestrator</h2>
+        <p class="text-gray-400 mb-6 max-w-2xl">
+          The primary interface of the system — real-time visualization of multi-model routing,
+          vector retrieval, scoring, and token flow.
+        </p>
+
+        <canvas id="orchestratorCanvas"
+                class="w-full h-[380px] rounded-xl bg-gray-950/60 border border-gray-700">
+        </canvas>
+      </section>
+
+      <!-- ============================ -->
+      <!-- RAG PIPELINE                  -->
+      <!-- ============================ -->
+      <section id="rag" class="mb-24">
+        <h2 class="text-3xl font-bold mb-4">RAG Pipeline Visualization</h2>
+        <p class="text-gray-400 mb-6 max-w-2xl">
+          How I build retrieval-augmented LLM systems — embeddings, retrieval, and synthesis.
+        </p>
+
+        <canvas id="ragCanvas"
+                class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700">
+        </canvas>
+      </section>
+
+      <!-- ============================ -->
+      <!-- SYSTEM VISUALIZER 2D         -->
+      <!-- ============================ -->
+      <section id="system2d" class="mb-24">
+        <h2 class="text-3xl font-bold mb-4">System Visualizer (2D)</h2>
+        <p class="text-gray-400 mb-6 max-w-2xl">
+          A flat, signal-routing view of the complete LLM compute flow.
+        </p>
+
+        <canvas id="viz2d"
+                class="w-full h-[420px] rounded-xl bg-gray-950/40 border border-gray-700">
+        </canvas>
+      </section>
+
+      <!-- ============================ -->
+      <!-- SYSTEM VISUALIZER 3D         -->
+      <!-- ============================ -->
+      <section id="system3d" class="mb-24">
+        <h2 class="text-3xl font-bold mb-4">Neural Galaxy (3D)</h2>
+        <p class="text-gray-400 mb-6 max-w-2xl">
+          A cyberpunk neural field simulation representing internal LLM activations.
+        </p>
+
+        <canvas id="viz3d"
+                class="w-full h-[500px] rounded-xl bg-black border border-gray-700">
+        </canvas>
+      </section>
+
+      <!-- ============================ -->
+      <!-- TRANSFORMER INTERNALS        -->
+      <!-- ============================ -->
+      <section id="transformer" class="mb-24">
+        <h2 class="text-3xl font-bold mb-4">Transformer Internals</h2>
+        <p class="text-gray-400 mb-6 max-w-2xl">
+          Token → Embeddings → Multi-Head Attention → Residual Streams → FFN → Logits.
+        </p>
+
+        <canvas id="llm-viz"
+                class="w-full h-[420px] rounded-xl bg-gray-950/40 border border-gray-700">
+        </canvas>
+      </section>
+
+      <!-- ============================ -->
+      <!-- MULTI-HEAD ATTENTION         -->
+      <!-- ============================ -->
+      <section id="attention" class="mb-24">
+        <h2 class="text-3xl font-bold mb-4">Attention Head Visualizer</h2>
+        <p class="text-gray-400 mb-6 max-w-2xl">
+          Independent attention heads dynamically routing semantic information.
+        </p>
+
+        <canvas id="attentionCanvas"
+                class="w-full h-[340px] rounded-xl bg-gray-950/40 border border-gray-700">
+        </canvas>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- ABOUT                                         -->
+      <!-- ============================================= -->
+      <section id="about" class="mb-24 max-w-3xl">
+        <h2 class="text-3xl font-bold mb-4">About Me</h2>
+        <p class="text-gray-300 leading-relaxed mb-4">
+          I am an MSc Artificial Intelligence researcher focused on multi-model LLM systems,
+          retrieval-augmented generation, scalable compute pipelines, and applied research engineering.
+        </p>
+        <p class="text-gray-300 leading-relaxed">
+          My work spans backend engineering, QA automation, DevOps, vector search systems,
+          and neural architecture visualization.
+        </p>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- SKILLS                                        -->
+      <!-- ============================================= -->
+      <section id="skills" class="mb-24 max-w-4xl">
+        <h2 class="text-3xl font-bold mb-6">Technical Skills</h2>
+
+        <div class="grid md:grid-cols-2 gap-8">
+          <div>
+            <h3 class="text-lg text-indigo-400 mb-2">Backend</h3>
+            <p class="text-gray-400 text-sm">Python • FastAPI • Flask • REST • Microservices</p>
+          </div>
+          <div>
+            <h3 class="text-lg text-indigo-400 mb-2">QA / Automation</h3>
+            <p class="text-gray-400 text-sm">Playwright • Selenium • K6 • CI/CD</p>
+          </div>
+          <div>
+            <h3 class="text-lg text-indigo-400 mb-2">DevOps</h3>
+            <p class="text-gray-400 text-sm">Docker • Linux • VM Provisioning • Swarm</p>
+          </div>
+          <div>
+            <h3 class="text-lg text-indigo-400 mb-2">AI / Data</h3>
+            <p class="text-gray-400 text-sm">LLMs • RAG • Vector DBs • Embeddings</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- EXPERIENCE                                    -->
+      <!-- ============================================= -->
+      <section id="experience" class="mb-24 max-w-4xl">
+        <h2 class="text-3xl font-bold mb-10">Experience</h2>
+
+        <div class="space-y-10">
+          <div class="border-l-4 border-indigo-500 pl-6">
+            <h3 class="text-xl font-semibold">Software Engineer</h3>
+            <p class="text-gray-400 text-sm">KIOS Center | 2025–Present</p>
+            <p class="text-gray-300 mt-2">Building research software, backend modules, and systems integration.</p>
+          </div>
+
+          <div class="border-l-4 border-indigo-500 pl-6">
+            <h3 class="text-xl font-semibold">QA Automation Engineer</h3>
+            <p class="text-gray-400 text-sm">Techlink LTD | 2023–2025</p>
+            <p class="text-gray-300 mt-2">Playwright, Selenium, performance suites, automation pipelines.</p>
+          </div>
+
+          <div class="border-l-4 border-indigo-500 pl-6">
+            <h3 class="text-xl font-semibold">Special Research Scientist</h3>
+            <p class="text-gray-400 text-sm">DMSL, UCY | 2025–Present</p>
+            <p class="text-gray-300 mt-2">LLM experimentation, vector DB integration, infrastructure.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- PROJECTS                                      -->
+      <!-- ============================================= -->
+      <section id="projects" class="mb-24 max-w-5xl">
+        <h2 class="text-3xl font-bold mb-10">Projects</h2>
+
+        <div class="grid md:grid-cols-2 gap-8">
+          <div class="bg-gray-900/80 p-6 rounded-xl">
+            <h3 class="text-lg font-semibold">LLM-MS Engine</h3>
+            <p class="text-gray-400 text-sm mt-2">Multi-model LLM orchestrator & vector-aware retrieval.</p>
+          </div>
+          <div class="bg-gray-900/80 p-6 rounded-xl">
+            <h3 class="text-lg font-semibold">LLME</h3>
+            <p class="text-gray-400 text-sm mt-2">Distributed LLM service deployed on local edge resources.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- CONTACT                                       -->
+      <!-- ============================================= -->
+      <section id="contact" class="mb-24 max-w-xl">
+        <h2 class="text-3xl font-bold mb-4">Contact</h2>
+        <p class="text-gray-400 mb-4">Let’s collaborate on AI systems or research engineering.</p>
+        <p>Email: <a href="mailto:kkraso01@ucy.ac.cy" class="text-indigo-400">kkraso01@ucy.ac.cy</a></p>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- JS FILES -->
+  <script src="background.js"></script>
+  <script src="rag_pipeline.js"></script>
+  <script src="system_status.js"></script>
+  <script src="system_visualizer_2d.js"></script>
+  <script src="system_visualizer_3d.js"></script>
+  <script src="system_dashboard.js"></script>
+  <script src="system_plugins.js"></script>
+  <script src="system_orchestrator.js"></script>
+  <script src="llm_viz.js"></script>
+  <script src="attention.js"></script>
+
+  <script>
+    /* Boot animation logic */
+    const boot = document.getElementById('boot-screen');
+    const log = document.getElementById('boot-log');
+
+    const lines = [
+      "[INIT] Loading research node...",
+      "[OK]  Vector DB interface online",
+      "[OK]  LLM-MS orchestrator operational",
+      "[OK]  Neural field renderer active",
+      "[OK]  Transformer visualizer attached",
+      "[OK]  Telemetry HUD streaming",
+      "[READY] Welcome, Konstantin."
+    ];
+
+    let i = 0;
+    function nextLine() {
+      if (i < lines.length) {
+        log.textContent += lines[i] + "\n";
+        i++;
+        setTimeout(nextLine, 450);
+      } else {
+        setTimeout(() => {
+          boot.classList.add("hidden");
+        }, 600);
+      }
+    }
+    nextLine();
+  </script>
+
+</body>
+</html>

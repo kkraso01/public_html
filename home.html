@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Konstantin Krasovitskiy | AI Portfolio</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Lottie (kept from your template, currently unused but available) -->
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+
+  <!-- Custom styles for background + subtle polish -->
+  <style>
+    /* Fullscreen canvas for NN / constellation background */
+    #nn-bg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #020617 100%);
+      pointer-events: none;
+    }
+
+    /* Slight glass effect for hero buttons when over the animated background */
+    .glass-btn {
+      backdrop-filter: blur(8px);
+      background-color: rgba(79, 70, 229, 0.85);
+    }
+    .glass-outline {
+      backdrop-filter: blur(8px);
+      background-color: rgba(15, 23, 42, 0.7);
+    }
+
+    /* Optional: subtle fade-in for hero */
+    .fade-in {
+      animation: fadeIn 1.2s ease-out forwards;
+      opacity: 0;
+    }
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans scroll-smooth">
+
+  <!-- Neural Network / Constellation Background -->
+  <canvas id="nn-bg"></canvas>
+
+  <!-- System Dashboard Overlay -->
+  <div id="sys-dashboard" class="fixed top-4 right-4 
+      bg-gray-900/60 backdrop-blur-lg px-6 py-4 rounded-2xl border border-gray-700 shadow-lg z-50">
+    <h3 class="text-indigo-300 text-sm mb-2 tracking-widest">SYSTEM STATUS</h3>
+    <div class="space-y-1 text-gray-200 text-xs font-mono">
+      <p>Node: <span id="hud-node" class="text-green-400">ACTIVE</span></p>
+      <p>Latency: <span id="hud-lat">0</span>ms</p>
+      <p>Token/s: <span id="hud-tps">0</span></p>
+      <p>GPU Load: <span id="hud-gpu">0</span>%</p>
+      <p>Vector Ops: <span id="hud-vops">0</span>/s</p>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in">
+    <div class="max-w-3xl">
+      <div id="system-status" class="text-xs text-indigo-300 mb-4 tracking-widest opacity-80">
+        NODE STATUS: <span id="sys-state">ACTIVE</span> • 
+        TOKENS/s: <span id="sys-tps">0</span> • 
+        LAT: <span id="sys-lat">0</span>ms
+      </div>
+      <p class="text-xs tracking-[0.3em] uppercase text-indigo-300 mb-4">
+        Research Node • LLM Systems • Neural Architectures
+      </p>
+      <h1 class="text-4xl sm:text-5xl md:text-6xl font-bold mb-4">
+        Konstantin Krasovitskiy
+      </h1>
+      <p class="text-lg md:text-xl text-gray-300 mb-8">
+        MSc Artificial Intelligence &middot; AI Researcher &middot; QA & Systems Engineer
+      </p>
+      <div class="flex flex-wrap justify-center gap-4">
+        <a href="#projects"
+           class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
+          View Projects
+        </a>
+        <a href="new/new_home.html"
+           class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
+          Dive In
+        </a>
+        <a href="KONSTANTIN_KRASOVITSKIY_CV_2025_NEW.pdf"
+           class="glass-outline px-6 py-3 border border-gray-500 rounded-full hover:bg-gray-800 transition-colors">
+          Download CV
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- RAG Pipeline Visualization -->
+  <section id="rag-pipeline" class="py-20 px-6 relative max-w-5xl mx-auto">
+    <h2 class="text-3xl font-bold mb-6">How I Build AI Systems</h2>
+    <p class="text-gray-400 mb-8">
+      A clean visualization of the Retrieval-Augmented Generation (RAG) pipeline 
+      and LLM orchestration — the core of my research work.
+    </p>
+
+    <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
+  </section>
+
+  <!-- 2D System Visualizer -->
+  <section id="viz-2d" class="py-24 max-w-6xl mx-auto px-6">
+    <h2 class="text-3xl font-bold mb-4">GPT‑4 Inspired System Visualizer (2D)</h2>
+    <p class="text-gray-400 mb-6">A real-time animated view of multi-model orchestration, token routing, and vector retrieval.</p>
+    <canvas id="viz2d" class="w-full h-[420px] rounded-xl bg-gray-950/40 border border-gray-700"></canvas>
+  </section>
+
+  <!-- 3D Neural Galaxy Visualizer -->
+  <section id="viz-3d" class="py-24 max-w-6xl mx-auto px-6">
+    <h2 class="text-3xl font-bold mb-4">Neural Galaxy (3D)</h2>
+    <p class="text-gray-400 mb-6">A cyberpunk 3D neural field representing LLM internal computation states.</p>
+    <canvas id="viz3d" class="w-full h-[500px] rounded-xl bg-black border border-gray-700"></canvas>
+  </section>
+
+  <!-- Multi-LLM Orchestrator Visualization -->
+  <section id="orchestrator" class="py-20 px-6 relative max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-4">Multi-LLM Orchestrator (LLM-MS)</h2>
+    <p class="text-gray-400 mb-8">
+      Visualization of a multi-model LLM orchestration layer: a router dispatches queries to multiple models,
+      consults a vector database, and merges responses based on cost, latency, and relevance.
+    </p>
+
+    <canvas id="orchestratorCanvas" class="w-full h-[360px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
+
+    <p class="mt-3 text-xs text-gray-500">
+      Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge → Response
+    </p>
+  </section>
+
+  <!-- Transformer Block Visualizer -->
+  <section id="transformer-viz" class="py-24 px-6 relative max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-4">Transformer Architecture Internals</h2>
+    <p class="text-gray-400 mb-8">
+      Real-time visualization of transformer token flow through embeddings, multi-head attention blocks,
+      residual connections, and logit distribution — a peek into how LLMs process language.
+    </p>
+
+    <canvas id="llm-viz" class="w-full h-[420px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
+  </section>
+
+  <!-- Multi-Head Attention Visualizer -->
+  <section id="attention-viz" class="py-20 px-6 relative max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-4">Multi-Head Attention Mechanism</h2>
+    <p class="text-gray-400 mb-8">
+      Animated visualization of parallel attention heads computing token relationships.
+      Each head independently learns to attend to different semantic and syntactic features.
+    </p>
+
+    <canvas id="attentionCanvas" class="w-full h-[340px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
+  </section>
+
+  <!-- About -->
+  <section id="about" class="max-w-4xl mx-auto py-20 px-6 relative">
+    <h2 class="text-3xl font-bold mb-6">About Me</h2>
+    <p class="text-gray-300 leading-relaxed mb-6">
+      I am an MSc Artificial Intelligence student at the University of Cyprus with research expertise in
+      <span class="text-indigo-400">multi-model LLM systems</span>,
+      <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
+      <span class="text-indigo-400">scalable AI architectures</span>.
+      Professionally, I bring hands-on experience in software engineering, QA automation, DevOps, and research deployment.
+    </p>
+    <p class="text-gray-300 leading-relaxed">
+      My background spans full-stack development, infrastructure management, and collaborative research environments.
+      I focus on building maintainable systems, clear communication, and robust documentation.
+    </p>
+  </section>
+
+  <!-- Skills -->
+  <section id="skills" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 relative">
+    <div class="max-w-4xl mx-auto">
+      <h2 class="text-3xl font-bold mb-8">Technical Skills</h2>
+
+      <div class="grid md:grid-cols-2 gap-8 mb-8">
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Backend & Web</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Python (Flask/FastAPI)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">JavaScript</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">REST APIs</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Microservices</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">HTML5 &amp; CSS3</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">QA &amp; Automation</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Playwright (C#)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Selenium (Java)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">K6 Performance Testing</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Test Design</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Infrastructure &amp; DevOps</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Docker &amp; Docker Swarm</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Linux &amp; Bash</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">VM Provisioning</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">CI/CD</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Nginx &amp; Apache</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI &amp; Data</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">LLMs &amp; RAG</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">ChromaDB</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SQL</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vector Databases</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Professional Experience -->
+  <section id="experience" class="max-w-5xl mx-auto py-20 px-6 relative">
+    <h2 class="text-3xl font-bold mb-10">Professional Experience</h2>
+    <div class="space-y-8">
+
+      <div class="border-l-4 border-indigo-500 pl-6">
+        <h3 class="text-xl font-semibold">Software Engineer</h3>
+        <p class="text-gray-400 text-sm">
+          KIOS Research and Innovation Center of Excellence, University of Cyprus | Nov 2025 – Present
+        </p>
+        <p class="text-gray-300 mt-2">
+          Design and maintain back-end/front-end modules for research projects. Implement RESTful APIs and
+          microservices using Python and JavaScript. Deploy and monitor services in Docker-based environments.
+        </p>
+      </div>
+
+      <div class="border-l-4 border-indigo-500 pl-6">
+        <h3 class="text-xl font-semibold">QA Automation Engineer</h3>
+        <p class="text-gray-400 text-sm">Techlink LTD, Nicosia | Sep 2023 – Oct 2025</p>
+        <p class="text-gray-300 mt-2">
+          Authored manual and automated UI/regression tests using Playwright (C#) and Selenium (Java). Operated
+          K6 performance suites on Docker Swarm and built DB utilities to optimize test data preparation.
+        </p>
+      </div>
+
+      <div class="border-l-4 border-indigo-500 pl-6">
+        <h3 class="text-xl font-semibold">Special Research Scientist</h3>
+        <p class="text-gray-400 text-sm">DMSL, University of Cyprus | Mar 2025 – Present</p>
+        <p class="text-gray-300 mt-2">
+          Built a Flask backend integrating ChromaDB with open-source LLMs. Deployed and evaluated LLMs locally
+          for cost-effective experimentation and supported lab users with VM provisioning and research workflows.
+        </p>
+      </div>
+
+      <div class="border-l-4 border-indigo-500 pl-6">
+        <h3 class="text-xl font-semibold">Technical Support Assistant</h3>
+        <p class="text-gray-400 text-sm">University of Cyprus | Oct 2021 – Aug 2023</p>
+        <p class="text-gray-300 mt-2">
+          Diagnosed and replaced hardware, performed secure imaging and disk wiping, and provided front-line
+          technical support for departmental IT systems.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Projects -->
+  <section id="projects" class="max-w-5xl mx-auto py-20 px-6 relative">
+    <h2 class="text-3xl font-bold mb-10">Featured Projects</h2>
+    <div class="grid md:grid-cols-2 gap-8">
+      <!-- Project Card -->
+      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
+        <h3 class="text-xl font-semibold mb-2">LLM-MS: Multi-Model Search Engine</h3>
+        <p class="text-gray-400 mb-4">
+          Research system orchestrating multiple LLMs with token-aware selection strategies and vector-based
+          retrieval using ChromaDB.
+        </p>
+        <a href="https://chatucy.cs.ucy.ac.cy/llmms.html" target="_blank" class="text-indigo-400 hover:underline">Demo</a>
+        <span class="text-gray-500 mx-1">|</span>
+        <a href="https://www.cs.ucy.ac.cy/~dzeina/papers/llmvdb25-llmmeta.pdf" target="_blank"
+           class="text-indigo-400 hover:underline">Paper</a>
+      </div>
+
+      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
+        <h3 class="text-xl font-semibold mb-2">LLME: Distributed LLM Service</h3>
+        <p class="text-gray-400 mb-4">
+          Research manuscript exploring distributed, edge-deployed LLM services with focus on orchestration,
+          latency, and resource efficiency.
+        </p>
+        <span class="text-gray-500 text-sm">Manuscript (2025)</span>
+      </div>
+
+      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
+        <h3 class="text-xl font-semibold mb-2">Multi-Model LLM Search Engines</h3>
+        <p class="text-gray-400 mb-4">
+          B.Sc. thesis on scalable, multi-model LLM orchestration and token-efficient selection logic for
+          diverse query workloads.
+        </p>
+        <span class="text-gray-500 text-sm">B.Sc. Thesis (July 2025)</span>
+      </div>
+
+      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
+        <h3 class="text-xl font-semibold mb-2">AI System Architecture</h3>
+        <p class="text-gray-400 mb-4">
+          Portfolio enhancement featuring real-time visualizations of GPT-4 system internals,
+          multi-model orchestration, and cyberpunk research-lab aesthetics with live telemetry.
+        </p>
+        <span class="text-gray-500 text-sm">Interactive Visualizer (2025)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="contact" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 text-center relative">
+    <h2 class="text-3xl font-bold mb-6">Get in Touch</h2>
+    <p class="text-gray-400 mb-6">
+      Let's collaborate on AI research, software engineering, or innovative systems projects.
+    </p>
+    <div class="space-y-3">
+      <p>
+        Email:
+        <a href="mailto:kkraso01@ucy.ac.cy" class="text-indigo-400 hover:underline">kkraso01@ucy.ac.cy</a>
+      </p>
+      <p>
+        LinkedIn:
+        <a href="https://linkedin.com/" target="_blank" class="text-indigo-400 hover:underline">linkedin.com</a>
+        <span class="text-gray-500 mx-1">|</span>
+        GitHub:
+        <a href="https://github.com/" target="_blank" class="text-indigo-400 hover:underline">github.com</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- Education & Recognition -->
+  <section id="education" class="max-w-4xl mx-auto py-20 px-6 relative">
+    <h2 class="text-3xl font-bold mb-10">Education &amp; Recognition</h2>
+
+    <div class="mb-8">
+      <h3 class="text-lg font-semibold text-indigo-400 mb-4">Education</h3>
+      <div class="space-y-4">
+        <div>
+          <p class="font-semibold">M.Sc. Artificial Intelligence</p>
+          <p class="text-gray-400 text-sm">University of Cyprus | Sep 2025 – Present</p>
+        </div>
+        <div>
+          <p class="font-semibold">B.Sc. Computer Science</p>
+          <p class="text-gray-400 text-sm">University of Cyprus | Sep 2021 – Jun 2025</p>
+          <p class="text-gray-400 text-sm">Specialization: Big Data and Internet Computing</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 class="text-lg font-semibold text-indigo-400 mb-4">Publications &amp; Awards</h3>
+      <ul class="space-y-2 text-gray-300">
+        <li>
+          📄 <strong>LLM-MS: A Multi-Model LLM Search Engine</strong> —
+          International Workshop on LLM + Vector Data (May 2025)
+        </li>
+        <li>
+          🧠 <strong>LLME: A Distributed Large Language Model Service on the Edge</strong> —
+          Manuscript (2025)
+        </li>
+        <li>
+          🤖 <strong>Multi-Model LLM Search Engines</strong> —
+          B.Sc. Thesis, University of Cyprus (July 2025)
+        </li>
+        <li>
+          🏆 Judge &amp; Scientific Committee Member — Robotex Cyprus (2022 – Present)
+        </li>
+        <li>
+          🤖 Robotics Competition Awards — multiple 1st/2nd place distinctions (2018–2019)
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="py-6 text-center text-gray-600 bg-gray-950/90 relative">
+    © 2025 Konstantin Krasovitskiy
+  </footer>
+  
+  <!-- External JS for Background Animation -->
+  <script src="background.js"></script>
+  <script src="rag_pipeline.js"></script>
+  <script src="system_status.js"></script>
+  <script src="system_visualizer_2d.js"></script>
+  <script src="system_visualizer_3d.js"></script>
+  <script src="system_dashboard.js"></script>
+  <script src="system_plugins.js"></script>
+  <script src="system_orchestrator.js"></script>
+  <script src="llm_viz.js"></script>
+  <script src="attention.js"></script>
+
+</body>
+</html>
