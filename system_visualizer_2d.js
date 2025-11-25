@@ -81,7 +81,7 @@ if (!canvas2d) {
 
     ctx2d.fillStyle = "rgba(226,232,240,0.92)";
     ctx2d.beginPath();
-    drawRoundedRect(x - core.r, y - core.r, core.r * 2, core.r * 2, 10);
+    ctx2d.arc(x, y, core.r, 0, Math.PI * 2);
     ctx2d.fill();
 
     ctx2d.strokeStyle = `rgba(100, 200, 255, ${0.3 + 0.3 * Math.sin(t * 0.01)})`;

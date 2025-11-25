@@ -118,8 +118,7 @@ if (!ragCanvas) {
     const py = lerp(from.y, to.y, pulse);
     ctx.fillStyle = `hsla(${hue}, 85%, 75%, ${0.65 + spikeLevel * 0.1})`;
     ctx.beginPath();
-    const marker = 5 + spikeLevel * 0.8;
-    drawRoundedRect(px - marker, py - marker, marker * 2, marker * 2, 4);
+    ctx.arc(px, py, 5 + spikeLevel * 0.8, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "rgba(148,163,184,0.9)";

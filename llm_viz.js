@@ -212,7 +212,7 @@
       const alpha = 0.6 + 0.3 * Math.max(0, Math.sin(time * 2 + h));
       ctx.beginPath();
       ctx.fillStyle = `rgba(96,165,250,${alpha})`;
-      drawRoundedRect(hx - headRadius, hy - headRadius, headRadius * 2, headRadius * 2, 5);
+      ctx.arc(hx, hy, headRadius, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -282,7 +282,7 @@
 
         ctx.fillStyle = "rgba(52,211,153,0.85)";
         ctx.beginPath();
-        drawRoundedRect(px - 4, py - 4, 8, 8, 3);
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
         ctx.fill();
         break;
       }
