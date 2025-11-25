@@ -70,3 +70,73 @@ header h1 {
     color: #7ddfff;
     letter-spacing: 1px;
 }
+
+/* PID Control Sliders */
+.pid-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(to right, rgba(79, 70, 229, 0.2), rgba(79, 70, 229, 0.4));
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.pid-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4f46e5;
+    border: 2px solid #6366f1;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: box-shadow 0.2s;
+}
+
+.pid-slider::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 8px rgba(79, 70, 229, 0.6);
+}
+
+.pid-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #4f46e5;
+    border: 2px solid #6366f1;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: box-shadow 0.2s;
+}
+
+.pid-slider::-moz-range-thumb:hover {
+    box-shadow: 0 0 8px rgba(79, 70, 229, 0.6);
+}
+
+/* Checkboxes */
+.pid-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #4f46e5;
+    transition: all 0.2s;
+}
+
+.pid-checkbox:hover {
+    filter: brightness(1.2);
+}
+
+/* Reset Button */
+.pid-reset-btn {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.pid-reset-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(185, 28, 28, 0.25);
+}
+
+.pid-reset-btn:active {
+    transform: translateY(0);
+}

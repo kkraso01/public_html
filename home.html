@@ -108,7 +108,7 @@
       left: 50%;
       width: 56px;
       height: 56px;
-      border-radius: 50%;
+      /* border-radius: 50%; */
       transform: translate(-50%, -50%);
       display: grid;
       place-items: center;
@@ -120,23 +120,27 @@
       position: relative;
       width: 46px;
       height: 46px;
-      border-radius: 50%;
+      border-radius: 0;
       overflow: hidden;
-      background-image: url("line-follower-robot/Line%20Follower/3.JPG");
+      background-image: url("line-follower-robot/Line%20Follower/ROBOT.png");
       background-size: cover;
       background-position: center;
-      border: 2px solid rgba(129, 140, 248, 0.6);
-      box-shadow: 0 0 22px rgba(79, 70, 229, 0.35);
+      box-shadow: 0 2px 12px 0 rgba(30, 41, 59, 0.18);
+      z-index: 2;
+    }
+
+    /* Dimming overlay for robot image */
+    .lf-robot-core::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.32);
+      pointer-events: none;
       z-index: 2;
     }
 
     .lf-robot-core::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), transparent 45%),
-        linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.35));
-      mix-blend-mode: multiply;
+      display: none;
     }
 
     .lf-robot-ring {
@@ -144,8 +148,10 @@
       inset: -8px;
       border-radius: 50%;
       border: 1px dashed rgba(129, 140, 248, 0.35);
+      box-shadow: 0 0 24px 8px rgba(129, 140, 248, 0.25), 0 0 0 2px rgba(79, 70, 229, 0.12);
       animation: pulse 2.4s ease-in-out infinite;
       z-index: 1;
+      pointer-events: none;
     }
 
     @keyframes pulse {
@@ -309,119 +315,251 @@
       </p>
     </div>
 
-    <div class="grid lg:grid-cols-[1.4fr,1fr] gap-8">
-      <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden">
-        <div class="flex items-center gap-3 mb-3">
-          <span class="hud-chip">Draggable Bot</span>
-          <span class="cue-badge">Grab to reposition on the loop</span>
-        </div>
-        <div class="relative">
-          <canvas id="line-following-canvas" class="w-full h-[420px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
-          <div id="line-following-robot" class="lf-robot" title="Drag me">
-            <div class="lf-robot-core" aria-hidden="true"></div>
-            <div class="lf-robot-ring"></div>
-          </div>
-        </div>
+    <!-- Line Following Robot Demo -->
+    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-6">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="hud-chip">Draggable Bot</span>
+        <span class="cue-badge">Grab to reposition on the track</span>
       </div>
-
-      <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-5 space-y-5">
-        <div>
-          <h3 class="text-xl font-semibold">Telemetry</h3>
-          <p class="text-gray-400 text-sm">Live IR sensor reads and PID terms published over the shared EventBus.</p>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
-            <p class="text-xs text-gray-400">Proportional</p>
-            <p id="pid-p" class="text-2xl font-mono text-indigo-300">0.00</p>
-          </div>
-          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
-            <p class="text-xs text-gray-400">Integral</p>
-            <p id="pid-i" class="text-2xl font-mono text-indigo-300">0.00</p>
-          </div>
-          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
-            <p class="text-xs text-gray-400">Derivative</p>
-            <p id="pid-d" class="text-2xl font-mono text-indigo-300">0.00</p>
-          </div>
-          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
-            <p class="text-xs text-gray-400">Error</p>
-            <p id="pid-error" class="text-2xl font-mono text-rose-300">0.00</p>
-          </div>
-        </div>
-
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <h4 class="text-sm font-semibold">IR Sensor Array</h4>
-            <span class="text-xs text-gray-500">Left → Right</span>
-          </div>
-        <div class="grid grid-cols-4 gap-3">
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S1</p>
-            <p data-sensor-index="0" class="sensor-value">0.00</p>
-            </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S2</p>
-              <p data-sensor-index="1" class="sensor-value">0.00</p>
-            </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S3</p>
-              <p data-sensor-index="2" class="sensor-value">0.00</p>
-            </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S4</p>
-              <p data-sensor-index="3" class="sensor-value">0.00</p>
-            </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S5</p>
-              <p data-sensor-index="4" class="sensor-value">0.00</p>
-            </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S6</p>
-              <p data-sensor-index="5" class="sensor-value">0.00</p>
-            </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S7</p>
-              <p data-sensor-index="6" class="sensor-value">0.00</p>
-            </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S8</p>
-            <p data-sensor-index="7" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S9</p>
-            <p data-sensor-index="8" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S10</p>
-            <p data-sensor-index="9" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S11</p>
-            <p data-sensor-index="10" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S12</p>
-            <p data-sensor-index="11" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S13</p>
-            <p data-sensor-index="12" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S14</p>
-            <p data-sensor-index="13" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S15</p>
-            <p data-sensor-index="14" class="sensor-value">0.00</p>
-          </div>
-          <div class="sensor-pill">
-            <p class="text-xs text-gray-400">S16</p>
-            <p data-sensor-index="15" class="sensor-value">0.00</p>
-          </div>
+      <div class="relative">
+        <canvas id="line-following-canvas" class="w-full h-[480px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
+        <div id="line-following-robot" class="lf-robot" title="Drag me">
+          <div class="lf-robot-core" aria-hidden="true"></div>
+          <div class="lf-robot-ring"></div>
         </div>
       </div>
     </div>
+
+    <!-- Control Panel Below Track -->
+    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-3 space-y-2">
+      <!-- PID Tuning Controls Grid (First) -->
+      <div>
+        <h3 class="text-sm font-semibold mb-2">PID Tuning & Configuration</h3>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
+          <!-- Kp -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-gray-300">Proportional (Kp)</label>
+              <span id="kp-value" class="text-xs font-mono text-indigo-300">1.30</span>
+            </div>
+            <input 
+              id="kp-slider" 
+              type="range" 
+              min="0" 
+              max="3" 
+              step="0.01" 
+              value="1.3" 
+              class="pid-slider w-full"
+            >
+          </div>
+
+          <!-- Ki -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-gray-300">Integral (Ki)</label>
+              <span id="ki-value" class="text-xs font-mono text-indigo-300">0.42</span>
+            </div>
+            <input 
+              id="ki-slider" 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.01" 
+              value="0.42" 
+              class="pid-slider w-full"
+            >
+          </div>
+
+          <!-- Kd -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-gray-300">Derivative (Kd)</label>
+              <span id="kd-value" class="text-xs font-mono text-indigo-300">0.32</span>
+            </div>
+            <input 
+              id="kd-slider" 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.01" 
+              value="0.32" 
+              class="pid-slider w-full"
+            >
+          </div>
+
+          <!-- Speed -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-gray-300">Speed</label>
+              <span id="speed-value" class="text-xs font-mono text-indigo-300">90 px/s</span>
+            </div>
+            <input 
+              id="speed-slider" 
+              type="range" 
+              min="45" 
+              max="180" 
+              step="5" 
+              value="90" 
+              class="pid-slider w-full"
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced Options -->
+      <div class="pt-2 border-t border-gray-700">
+        <h4 class="text-xs font-semibold mb-2">Advanced Options</h4>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
+            <input 
+              id="noise-toggle" 
+              type="checkbox" 
+              class="pid-checkbox" 
+            >
+            <span class="text-xs text-gray-300">Sensor Noise</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
+            <input 
+              id="anti-windup-toggle" 
+              type="checkbox" 
+              checked 
+              class="pid-checkbox"
+            >
+            <span class="text-xs text-gray-300">Anti-Windup</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
+            <input 
+              id="d-filter-toggle" 
+              type="checkbox" 
+              class="pid-checkbox"
+            >
+            <span class="text-xs text-gray-300">D-Filter</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
+            <input 
+              id="adaptive-speed-toggle" 
+              type="checkbox" 
+              class="pid-checkbox"
+            >
+            <span class="text-xs text-gray-300">Adaptive Speed</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Reset Button -->
+      <div class="flex gap-2 pt-2 border-t border-gray-700">
+        <button 
+          id="pid-reset-btn" 
+          class="pid-reset-btn flex-1 py-1.5 px-2 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700 rounded-lg transition text-xs font-semibold text-rose-300"
+        >
+          ⟲ Reset to Default
+        </button>
+      </div>
+
+      <!-- Telemetry Section - Horizontal -->
+      <div class="pt-2 border-t border-gray-700">
+        <h3 class="text-sm font-semibold mb-2">Telemetry</h3>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
+            <p class="text-xs text-gray-400">P</p>
+            <p id="pid-p" class="text-sm font-mono text-indigo-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
+            <p class="text-xs text-gray-400">I</p>
+            <p id="pid-i" class="text-sm font-mono text-indigo-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
+            <p class="text-xs text-gray-400">D</p>
+            <p id="pid-d" class="text-sm font-mono text-indigo-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
+            <p class="text-xs text-gray-400">Error</p>
+            <p id="pid-error" class="text-sm font-mono text-rose-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
+            <p class="text-xs text-gray-400">Speed</p>
+            <p id="pid-speed" class="text-sm font-mono text-emerald-300">0.00</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sensor Array -->
+      <div class="pt-2 border-t border-gray-700">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-sm font-semibold">IR Sensor Array</h4>
+          <span class="text-xs text-gray-500">Left ← Center → Right</span>
+        </div>
+        <div class="grid grid-cols-8 gap-1">
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S1</p>
+            <p data-sensor-index="0" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S2</p>
+            <p data-sensor-index="1" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S3</p>
+            <p data-sensor-index="2" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S4</p>
+            <p data-sensor-index="3" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S5</p>
+            <p data-sensor-index="4" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S6</p>
+            <p data-sensor-index="5" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S7</p>
+            <p data-sensor-index="6" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S8</p>
+            <p data-sensor-index="7" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S9</p>
+            <p data-sensor-index="8" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S10</p>
+            <p data-sensor-index="9" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S11</p>
+            <p data-sensor-index="10" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S12</p>
+            <p data-sensor-index="11" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S13</p>
+            <p data-sensor-index="12" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S14</p>
+            <p data-sensor-index="13" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S15</p>
+            <p data-sensor-index="14" class="sensor-value text-xs">0.00</p>
+          </div>
+          <div class="sensor-pill text-center">
+            <p class="text-xs text-gray-400">S16</p>
+            <p data-sensor-index="15" class="sensor-value text-xs">0.00</p>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 

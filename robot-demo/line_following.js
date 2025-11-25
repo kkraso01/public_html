@@ -6,12 +6,36 @@
   const iEl = document.getElementById("pid-i");
   const dEl = document.getElementById("pid-d");
   const errorEl = document.getElementById("pid-error");
+  const speedEl = document.getElementById("pid-speed");
   const bus = window.EventBus || { emit: () => {}, on: () => {} };
 
   if (!canvas || !robotEl) return;
 
   const ctx = canvas.getContext("2d");
   let dpr = window.devicePixelRatio || 1;
+  
+  // Control element references
+  const kpSlider = document.getElementById("kp-slider");
+  const kiSlider = document.getElementById("ki-slider");
+  const kdSlider = document.getElementById("kd-slider");
+  const kpValue = document.getElementById("kp-value");
+  const kiValue = document.getElementById("ki-value");
+  const kdValue = document.getElementById("kd-value");
+  const speedSlider = document.getElementById("speed-slider");
+  const speedValue = document.getElementById("speed-value");
+  const noiseToggle = document.getElementById("noise-toggle");
+  const antiWindupToggle = document.getElementById("anti-windup-toggle");
+  const dFilterToggle = document.getElementById("d-filter-toggle");
+  const adaptiveSpeedToggle = document.getElementById("adaptive-speed-toggle");
+  const resetBtn = document.getElementById("pid-reset-btn");
+  
+  // Default PID gains and speed
+  const DEFAULT_GAINS = { kp: 2, ki: 0.42, kd: 0.32 };
+  const DEFAULT_SPEED = 90;
+  
+  // Animation control
+  let isRunning = false;
+  let intersectionObserver = null;
 
   const track = {
     center: { x: 0, y: 0 },
@@ -21,26 +45,28 @@
   };
 
   const sensorOffsets = [
-    { angle: -0.3, distance: 44 },
-    { angle: -0.26, distance: 45 },
-    { angle: -0.22, distance: 46 },
-    { angle: -0.18, distance: 47 },
-    { angle: -0.14, distance: 48 },
-    { angle: -0.1, distance: 49 },
-    { angle: -0.06, distance: 50 },
-    { angle: -0.02, distance: 51 },
-    { angle: 0.02, distance: 51 },
-    { angle: 0.06, distance: 50 },
-    { angle: 0.1, distance: 49 },
-    { angle: 0.14, distance: 48 },
-    { angle: 0.18, distance: 47 },
-    { angle: 0.22, distance: 46 },
-    { angle: 0.26, distance: 45 },
-    { angle: 0.3, distance: 44 }
+    { angle: -0.54, distance: 50 },
+    { angle: -0.47, distance: 50 },
+    { angle: -0.40, distance: 50 },
+    { angle: -0.33, distance: 50 },
+    { angle: -0.26, distance: 50 },
+    { angle: -0.19, distance: 50 },
+    { angle: -0.12, distance: 50 },
+    { angle: -0.05, distance: 50 },
+    { angle: 0.05, distance: 50 },
+    { angle: 0.12, distance: 50 },
+    { angle: 0.19, distance: 50 },
+    { angle: 0.26, distance: 50 },
+    { angle: 0.33, distance: 50 },
+    { angle: 0.40, distance: 50 },
+    { angle: 0.47, distance: 50 },
+    { angle: 0.54, distance: 50 }
   ];
 
-  const weights = [-7.5, -6.5, -5.5, -4.5, -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
-  const gains = { kp: 1.3, ki: 0.42, kd: 0.32 };
+  // const weights = sensorOffsets.map((_, i) => i - (sensorOffsets.length - 1) / 2);
+  const weights = sensorOffsets.map(s => s.angle);
+
+  const gains = { ...DEFAULT_GAINS };
 
   const state = {
     x: 0,
@@ -48,25 +74,42 @@
     angle: -Math.PI / 2,
     speed: 90,
     integral: 0,
-    prevError: 0
+    prevError: 0,
+    prevDeriv: null
+  };
+  
+  // Feature flags and configuration
+  const features = {
+    enableNoise: false,
+    enableAntiWindup: true,
+    enableDFilter: false,
+    enableAdaptiveSpeed: false
   };
 
   let dragging = false;
   let lastTime = performance.now();
 
   function buildTrackPath() {
-    const segments = 420;
     track.path = [];
-
-    for (let i = 0; i < segments; i++) {
-      const t = (i / segments) * Math.PI * 2;
-      const wobble = 0.1 * Math.sin(t * 1.4 + 0.6) + 0.08 * Math.cos(t * 2.2) + 0.06 * Math.sin(t * 4.4 + 1.2);
-      const squiggle = 7 * Math.sin(t * 3.1) + 5 * Math.cos(t * 5.3);
-      const radius = track.radius * (1 + wobble) + squiggle;
-      track.path.push({
-        x: track.center.x + Math.cos(t) * radius,
-        y: track.center.y + Math.sin(t) * radius
-      });
+    const cx = track.center.x;
+    const cy = track.center.y;
+    
+    // Get canvas dimensions
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    const margin = 50;
+    
+    // Oval track with different radii for width and height
+    const radiusX = w / 2 - margin;
+    const radiusY = h / 2 - margin;
+    
+    // Draw an ellipse
+    const steps = 360;
+    for (let i = 0; i <= steps; i++) {
+      const angle = (Math.PI * 2) * (i / steps);
+      const x = cx + radiusX * Math.cos(angle);
+      const y = cy + radiusY * Math.sin(angle);
+      track.path.push({ x, y });
     }
   }
 
@@ -96,6 +139,13 @@
     return Math.min(Math.max(value, min), max);
   }
 
+  function gaussianRandom() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  }
+
   function getSensorPositions() {
     return sensorOffsets.map((offset) => {
       const theta = state.angle + offset.angle;
@@ -107,11 +157,17 @@
     });
   }
 
-  function sampleSensors() {
-    const positions = getSensorPositions();
+  function sampleSensors(positions) {
     const readings = positions.map((pos) => {
       const distToLine = distanceToTrack(pos.x, pos.y);
-      const normalized = 1 - clamp(distToLine / (track.width / 2 + 10), 0, 1);
+      let normalized = 1 - clamp(distToLine / (track.width / 2 + 10), 0, 1);
+      
+      // Add Gaussian noise if enabled
+      if (features.enableNoise) {
+        const noise = gaussianRandom() * 0.05;
+        normalized = clamp(normalized + noise, 0, 1);
+      }
+      
       return Number(normalized.toFixed(2));
     });
 
@@ -142,12 +198,6 @@
       ctx.strokeStyle = "#0b0b0b";
       ctx.lineWidth = track.width;
       ctx.stroke();
-
-      ctx.setLineDash([6, 10]);
-      ctx.strokeStyle = "rgba(129, 140, 248, 0.25)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.setLineDash([]);
     }
 
     sensorPositions.forEach((pos, idx) => {
@@ -159,18 +209,38 @@
   }
 
   function updatePID(dt, error, hasSignal) {
+    // Proportional term
+    const pTerm = gains.kp * error;
+
+    // Integral term with anti-windup
     if (dragging) {
       state.integral = 0;
     } else if (hasSignal) {
-      state.integral = clamp(state.integral + error * dt, -14, 14);
+      const integralGain = state.integral + error * dt;
+      if (features.enableAntiWindup) {
+        // Conditional integration: only accumulate if not saturated
+        const control = gains.ki * integralGain;
+        if (Math.abs(control + pTerm) < 3.2) {
+          state.integral = clamp(integralGain, -14, 14);
+        }
+      } else {
+        state.integral = clamp(integralGain, -14, 14);
+      }
     } else {
       state.integral *= 0.8;
     }
 
-    const derivative = (error - state.prevError) / dt;
-
-    const pTerm = gains.kp * error;
     const iTerm = gains.ki * state.integral;
+
+    // Derivative term with optional low-pass filtering
+    let derivative = (error - state.prevError) / dt;
+    if (features.enableDFilter && state.prevDeriv !== null) {
+      // First-order low-pass filter with smooth blending
+      const alpha = 0.4; // Increased from 0.3 for better responsiveness
+      derivative = alpha * derivative + (1 - alpha) * state.prevDeriv;
+    }
+    state.prevDeriv = derivative; // Store for next iteration
+
     const dTerm = gains.kd * derivative;
     const control = clamp(pTerm + iTerm + dTerm, -3.2, 3.2);
 
@@ -186,17 +256,49 @@
     return control;
   }
 
-  function updateRobot(dt, control) {
-    state.angle += control * dt;
-    state.x += Math.cos(state.angle) * state.speed * dt;
-    state.y += Math.sin(state.angle) * state.speed * dt;
 
+  // Lost line recovery state
+  let recoveryMode = false;
+  let lastErrorSign = 0;
+  let lastSpeed = state.speed;
+  function updateRobot(dt, control, hasSignal) {
+    // If in recovery mode, keep turning in last error direction
+    let speed = state.speed;
+    if (features.enableAdaptiveSpeed) {
+      const errorMagnitude = Math.abs(state.prevError);
+      const k = 0.7;
+      speed = state.speed * (0.2 + 0.8 * Math.exp(-k * Math.pow(errorMagnitude, 3)));
+    }
+    lastSpeed = speed;
+
+    if (!hasSignal) {
+      // Lost line: enter recovery mode
+      recoveryMode = true;
+    } else {
+      // Line found: exit recovery mode
+      recoveryMode = false;
+    }
+
+    let angleDelta;
+    if (recoveryMode) {
+      // Turn in last error direction (default to right if unknown)
+      const turnDir = lastErrorSign !== 0 ? Math.sign(lastErrorSign) : 1;
+      angleDelta = turnDir * 2.2 * dt; // 2.2 is a reasonable turn rate
+    } else {
+      angleDelta = control * dt;
+    }
+    state.angle += angleDelta;
+
+    state.x += Math.cos(state.angle) * speed * dt;
+    state.y += Math.sin(state.angle) * speed * dt;
     const rect = canvas.getBoundingClientRect();
     state.x = clamp(state.x, 20, rect.width - 20);
     state.y = clamp(state.y, 20, rect.height - 20);
-
     robotEl.style.left = `${state.x}px`;
     robotEl.style.top = `${state.y}px`;
+    // Rotate robot to face the direction it's heading
+    const adjustedAngle = state.angle - Math.PI * 1;
+    robotEl.style.transform = `translate(-50%, -50%) rotate(${adjustedAngle}rad)`;
   }
 
   function computeError(readings) {
@@ -235,19 +337,24 @@
     const dt = clamp((now - lastTime) / 1000, 0.001, 0.05);
     lastTime = now;
 
-    const readings = sampleSensors();
     const positions = getSensorPositions();
+    const readings = sampleSensors(positions);
     const { error, hasSignal } = computeError(readings);
 
     if (!dragging) {
       const control = updatePID(dt, error, hasSignal);
-      updateRobot(dt, control);
+      // Track last error sign for recovery
+      if (hasSignal && error !== 0) lastErrorSign = error;
+      updateRobot(dt, control, hasSignal);
     } else {
       updatePID(dt, error, hasSignal);
     }
 
     drawTrack(positions, readings);
-    requestAnimationFrame(loop);
+    
+    if (isRunning) {
+      requestAnimationFrame(loop);
+    }
   }
 
   function syncSensorsUI() {
@@ -268,6 +375,7 @@
       if (iEl) iEl.textContent = i.toFixed(2);
       if (dEl) dEl.textContent = d.toFixed(2);
       if (errorEl) errorEl.textContent = error.toFixed(2);
+      if (speedEl) speedEl.textContent = lastSpeed.toFixed(2);
     });
   }
 
@@ -293,7 +401,7 @@
       state.integral = 0;
       state.prevError = 0;
       lastTime = performance.now();
-      state.speed = 95;
+      // Do not reset speed or gains here; keep user settings
       robotEl.setPointerCapture(evt.pointerId);
       robotEl.style.cursor = "grabbing";
     });
@@ -306,5 +414,140 @@
   syncSensorsUI();
   robotEl.style.left = `${state.x}px`;
   robotEl.style.top = `${state.y}px`;
-  requestAnimationFrame(loop);
+  const adjustedAngle = state.angle - Math.PI * 0.75;
+  robotEl.style.transform = `translate(-50%, -50%) rotate(${adjustedAngle}rad)`;
+
+  // --- Synchronize UI with gains on load ---
+  if (kpSlider) kpSlider.value = gains.kp;
+  if (kiSlider) kiSlider.value = gains.ki;
+  if (kdSlider) kdSlider.value = gains.kd;
+  if (kpValue) kpValue.textContent = gains.kp.toFixed(2);
+  if (kiValue) kiValue.textContent = gains.ki.toFixed(2);
+  if (kdValue) kdValue.textContent = gains.kd.toFixed(2);
+  
+  // Initialize control panel
+  function setupControlPanel() {
+    // PID Gain Sliders
+    if (kpSlider) {
+      kpSlider.addEventListener("input", (e) => {
+        gains.kp = parseFloat(e.target.value);
+        kpValue.textContent = gains.kp.toFixed(2);
+      });
+    }
+
+    if (kiSlider) {
+      kiSlider.addEventListener("input", (e) => {
+        gains.ki = parseFloat(e.target.value);
+        kiValue.textContent = gains.ki.toFixed(2);
+      });
+    }
+
+    if (kdSlider) {
+      kdSlider.addEventListener("input", (e) => {
+        gains.kd = parseFloat(e.target.value);
+        kdValue.textContent = gains.kd.toFixed(2);
+      });
+    }
+
+    // Speed Slider
+    if (speedSlider) {
+      speedSlider.addEventListener("input", (e) => {
+        state.speed = parseFloat(e.target.value);
+        speedValue.textContent = state.speed + " px/s";
+      });
+    }
+
+    // Feature Toggles
+    if (noiseToggle) {
+      noiseToggle.addEventListener("change", (e) => {
+        features.enableNoise = e.target.checked;
+      });
+    }
+
+    if (antiWindupToggle) {
+      antiWindupToggle.addEventListener("change", (e) => {
+        features.enableAntiWindup = e.target.checked;
+      });
+    }
+
+    if (dFilterToggle) {
+      dFilterToggle.addEventListener("change", (e) => {
+        features.enableDFilter = e.target.checked;
+      });
+    }
+
+    if (adaptiveSpeedToggle) {
+      adaptiveSpeedToggle.addEventListener("change", (e) => {
+        features.enableAdaptiveSpeed = e.target.checked;
+      });
+    }
+
+    // Reset Button
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        gains.kp = DEFAULT_GAINS.kp;
+        gains.ki = DEFAULT_GAINS.ki;
+        gains.kd = DEFAULT_GAINS.kd;
+        state.speed = DEFAULT_SPEED;
+        
+        if (kpSlider) kpSlider.value = DEFAULT_GAINS.kp;
+        if (kiSlider) kiSlider.value = DEFAULT_GAINS.ki;
+        if (kdSlider) kdSlider.value = DEFAULT_GAINS.kd;
+        if (speedSlider) speedSlider.value = DEFAULT_SPEED;
+        
+        if (kpValue) kpValue.textContent = DEFAULT_GAINS.kp.toFixed(2);
+        if (kiValue) kiValue.textContent = DEFAULT_GAINS.ki.toFixed(2);
+        if (kdValue) kdValue.textContent = DEFAULT_GAINS.kd.toFixed(2);
+        if (speedValue) speedValue.textContent = DEFAULT_SPEED + " px/s";
+        
+        state.integral = 0;
+        state.prevError = 0;
+        state.prevDeriv = null;
+        
+        noiseToggle.checked = false;
+        features.enableNoise = false;
+        
+        antiWindupToggle.checked = true;
+        features.enableAntiWindup = true;
+        
+        dFilterToggle.checked = false;
+        features.enableDFilter = false;
+        
+        adaptiveSpeedToggle.checked = false;
+        features.enableAdaptiveSpeed = false;
+      });
+    }
+  }
+  
+  setupControlPanel();
+  
+  // Intersection Observer for pause/resume on scroll
+  function setupIntersectionObserver() {
+    const section = canvas.closest("section") || canvas.closest("div[data-nav-section]");
+    if (!section) {
+      // Fallback: just start running
+      isRunning = true;
+      requestAnimationFrame(loop);
+      return;
+    }
+
+    intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            isRunning = true;
+            lastTime = performance.now();
+            requestAnimationFrame(loop);
+          } else {
+            isRunning = false;
+          }
+        });
+      },
+      { threshold: 0.3 }
+    );
+
+    intersectionObserver.observe(section);
+  }
+  
+  setupIntersectionObserver();
 })();
