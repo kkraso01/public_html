@@ -101,6 +101,61 @@
       50% { color: #22c55e; }
       100% { color: #e5e7eb; }
     }
+
+    .lf-robot {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      display: grid;
+      place-items: center;
+      pointer-events: auto;
+      cursor: grab;
+    }
+
+    .lf-robot-core {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #1f2937 0%, #111827 60%, #0b1020 100%);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      border: 2px solid rgba(129, 140, 248, 0.6);
+      box-shadow: 0 0 22px rgba(79, 70, 229, 0.35);
+      z-index: 2;
+    }
+
+    .lf-robot-ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px dashed rgba(129, 140, 248, 0.35);
+      animation: pulse 2.4s ease-in-out infinite;
+      z-index: 1;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.92); opacity: 0.7; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.92); opacity: 0.7; }
+    }
+
+    .sensor-pill {
+      background: rgba(17, 24, 39, 0.6);
+      border: 1px solid rgba(75, 85, 99, 0.6);
+      border-radius: 14px;
+      padding: 10px 12px;
+    }
+
+    .sensor-value {
+      font-family: "IBM Plex Mono", "Fira Code", monospace;
+      font-weight: 600;
+      color: #a5b4fc;
+    }
   </style>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans scroll-smooth">
@@ -124,12 +179,8 @@
   <!-- Side Navigation (Command Links) -->
   <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
     <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Command</div>
-    <a href="#rag-pipeline" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">RAG Mesh</a>
-    <a href="#viz-2d" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Vector Ops (2D)</a>
-    <a href="#viz-3d" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Neural Galaxy</a>
-    <a href="#orchestrator" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">LLM Router</a>
-    <a href="#transformer-viz" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Transformer Core</a>
-    <a href="#attention-viz" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Attention Field</a>
+    <a href="#research-systems" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Research Systems</a>
+    <a href="#playful-demo" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Playful Demo</a>
     <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects</a>
   </nav>
 
@@ -168,96 +219,168 @@
     </div>
   </section>
 
-  <!-- RAG Pipeline Visualization -->
-  <section id="rag-pipeline" data-nav-section class="py-20 px-6 relative max-w-5xl mx-auto">
-    <h2 class="text-3xl font-bold mb-2">How I Build AI Systems</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Deploy retrieval mesh & orchestrate context flow.</p>
-    <p class="text-gray-400 mb-6">
-      A clean visualization of the Retrieval-Augmented Generation (RAG) pipeline
-      and LLM orchestration — the core of my research work.
-    </p>
-
-    <div class="flex items-center gap-3 mb-4">
-      <span class="hud-chip">Signal Routing</span>
-      <span class="cue-badge">Hover to trace retrieval hops</span>
+  <!-- Research-First Systems -->
+  <section id="research-systems" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+    <div class="flex flex-col gap-3 mb-10">
+      <p class="mission-brief text-indigo-300/80">Mission: Showcase production-grade, research-led LLM systems.</p>
+      <h2 class="text-3xl font-bold">Industry-Lean Research Systems</h2>
+      <p class="text-gray-400 max-w-3xl">
+        A focused selection of the most deployment-ready canvases — RAG mesh, LLM routing, and transformer
+        internals — grouped together so you can keep signal-dense, research-first visuals up front while the
+        playful lab lives separately.
+      </p>
     </div>
-    <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
+
+    <div class="grid lg:grid-cols-2 gap-12">
+      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+        <div class="flex items-center gap-3">
+          <span class="hud-chip">Signal Routing</span>
+          <span class="cue-badge">Hover to trace retrieval hops</span>
+        </div>
+        <div>
+          <h3 class="text-2xl font-semibold">RAG Mesh &amp; Context Flow</h3>
+          <p class="text-gray-400">A clean view of the Retrieval-Augmented Generation (RAG) pipeline and how
+            context moves through the system.</p>
+        </div>
+        <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
+      </article>
+
+      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+        <div class="flex items-center gap-3">
+          <span class="hud-chip">Router Status</span>
+          <span class="cue-badge">Hover to watch dispatch logic</span>
+        </div>
+        <div>
+          <h3 class="text-2xl font-semibold">Multi-LLM Orchestrator</h3>
+          <p class="text-gray-400">Router-dispatch visualization showing vector DB lookups, model selection,
+            and merge policies under latency/cost constraints.</p>
+        </div>
+        <canvas id="orchestratorCanvas" class="w-full h-[320px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
+        <p class="mt-1 text-xs text-gray-500">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge → Response</p>
+      </article>
+
+      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+        <div class="flex items-center gap-3">
+          <span class="hud-chip">Token Flow</span>
+          <span class="cue-badge">Hover to reveal head activity</span>
+        </div>
+        <div>
+          <h3 class="text-2xl font-semibold">Transformer Core Internals</h3>
+          <p class="text-gray-400">Embeddings → multi-head attention → residual paths → logits, rendered with
+            the same live metrics used across the portfolio.</p>
+        </div>
+        <canvas id="llm-viz" class="w-full h-[360px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
+      </article>
+
+      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+        <div class="flex items-center gap-3">
+          <span class="hud-chip">Attention Field</span>
+          <span class="cue-badge">Hover to expose head weights</span>
+        </div>
+        <div>
+          <h3 class="text-2xl font-semibold">Semantic Attention Map</h3>
+          <p class="text-gray-400">Parallel attention heads computing token relationships and convergence
+            patterns — the research signal that informs tuning.</p>
+        </div>
+        <canvas id="attentionCanvas" class="w-full h-[300px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
+      </article>
+    </div>
   </section>
 
-  <!-- 2D System Visualizer -->
-  <section id="viz-2d" data-nav-section class="py-24 max-w-6xl mx-auto px-6">
-    <h2 class="text-3xl font-bold mb-2">GPT‑4 Inspired System Visualizer (2D)</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Observe vector ops and token routing.</p>
-    <p class="text-gray-400 mb-6">A real-time animated view of multi-model orchestration, token routing, and vector retrieval.</p>
-    <div class="flex items-center gap-3 mb-4">
-      <span class="hud-chip">Vector Ops</span>
-      <span class="cue-badge">Tap to pulse token flow</span>
+  <!-- Playful Line-Following Lab -->
+  <section id="playful-demo" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+    <div class="flex flex-col gap-3 mb-10">
+      <p class="mission-brief text-indigo-300/80">Mission: A playful robotics demo that reuses the HUD + metrics fabric.</p>
+      <h2 class="text-3xl font-bold">Line-Following Robot Lab</h2>
+      <p class="text-gray-400 max-w-3xl">
+        Drag-and-drop the bot anywhere on the track, watch eight IR sensors sample the canvas, and follow the
+        PID loop as it keeps the rover locked on the black line. Metrics use the shared EventBus so the HUD
+        styling stays consistent with the research canvases.
+      </p>
     </div>
-    <canvas id="viz2d" class="w-full h-[420px] rounded-xl bg-gray-950/40 border border-gray-700"></canvas>
-  </section>
 
-  <!-- 3D Neural Galaxy Visualizer -->
-  <section id="viz-3d" data-nav-section class="py-24 max-w-6xl mx-auto px-6">
-    <h2 class="text-3xl font-bold mb-2">Neural Galaxy (3D)</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Stabilize neural constellation.</p>
-    <p class="text-gray-400 mb-6">A cyberpunk 3D neural field representing LLM internal computation states.</p>
-    <div class="flex items-center gap-3 mb-4">
-      <span class="hud-chip">Spatial Cortex</span>
-      <span class="cue-badge">Drag to orbit & zoom</span>
+    <div class="grid lg:grid-cols-[1.4fr,1fr] gap-8">
+      <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="hud-chip">Draggable Bot</span>
+          <span class="cue-badge">Grab to reposition on the loop</span>
+        </div>
+        <div class="relative">
+          <canvas id="line-following-canvas" class="w-full h-[420px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
+          <div id="line-following-robot" class="lf-robot" title="Drag me">
+            <div class="lf-robot-core">🤖</div>
+            <div class="lf-robot-ring"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-5 space-y-5">
+        <div>
+          <h3 class="text-xl font-semibold">Telemetry</h3>
+          <p class="text-gray-400 text-sm">Live IR sensor reads and PID terms published over the shared EventBus.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
+            <p class="text-xs text-gray-400">Proportional</p>
+            <p id="pid-p" class="text-2xl font-mono text-indigo-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
+            <p class="text-xs text-gray-400">Integral</p>
+            <p id="pid-i" class="text-2xl font-mono text-indigo-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
+            <p class="text-xs text-gray-400">Derivative</p>
+            <p id="pid-d" class="text-2xl font-mono text-indigo-300">0.00</p>
+          </div>
+          <div class="bg-gray-950/60 rounded-xl border border-gray-800 p-3">
+            <p class="text-xs text-gray-400">Error</p>
+            <p id="pid-error" class="text-2xl font-mono text-rose-300">0.00</p>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-semibold">IR Sensor Array</h4>
+            <span class="text-xs text-gray-500">Left → Right</span>
+          </div>
+          <div class="grid grid-cols-4 gap-3">
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S1</p>
+              <p data-sensor-index="0" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S2</p>
+              <p data-sensor-index="1" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S3</p>
+              <p data-sensor-index="2" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S4</p>
+              <p data-sensor-index="3" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S5</p>
+              <p data-sensor-index="4" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S6</p>
+              <p data-sensor-index="5" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S7</p>
+              <p data-sensor-index="6" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill">
+              <p class="text-xs text-gray-400">S8</p>
+              <p data-sensor-index="7" class="sensor-value">0.00</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <canvas id="viz3d" class="w-full h-[500px] rounded-xl bg-black border border-gray-700"></canvas>
-  </section>
-
-  <!-- Multi-LLM Orchestrator Visualization -->
-  <section id="orchestrator" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold mb-2">Multi-LLM Orchestrator (LLM-MS)</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Route & merge multi-model intelligence.</p>
-    <p class="text-gray-400 mb-8">
-      Visualization of a multi-model LLM orchestration layer: a router dispatches queries to multiple models,
-      consults a vector database, and merges responses based on cost, latency, and relevance.
-    </p>
-
-    <div class="flex items-center gap-3 mb-4">
-      <span class="hud-chip">Router Status</span>
-      <span class="cue-badge">Hover to watch dispatch logic</span>
-    </div>
-    <canvas id="orchestratorCanvas" class="w-full h-[360px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
-
-    <p class="mt-3 text-xs text-gray-500">
-      Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge → Response
-    </p>
-  </section>
-
-  <!-- Transformer Block Visualizer -->
-  <section id="transformer-viz" data-nav-section class="py-24 px-6 relative max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold mb-2">Transformer Architecture Internals</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Track embedding → attention → logits.</p>
-    <p class="text-gray-400 mb-8">
-      Real-time visualization of transformer token flow through embeddings, multi-head attention blocks,
-      residual connections, and logit distribution — a peek into how LLMs process language.
-    </p>
-
-    <div class="flex items-center gap-3 mb-4">
-      <span class="hud-chip">Token Flow</span>
-      <span class="cue-badge">Hover to reveal head activity</span>
-    </div>
-    <canvas id="llm-viz" class="w-full h-[420px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
-  </section>
-
-  <!-- Multi-Head Attention Visualizer -->
-  <section id="attention-viz" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold mb-2">Multi-Head Attention Mechanism</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Observe semantic head convergence.</p>
-    <p class="text-gray-400 mb-8">
-      Animated visualization of parallel attention heads computing token relationships.
-      Each head independently learns to attend to different semantic and syntactic features.
-    </p>
-
-    <div class="flex items-center gap-3 mb-4">
-      <span class="hud-chip">Attention Field</span>
-      <span class="cue-badge">Hover to expose head weights</span>
-    </div>
-    <canvas id="attentionCanvas" class="w-full h-[340px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
 
   <!-- About -->
@@ -500,6 +623,7 @@
   <script src="system_orchestrator.js"></script>
   <script src="llm_viz.js"></script>
   <script src="attention.js"></script>
+  <script src="robot-demo/line_following.js"></script>
 
   <script>
     // Scroll-linked navigation glow
