@@ -7,8 +7,12 @@ function init3DVisualizer() {
   }
 
   const ctx = canvas3d.getContext("2d");
+  const bus = window.EventBus;
   let w, h, dpr;
   let t = 0;
+  let running = true;
+  let speed = 1;
+  let highlight = 0;
 
   function resize() {
     dpr = window.devicePixelRatio || 1;
@@ -23,137 +27,153 @@ function init3DVisualizer() {
   resize();
   window.addEventListener("resize", resize);
 
-  // Neural nodes
-  const nodeCount = 8;
-  const nodes = [];
-  for (let i = 0; i < nodeCount; i++) {
-    const angle = (i / nodeCount) * Math.PI * 2;
-    nodes.push({
+  const clusters = [
+    { label: "retrieval", hue: 200 },
+    { label: "generation", hue: 320 },
+    { label: "routing", hue: 160 }
+  ];
+
+  const particles = Array.from({ length: 220 }, (_, i) => {
+    const arm = i % clusters.length;
+    const angle = (i / 120) * Math.PI * 4;
+    const radius = 30 + Math.random() * 180;
+    return {
+      arm,
       baseAngle: angle,
-      orbitRadius: 80,
-      size: 8 + Math.random() * 6,
-      speed: 0.002 + Math.random() * 0.002,
-      hue: 190 + i * 30,
-      wobble: Math.random() * Math.PI * 2
-    });
-  }
+      radius,
+      speed: 0.0008 + Math.random() * 0.0012,
+      z: Math.random(),
+      size: 1 + Math.random() * 2,
+      jitter: Math.random() * Math.PI * 2
+    };
+  });
 
-  // Particle nebula
-  const particles = [];
-  for (let i = 0; i < 150; i++) {
-    particles.push({
-      x: (Math.random() - 0.5) * w,
-      y: (Math.random() - 0.5) * h,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.5,
-      hue: 200 + Math.random() * 100,
-      size: Math.random() * 2 + 0.5,
-      depth: Math.random()
-    });
-  }
+  const topics = [
+    { label: "Embeddings", x: 0.26, y: 0.32 },
+    { label: "Latency bands", x: 0.52, y: 0.22 },
+    { label: "Clustered intents", x: 0.68, y: 0.46 }
+  ];
 
-  // Neural connections
-  const connections = [];
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      if (Math.random() > 0.55) {
-        connections.push({ from: i, to: j, alpha: 0 });
-      }
-    }
+  function drawBackground() {
+    const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 1.2);
+    grad.addColorStop(0, "rgba(15,23,42,1)");
+    grad.addColorStop(1, "rgba(2,6,23,0.9)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
   }
 
   function drawParticles() {
-    particles.forEach(p => {
-      p.x += p.vx;
-      p.y += p.vy;
+    const cx = w / 2;
+    const cy = h / 2;
 
-      // Wrap around
-      if (p.x < -w / 2) p.x = w / 2;
-      if (p.x > w / 2) p.x = -w / 2;
-      if (p.y < -h / 2) p.y = h / 2;
-      if (p.y > h / 2) p.y = -h / 2;
+    particles.forEach((p, idx) => {
+      if (running) p.baseAngle += p.speed * speed;
+      const spiral = p.baseAngle + Math.sin(t * 0.002 + p.jitter) * 0.02;
+      const r = p.radius * (1 + 0.1 * Math.sin(t * 0.001 + idx)) + highlight * 4;
+      const x = cx + Math.cos(spiral) * r;
+      const y = cy + Math.sin(spiral) * r * 0.6 + Math.sin(p.baseAngle) * 6;
 
-      const opacity = 0.3 + p.depth * 0.4;
-      ctx.fillStyle = `hsla(${p.hue}, 80%, 60%, ${opacity})`;
+      const cluster = clusters[p.arm];
+      const alpha = 0.35 + p.z * 0.4 + highlight * 0.1;
+      ctx.fillStyle = `hsla(${cluster.hue}, 90%, 70%, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(w / 2 + p.x, h / 2 + p.y, p.size, 0, Math.PI * 2);
+      ctx.arc(x, y, p.size + p.z * 2, 0, Math.PI * 2);
       ctx.fill();
     });
   }
 
-  function drawConnections() {
+  function drawRibbons() {
     const cx = w / 2;
     const cy = h / 2;
 
-    connections.forEach((conn, idx) => {
-      const node1 = nodes[conn.from];
-      const node2 = nodes[conn.to];
-
-      const angle1 = node1.baseAngle + t * node1.speed;
-      const angle2 = node2.baseAngle + t * node2.speed;
-
-      const x1 = cx + Math.cos(angle1) * node1.orbitRadius;
-      const y1 = cy + Math.sin(angle1) * node1.orbitRadius;
-
-      const x2 = cx + Math.cos(angle2) * node2.orbitRadius;
-      const y2 = cy + Math.sin(angle2) * node2.orbitRadius;
-
-      // Pulsing alpha
-      const pulse = Math.sin(t * 0.01 + idx) * 0.5 + 0.5;
-      ctx.strokeStyle = `rgba(167, 139, 250, ${pulse * 0.4})`;
-      ctx.lineWidth = 1.2;
+    clusters.forEach((cluster, idx) => {
+      ctx.strokeStyle = `hsla(${cluster.hue}, 90%, 70%, 0.4)`;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.12) {
+        const r = 40 + idx * 30 + Math.sin(angle * 2 + t * 0.002 * speed) * 10;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r * 0.7;
+        if (angle === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
       ctx.stroke();
     });
   }
 
-  function drawNodes() {
-    const cx = w / 2;
-    const cy = h / 2;
+  function drawHUD() {
+    ctx.save();
+    ctx.translate(16, 16);
+    ctx.fillStyle = "rgba(15,23,42,0.82)";
+    ctx.strokeStyle = "rgba(129,140,248,0.5)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, 180, 90, 12);
+    ctx.fill();
+    ctx.stroke();
 
-    nodes.forEach((node, i) => {
-      const angle = node.baseAngle + t * node.speed;
-      const wobble = Math.sin(Date.now() * 0.001 + node.wobble) * 3;
+    ctx.fillStyle = "rgba(226,232,240,0.92)";
+    ctx.font = "11px monospace";
+    ctx.fillText("Neural Galaxy", 12, 20);
+    ctx.fillStyle = "rgba(148,163,184,0.9)";
+    ctx.fillText(`speed x${speed.toFixed(2)}`, 12, 36);
+    ctx.fillText(`highlight ${highlight.toFixed(2)}`, 12, 52);
+    ctx.fillText(`particles ${particles.length}`, 12, 68);
+    ctx.restore();
+  }
 
-      const x = cx + Math.cos(angle) * node.orbitRadius + wobble;
-      const y = cy + Math.sin(angle) * node.orbitRadius + wobble;
-
-      // Glow
-      const glowGrad = ctx.createRadialGradient(x, y, 0, x, y, node.size * 4);
-      glowGrad.addColorStop(0, `hsla(${node.hue}, 100%, 70%, 0.8)`);
-      glowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-      ctx.fillStyle = glowGrad;
+  function drawTopics() {
+    ctx.fillStyle = "rgba(226,232,240,0.85)";
+    ctx.font = "11px monospace";
+    topics.forEach((tpc) => {
+      const x = tpc.x * w;
+      const y = tpc.y * h;
+      ctx.fillText(tpc.label, x, y);
+      ctx.strokeStyle = "rgba(94,234,212,0.5)";
       ctx.beginPath();
-      ctx.arc(x, y, node.size * 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Node core
-      ctx.fillStyle = `hsla(${node.hue}, 95%, 75%, 1)`;
-      ctx.beginPath();
-      ctx.arc(x, y, node.size, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Rotating ring
-      ctx.strokeStyle = `hsla(${node.hue}, 80%, 70%, 0.6)`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(x, y, node.size * 1.8, 0, Math.PI * 2);
+      ctx.arc(x, y - 6, 6 + highlight * 0.5, 0, Math.PI * 2);
       ctx.stroke();
     });
   }
 
   function animate() {
-    t += 1;
-    ctx.clearRect(0, 0, w, h);
+    if (running) {
+      t += 16;
+      highlight = Math.max(0, highlight - 0.01);
+    }
 
+    ctx.clearRect(0, 0, w, h);
+    drawBackground();
     drawParticles();
-    drawConnections();
-    drawNodes();
+    drawRibbons();
+    drawTopics();
+    drawHUD();
 
     requestAnimationFrame(animate);
+  }
+
+  function handleControl(payload) {
+    if (!payload) return;
+    if (payload.action === "toggle") running = !payload.value;
+    if (payload.action === "speed" && typeof payload.value === "number") speed = payload.value;
+    if (payload.action === "spike") {
+      highlight = Math.min(3, highlight + (payload.value || 1));
+      if (bus) bus.emit("telemetry:spike", { source: "galaxy3d", intensity: highlight });
+    }
+  }
+
+  canvas3d.addEventListener("click", () => {
+    highlight = Math.min(3, highlight + 0.8);
+    if (bus) bus.emit("telemetry:spike", { source: "galaxy3d", intensity: highlight });
+  });
+
+  if (bus) {
+    bus.on("control:galaxy3d", handleControl);
+    bus.on("telemetry:spike", ({ source, intensity }) => {
+      if (source === "galaxy3d") return;
+      highlight = Math.min(3, highlight + (intensity || 0.4));
+    });
   }
 
   animate();
