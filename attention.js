@@ -1,7 +1,10 @@
-const canvas = document.getElementById("attentionCanvas");
-if (!canvas) {
-  console.warn("[Attention] canvas not found");
-} else {
+(function () {
+  const canvas = document.getElementById("attentionCanvas");
+  if (!canvas) {
+    console.warn("[Attention] canvas not found");
+    return;
+  }
+
   const ctx = canvas.getContext("2d");
   const bus = window.EventBus;
 
@@ -67,7 +70,7 @@ if (!canvas) {
       ctx.fillText(tk, tokenX[i], tokenY + 22);
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.beginPath();
-      ctx.arc(tokenX[i], tokenY, 10, 0, Math.PI * 2);
+      drawRoundedRect(tokenX[i] - 10, tokenY - 10, 20, 20, 5);
       ctx.fill();
     });
     return { tokenX, tokenY };
@@ -194,4 +197,4 @@ if (!canvas) {
   }
 
   draw();
-}
+})();

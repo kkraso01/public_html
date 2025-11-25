@@ -178,7 +178,7 @@
       const alpha = 0.8;
       ctx.fillStyle = `rgba(15,23,42,${alpha})`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+      drawRoundedRect(p.x - 12, p.y - 12, 24, 24, 6);
       ctx.fill();
       ctx.strokeStyle = "rgba(148,163,184,0.9)";
       ctx.lineWidth = 1.2;

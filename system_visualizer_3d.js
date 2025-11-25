@@ -149,7 +149,8 @@ function init3DVisualizer() {
       ctx.fillText(tpc.label, x, y);
       ctx.strokeStyle = "rgba(94,234,212,0.5)";
       ctx.beginPath();
-      ctx.arc(x, y - 6, 6 + highlight * 0.5, 0, Math.PI * 2);
+      const marker = 6 + highlight * 0.5;
+      drawRoundedRect(x - marker, y - 6 - marker, marker * 2, marker * 2, 5);
       ctx.stroke();
     });
   }

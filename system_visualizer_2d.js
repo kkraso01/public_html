@@ -87,7 +87,7 @@ if (!canvas2d) {
     ctx2d.strokeStyle = `rgba(100, 200, 255, ${0.3 + 0.3 * Math.sin(t * 0.01)})`;
     ctx2d.lineWidth = 2;
     ctx2d.beginPath();
-    ctx2d.arc(x, y, core.r * 1.4, 0, Math.PI * 2);
+    drawRoundedRect(x - core.r * 1.4, y - core.r * 1.4, core.r * 2.8, core.r * 2.8, 12);
     ctx2d.stroke();
   }
 
@@ -102,7 +102,7 @@ if (!canvas2d) {
 
       ctx2d.fillStyle = `hsla(${n.hue}, 85%, 70%, 0.9)`;
       ctx2d.beginPath();
-      ctx2d.arc(x, y, n.size, 0, Math.PI * 2);
+      drawRoundedRect(x - n.size, y - n.size, n.size * 2, n.size * 2, 6);
       ctx2d.fill();
 
       if (i % 2 === 0) {
@@ -139,7 +139,8 @@ if (!canvas2d) {
 
     ctx2d.fillStyle = `hsla(${vectorDB.hue}, 90%, 70%, 0.9)`;
     ctx2d.beginPath();
-    ctx2d.arc(x, y, vectorDB.r * 0.6, 0, Math.PI * 2);
+    const vSize = vectorDB.r * 0.6;
+    drawRoundedRect(x - vSize, y - vSize, vSize * 2, vSize * 2, 8);
     ctx2d.fill();
 
     ctx2d.fillStyle = "rgba(148,163,184,0.9)";
@@ -173,7 +174,8 @@ if (!canvas2d) {
 
       ctx2d.fillStyle = channel.color;
       ctx2d.beginPath();
-      ctx2d.arc(x, y, p.size + burst * 0.6, 0, Math.PI * 2);
+      const marker = p.size + burst * 0.6;
+      drawRoundedRect(x - marker, y - marker, marker * 2, marker * 2, 4);
       ctx2d.fill();
     });
   }
