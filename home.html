@@ -83,22 +83,6 @@
       text-transform: uppercase;
     }
 
-    .control-btn {
-      padding: 6px 10px;
-      border-radius: 10px;
-      font-size: 12px;
-      border: 1px solid rgba(129, 140, 248, 0.35);
-      background: rgba(15, 23, 42, 0.7);
-      color: #e5e7eb;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-      transition: border-color 0.2s ease, transform 0.2s ease;
-    }
-
-    .control-btn:hover {
-      border-color: rgba(129, 140, 248, 0.85);
-      transform: translateY(-1px);
-    }
-
     .cue-badge {
       font-size: 11px;
       border-radius: 999px;
@@ -187,7 +171,7 @@
   <!-- RAG Pipeline Visualization -->
   <section id="rag-pipeline" data-nav-section class="py-20 px-6 relative max-w-5xl mx-auto">
     <h2 class="text-3xl font-bold mb-2">How I Build AI Systems</h2>
-    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Deploy retrieval mesh & orchestrate context flow; cross-linked telemetry active.</p>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Deploy retrieval mesh & orchestrate context flow.</p>
     <p class="text-gray-400 mb-6">
       A clean visualization of the Retrieval-Augmented Generation (RAG) pipeline
       and LLM orchestration — the core of my research work.
@@ -196,15 +180,6 @@
     <div class="flex items-center gap-3 mb-4">
       <span class="hud-chip">Signal Routing</span>
       <span class="cue-badge">Hover to trace retrieval hops</span>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="rag">
-      <button class="control-btn" data-action="toggle">Pause</button>
-      <button class="control-btn" data-action="spike">Inject Spike</button>
-      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
-        <span>Speed</span>
-        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
-      </label>
-      <span class="text-gray-400" data-state>Live</span>
     </div>
     <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
   </section>
@@ -218,15 +193,6 @@
       <span class="hud-chip">Vector Ops</span>
       <span class="cue-badge">Tap to pulse token flow</span>
     </div>
-    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="vector2d">
-      <button class="control-btn" data-action="toggle">Pause</button>
-      <button class="control-btn" data-action="spike">Burst Mode</button>
-      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
-        <span>Speed</span>
-        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
-      </label>
-      <span class="text-gray-400" data-state>Live</span>
-    </div>
     <canvas id="viz2d" class="w-full h-[420px] rounded-xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
 
@@ -238,15 +204,6 @@
     <div class="flex items-center gap-3 mb-4">
       <span class="hud-chip">Spatial Cortex</span>
       <span class="cue-badge">Drag to orbit & zoom</span>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="galaxy3d">
-      <button class="control-btn" data-action="toggle">Pause</button>
-      <button class="control-btn" data-action="spike">Highlight Cluster</button>
-      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
-        <span>Speed</span>
-        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
-      </label>
-      <span class="text-gray-400" data-state>Live</span>
     </div>
     <canvas id="viz3d" class="w-full h-[500px] rounded-xl bg-black border border-gray-700"></canvas>
   </section>
@@ -263,15 +220,6 @@
     <div class="flex items-center gap-3 mb-4">
       <span class="hud-chip">Router Status</span>
       <span class="cue-badge">Hover to watch dispatch logic</span>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="orchestrator">
-      <button class="control-btn" data-action="toggle">Pause</button>
-      <button class="control-btn" data-action="spike">Force Reroute</button>
-      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
-        <span>Speed</span>
-        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
-      </label>
-      <span class="text-gray-400" data-state>Live</span>
     </div>
     <canvas id="orchestratorCanvas" class="w-full h-[360px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
 
@@ -293,15 +241,6 @@
       <span class="hud-chip">Token Flow</span>
       <span class="cue-badge">Hover to reveal head activity</span>
     </div>
-    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="transformer">
-      <button class="control-btn" data-action="toggle">Pause</button>
-      <button class="control-btn" data-action="spike">Spike Load</button>
-      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
-        <span>Speed</span>
-        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
-      </label>
-      <span class="text-gray-400" data-state>Live</span>
-    </div>
     <canvas id="llm-viz" class="w-full h-[420px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
 
@@ -317,15 +256,6 @@
     <div class="flex items-center gap-3 mb-4">
       <span class="hud-chip">Attention Field</span>
       <span class="cue-badge">Hover to expose head weights</span>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="attention">
-      <button class="control-btn" data-action="toggle">Pause</button>
-      <button class="control-btn" data-action="spike">Entropy Spike</button>
-      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
-        <span>Speed</span>
-        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
-      </label>
-      <span class="text-gray-400" data-state>Live</span>
     </div>
     <canvas id="attentionCanvas" class="w-full h-[340px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
@@ -572,8 +502,6 @@
   <script src="attention.js"></script>
 
   <script>
-    const controlBus = window.EventBus;
-
     // Scroll-linked navigation glow
     const navLinks = Array.from(document.querySelectorAll('.nav-link'));
     const sections = Array.from(document.querySelectorAll('[data-nav-section]'));
@@ -607,35 +535,6 @@
 
       parentSection.addEventListener('pointerenter', handleInteraction, { once: true });
       parentSection.addEventListener('click', handleInteraction, { once: true });
-    });
-
-    // Control bars wiring
-    document.querySelectorAll('[data-control-target]').forEach((bar) => {
-      const target = bar.dataset.controlTarget;
-      const stateEl = bar.querySelector('[data-state]');
-      let paused = false;
-
-      const emitState = (action, value) => {
-        if (!controlBus) return;
-        controlBus.emit(`control:${target}`, { action, value, paused });
-      };
-
-      bar.querySelectorAll('[data-action="toggle"]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          paused = !paused;
-          btn.textContent = paused ? 'Resume' : 'Pause';
-          stateEl.textContent = paused ? 'Paused' : 'Live';
-          emitState('toggle', paused);
-        });
-      });
-
-      bar.querySelectorAll('[data-action="spike"]').forEach((btn) => {
-        btn.addEventListener('click', () => emitState('spike', Math.random() * 2 + 0.5));
-      });
-
-      bar.querySelectorAll('[data-action="speed"]').forEach((input) => {
-        input.addEventListener('input', (e) => emitState('speed', parseFloat(e.target.value)));
-      });
     });
   </script>
 
