@@ -9,8 +9,12 @@
   }
 
   const ctx = canvas.getContext("2d");
+  const bus = window.EventBus;
   let w, h, dpr;
   let t = 0;
+  let running = true;
+  let speed = 1;
+  let spike = 0;
 
   function resize() {
     dpr = window.devicePixelRatio || 1;
@@ -199,7 +203,10 @@
 
   // Main animation loop
   function drawScene() {
-    t += 1;
+    if (running) {
+      t += 1 * speed;
+      spike = Math.max(0, spike - 0.01);
+    }
     const route = currentRouteWithMetrics();
 
     ctx.clearRect(0, 0, w, h);
@@ -230,7 +237,7 @@
     arrow(
       layout.client,
       layout.router,
-      "rgba(129,140,248,0.9)",
+      `rgba(129,140,248,${0.7 + spike * 0.1})`,
       2,
       true,
       pulse
@@ -240,7 +247,7 @@
     arrow(
       { x: layout.router.x, y: layout.router.y + 0.10 },
       { x: layout.vdb.x,    y: layout.vdb.y - 0.12 },
-      "rgba(52,211,153,0.8)",
+      `rgba(52,211,153,${0.7 + spike * 0.1})`,
       1.8,
       true,
       pulse + 0.2
@@ -251,7 +258,7 @@
     arrow(
       { x: layout.router.x + 0.06, y: layout.router.y - 0.14 },
       { x: chosenLLM.x - 0.05,     y: chosenLLM.y },
-      "rgba(129,140,248,0.9)",
+      `rgba(129,140,248,${0.7 + spike * 0.1})`,
       2,
       true,
       pulse + 0.4
@@ -261,7 +268,7 @@
     arrow(
       { x: chosenLLM.x + 0.06, y: chosenLLM.y },
       { x: layout.scorer.x - 0.06, y: layout.scorer.y - 0.04 },
-      "rgba(244,114,182,0.8)",
+      `rgba(244,114,182,${0.7 + spike * 0.1})`,
       1.8,
       true,
       pulse + 0.6
@@ -271,7 +278,7 @@
     arrow(
       layout.scorer,
       layout.output,
-      "rgba(52,211,153,0.9)",
+      `rgba(52,211,153,${0.8 + spike * 0.1})`,
       2,
       true,
       pulse + 0.8
@@ -283,6 +290,24 @@
   }
 
   drawScene();
+
+  function handleControl(payload) {
+    if (!payload) return;
+    if (payload.action === "toggle") running = !payload.value;
+    if (payload.action === "speed" && typeof payload.value === "number") speed = payload.value;
+    if (payload.action === "spike") {
+      spike = Math.min(3, spike + (payload.value || 1));
+      if (bus) bus.emit("telemetry:spike", { source: "orchestrator", intensity: spike });
+    }
+  }
+
+  if (bus) {
+    bus.on("control:orchestrator", handleControl);
+    bus.on("telemetry:spike", ({ source, intensity }) => {
+      if (source === "orchestrator") return;
+      spike = Math.min(3, spike + (intensity || 0.4));
+    });
+  }
 
   // Optional: Register with SystemPlugins if available
   if (window.SystemPlugins && typeof window.SystemPlugins.registerNode === "function") {

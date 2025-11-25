@@ -44,6 +44,79 @@
         opacity: 1;
       }
     }
+
+    /* HUD side navigation */
+    .hud-nav .nav-link {
+      backdrop-filter: blur(10px);
+      background: linear-gradient(120deg, rgba(15, 23, 42, 0.65), rgba(51, 65, 85, 0.4));
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .hud-nav .nav-link:hover {
+      border-color: rgba(129, 140, 248, 0.9);
+      transform: translateX(2px);
+    }
+
+    .hud-nav .nav-link.active {
+      border-color: rgba(129, 140, 248, 1);
+      box-shadow: 0 15px 40px rgba(99, 102, 241, 0.35);
+    }
+
+    .hud-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(79, 70, 229, 0.12);
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .mission-brief {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .control-btn {
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      background: rgba(15, 23, 42, 0.7);
+      color: #e5e7eb;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .control-btn:hover {
+      border-color: rgba(129, 140, 248, 0.85);
+      transform: translateY(-1px);
+    }
+
+    .cue-badge {
+      font-size: 11px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.14);
+      border: 1px dashed rgba(148, 163, 184, 0.5);
+      padding: 6px 10px;
+      transition: opacity 0.3s ease;
+    }
+
+    .metric-flash {
+      animation: flash 0.6s ease;
+    }
+
+    @keyframes flash {
+      0% { color: #a5b4fc; }
+      50% { color: #22c55e; }
+      100% { color: #e5e7eb; }
+    }
   </style>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans scroll-smooth">
@@ -52,7 +125,7 @@
   <canvas id="nn-bg"></canvas>
 
   <!-- System Dashboard Overlay -->
-  <div id="sys-dashboard" class="fixed top-4 right-4 
+  <div id="sys-dashboard" class="fixed top-4 right-4
       bg-gray-900/60 backdrop-blur-lg px-6 py-4 rounded-2xl border border-gray-700 shadow-lg z-50">
     <h3 class="text-indigo-300 text-sm mb-2 tracking-widest">SYSTEM STATUS</h3>
     <div class="space-y-1 text-gray-200 text-xs font-mono">
@@ -63,6 +136,18 @@
       <p>Vector Ops: <span id="hud-vops">0</span>/s</p>
     </div>
   </div>
+
+  <!-- Side Navigation (Command Links) -->
+  <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
+    <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Command</div>
+    <a href="#rag-pipeline" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">RAG Mesh</a>
+    <a href="#viz-2d" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Vector Ops (2D)</a>
+    <a href="#viz-3d" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Neural Galaxy</a>
+    <a href="#orchestrator" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">LLM Router</a>
+    <a href="#transformer-viz" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Transformer Core</a>
+    <a href="#attention-viz" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Attention Field</a>
+    <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects</a>
+  </nav>
 
   <!-- Hero -->
   <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in">
@@ -100,38 +185,94 @@
   </section>
 
   <!-- RAG Pipeline Visualization -->
-  <section id="rag-pipeline" class="py-20 px-6 relative max-w-5xl mx-auto">
-    <h2 class="text-3xl font-bold mb-6">How I Build AI Systems</h2>
-    <p class="text-gray-400 mb-8">
-      A clean visualization of the Retrieval-Augmented Generation (RAG) pipeline 
+  <section id="rag-pipeline" data-nav-section class="py-20 px-6 relative max-w-5xl mx-auto">
+    <h2 class="text-3xl font-bold mb-2">How I Build AI Systems</h2>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Deploy retrieval mesh & orchestrate context flow. Cross-linked telemetry active.</p>
+    <p class="text-gray-400 mb-6">
+      A clean visualization of the Retrieval-Augmented Generation (RAG) pipeline
       and LLM orchestration — the core of my research work.
     </p>
 
+    <div class="flex items-center gap-3 mb-4">
+      <span class="hud-chip">Signal Routing</span>
+      <span class="cue-badge">Hover to trace retrieval hops</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="rag">
+      <button class="control-btn" data-action="toggle">Pause</button>
+      <button class="control-btn" data-action="spike">Inject Spike</button>
+      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+        <span>Speed</span>
+        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
+      </label>
+      <span class="text-gray-400" data-state>Live</span>
+    </div>
     <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
   </section>
 
   <!-- 2D System Visualizer -->
-  <section id="viz-2d" class="py-24 max-w-6xl mx-auto px-6">
-    <h2 class="text-3xl font-bold mb-4">GPT‑4 Inspired System Visualizer (2D)</h2>
+  <section id="viz-2d" data-nav-section class="py-24 max-w-6xl mx-auto px-6">
+    <h2 class="text-3xl font-bold mb-2">GPT‑4 Inspired System Visualizer (2D)</h2>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Observe vector ops and token routing.</p>
     <p class="text-gray-400 mb-6">A real-time animated view of multi-model orchestration, token routing, and vector retrieval.</p>
+    <div class="flex items-center gap-3 mb-4">
+      <span class="hud-chip">Vector Ops</span>
+      <span class="cue-badge">Tap to pulse token flow</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="vector2d">
+      <button class="control-btn" data-action="toggle">Pause</button>
+      <button class="control-btn" data-action="spike">Burst Mode</button>
+      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+        <span>Speed</span>
+        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
+      </label>
+      <span class="text-gray-400" data-state>Live</span>
+    </div>
     <canvas id="viz2d" class="w-full h-[420px] rounded-xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
 
   <!-- 3D Neural Galaxy Visualizer -->
-  <section id="viz-3d" class="py-24 max-w-6xl mx-auto px-6">
-    <h2 class="text-3xl font-bold mb-4">Neural Galaxy (3D)</h2>
+  <section id="viz-3d" data-nav-section class="py-24 max-w-6xl mx-auto px-6">
+    <h2 class="text-3xl font-bold mb-2">Neural Galaxy (3D)</h2>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Stabilize neural constellation.</p>
     <p class="text-gray-400 mb-6">A cyberpunk 3D neural field representing LLM internal computation states.</p>
+    <div class="flex items-center gap-3 mb-4">
+      <span class="hud-chip">Spatial Cortex</span>
+      <span class="cue-badge">Drag to orbit & zoom</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="galaxy3d">
+      <button class="control-btn" data-action="toggle">Pause</button>
+      <button class="control-btn" data-action="spike">Highlight Cluster</button>
+      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+        <span>Speed</span>
+        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
+      </label>
+      <span class="text-gray-400" data-state>Live</span>
+    </div>
     <canvas id="viz3d" class="w-full h-[500px] rounded-xl bg-black border border-gray-700"></canvas>
   </section>
 
   <!-- Multi-LLM Orchestrator Visualization -->
-  <section id="orchestrator" class="py-20 px-6 relative max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold mb-4">Multi-LLM Orchestrator (LLM-MS)</h2>
+  <section id="orchestrator" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-2">Multi-LLM Orchestrator (LLM-MS)</h2>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Route & merge multi-model intelligence.</p>
     <p class="text-gray-400 mb-8">
       Visualization of a multi-model LLM orchestration layer: a router dispatches queries to multiple models,
       consults a vector database, and merges responses based on cost, latency, and relevance.
     </p>
 
+    <div class="flex items-center gap-3 mb-4">
+      <span class="hud-chip">Router Status</span>
+      <span class="cue-badge">Hover to watch dispatch logic</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="orchestrator">
+      <button class="control-btn" data-action="toggle">Pause</button>
+      <button class="control-btn" data-action="spike">Force Reroute</button>
+      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+        <span>Speed</span>
+        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
+      </label>
+      <span class="text-gray-400" data-state>Live</span>
+    </div>
     <canvas id="orchestratorCanvas" class="w-full h-[360px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
 
     <p class="mt-3 text-xs text-gray-500">
@@ -140,24 +281,52 @@
   </section>
 
   <!-- Transformer Block Visualizer -->
-  <section id="transformer-viz" class="py-24 px-6 relative max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold mb-4">Transformer Architecture Internals</h2>
+  <section id="transformer-viz" data-nav-section class="py-24 px-6 relative max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-2">Transformer Architecture Internals</h2>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Track embedding → attention → logits.</p>
     <p class="text-gray-400 mb-8">
       Real-time visualization of transformer token flow through embeddings, multi-head attention blocks,
       residual connections, and logit distribution — a peek into how LLMs process language.
     </p>
 
+    <div class="flex items-center gap-3 mb-4">
+      <span class="hud-chip">Token Flow</span>
+      <span class="cue-badge">Hover to reveal head activity</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="transformer">
+      <button class="control-btn" data-action="toggle">Pause</button>
+      <button class="control-btn" data-action="spike">Spike Load</button>
+      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+        <span>Speed</span>
+        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
+      </label>
+      <span class="text-gray-400" data-state>Live</span>
+    </div>
     <canvas id="llm-viz" class="w-full h-[420px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
 
   <!-- Multi-Head Attention Visualizer -->
-  <section id="attention-viz" class="py-20 px-6 relative max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold mb-4">Multi-Head Attention Mechanism</h2>
+  <section id="attention-viz" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-2">Multi-Head Attention Mechanism</h2>
+    <p class="mission-brief text-indigo-300/80 mb-4">Mission: Observe semantic head convergence.</p>
     <p class="text-gray-400 mb-8">
       Animated visualization of parallel attention heads computing token relationships.
       Each head independently learns to attend to different semantic and syntactic features.
     </p>
 
+    <div class="flex items-center gap-3 mb-4">
+      <span class="hud-chip">Attention Field</span>
+      <span class="cue-badge">Hover to expose head weights</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-indigo-100/80 mb-3" data-control-target="attention">
+      <button class="control-btn" data-action="toggle">Pause</button>
+      <button class="control-btn" data-action="spike">Entropy Spike</button>
+      <label class="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+        <span>Speed</span>
+        <input type="range" min="0.5" max="2" step="0.25" value="1" class="accent-indigo-400" data-action="speed">
+      </label>
+      <span class="text-gray-400" data-state>Live</span>
+    </div>
     <canvas id="attentionCanvas" class="w-full h-[340px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
   </section>
 
@@ -275,7 +444,7 @@
   </section>
 
   <!-- Projects -->
-  <section id="projects" class="max-w-5xl mx-auto py-20 px-6 relative">
+  <section id="projects" data-nav-section class="max-w-5xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-10">Featured Projects</h2>
     <div class="grid md:grid-cols-2 gap-8">
       <!-- Project Card -->
@@ -390,6 +559,7 @@
   </footer>
   
   <!-- External JS for Background Animation -->
+  <script src="shared_bus.js"></script>
   <script src="background.js"></script>
   <script src="rag_pipeline.js"></script>
   <script src="system_status.js"></script>
@@ -400,6 +570,74 @@
   <script src="system_orchestrator.js"></script>
   <script src="llm_viz.js"></script>
   <script src="attention.js"></script>
+
+  <script>
+    const controlBus = window.EventBus;
+
+    // Scroll-linked navigation glow
+    const navLinks = Array.from(document.querySelectorAll('.nav-link'));
+    const sections = Array.from(document.querySelectorAll('[data-nav-section]'));
+
+    const activateLink = (id) => {
+      navLinks.forEach((link) => {
+        const target = link.getAttribute('href').replace('#', '');
+        link.classList.toggle('active', target === id);
+      });
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          activateLink(entry.target.id);
+        }
+      });
+    }, { threshold: 0.4 });
+
+    sections.forEach((section) => observer.observe(section));
+
+    // Fade interaction cues after first engagement
+    const cueBadges = document.querySelectorAll('.cue-badge');
+    cueBadges.forEach((badge) => {
+      const parentSection = badge.closest('section');
+      if (!parentSection) return;
+
+      const handleInteraction = () => {
+        badge.classList.add('opacity-60');
+      };
+
+      parentSection.addEventListener('pointerenter', handleInteraction, { once: true });
+      parentSection.addEventListener('click', handleInteraction, { once: true });
+    });
+
+    // Control bars wiring
+    document.querySelectorAll('[data-control-target]').forEach((bar) => {
+      const target = bar.dataset.controlTarget;
+      const stateEl = bar.querySelector('[data-state]');
+      let paused = false;
+
+      const emitState = (action, value) => {
+        if (!controlBus) return;
+        controlBus.emit(`control:${target}`, { action, value, paused });
+      };
+
+      bar.querySelectorAll('[data-action="toggle"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          paused = !paused;
+          btn.textContent = paused ? 'Resume' : 'Pause';
+          stateEl.textContent = paused ? 'Paused' : 'Live';
+          emitState('toggle', paused);
+        });
+      });
+
+      bar.querySelectorAll('[data-action="spike"]').forEach((btn) => {
+        btn.addEventListener('click', () => emitState('spike', Math.random() * 2 + 0.5));
+      });
+
+      bar.querySelectorAll('[data-action="speed"]').forEach((input) => {
+        input.addEventListener('input', (e) => emitState('speed', parseFloat(e.target.value)));
+      });
+    });
+  </script>
 
 </body>
 </html>

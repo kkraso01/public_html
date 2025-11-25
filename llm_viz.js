@@ -3,10 +3,14 @@
   if (!canvas) return;
 
   const ctx = canvas.getContext("2d");
+  const bus = window.EventBus;
   let width, height, dpr;
 
   const TOKENS = ["I", "query", "an", "LLM"];
   let time = 0;
+  let running = true;
+  let speed = 1;
+  let loadSpike = 0;
 
   function resize() {
     dpr = window.devicePixelRatio || 1;
@@ -42,7 +46,10 @@
   }
 
   function draw() {
-    time += 0.015;
+    if (running) {
+      time += 0.015 * speed;
+      loadSpike = Math.max(0, loadSpike - 0.01);
+    }
 
     ctx.clearRect(0, 0, width, height);
 
@@ -301,8 +308,45 @@
     ctx.fillText("Residual Stream", (block1X + block2X) / 2, centerY + blockHeight + 18);
     ctx.fillText("Next-token distribution", logitsX, logitsY - 10);
 
+    // HUD inset
+    ctx.fillStyle = "rgba(15,23,42,0.82)";
+    ctx.strokeStyle = "rgba(129,140,248,0.45)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(width - 170, 12, 150, 70, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(226,232,240,0.9)";
+    ctx.font = "10px monospace";
+    ctx.fillText(`speed x${speed.toFixed(2)}`, width - 160, 36);
+    ctx.fillStyle = "rgba(52,211,153,0.9)";
+    ctx.fillText(`load ${loadSpike.toFixed(2)}`, width - 160, 52);
+
     requestAnimationFrame(draw);
   }
 
   draw();
+
+  function handleControl(payload) {
+    if (!payload) return;
+    if (payload.action === "toggle") running = !payload.value;
+    if (payload.action === "speed" && typeof payload.value === "number") speed = payload.value;
+    if (payload.action === "spike") {
+      loadSpike = Math.min(3, loadSpike + (payload.value || 1));
+      if (bus) bus.emit("telemetry:spike", { source: "transformer", intensity: loadSpike });
+    }
+  }
+
+  canvas.addEventListener("click", () => {
+    loadSpike = Math.min(3, loadSpike + 0.6);
+    if (bus) bus.emit("telemetry:spike", { source: "transformer", intensity: loadSpike });
+  });
+
+  if (bus) {
+    bus.on("control:transformer", handleControl);
+    bus.on("telemetry:spike", ({ source, intensity }) => {
+      if (source === "transformer") return;
+      loadSpike = Math.min(3, loadSpike + (intensity || 0.4));
+    });
+  }
 })();
