@@ -241,7 +241,7 @@
       </p>
     </div>
 
-    <div class="grid lg:grid-cols-2 gap-12">
+    <div class="grid grid-cols-1 gap-12">
       <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
         <div class="flex items-center gap-3">
           <span class="hud-chip">Signal Routing</span>
@@ -303,7 +303,7 @@
       <p class="mission-brief text-indigo-300/80">Mission: A playful robotics demo that reuses the HUD + metrics fabric.</p>
       <h2 class="text-3xl font-bold">Line-Following Robot Lab</h2>
       <p class="text-gray-400 max-w-3xl">
-        Drag-and-drop the bot anywhere on the track, watch eight IR sensors sample the canvas, and follow the
+        Drag-and-drop the bot anywhere on the track, watch sixteen IR sensors sample the canvas, and follow the
         PID loop as it keeps the rover locked on the black line. Metrics use the shared EventBus so the HUD
         styling stays consistent with the research canvases.
       </p>
@@ -354,10 +354,10 @@
             <h4 class="text-sm font-semibold">IR Sensor Array</h4>
             <span class="text-xs text-gray-500">Left → Right</span>
           </div>
-          <div class="grid grid-cols-4 gap-3">
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S1</p>
-              <p data-sensor-index="0" class="sensor-value">0.00</p>
+        <div class="grid grid-cols-4 gap-3">
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S1</p>
+            <p data-sensor-index="0" class="sensor-value">0.00</p>
             </div>
             <div class="sensor-pill">
               <p class="text-xs text-gray-400">S2</p>
@@ -383,13 +383,45 @@
               <p class="text-xs text-gray-400">S7</p>
               <p data-sensor-index="6" class="sensor-value">0.00</p>
             </div>
-            <div class="sensor-pill">
-              <p class="text-xs text-gray-400">S8</p>
-              <p data-sensor-index="7" class="sensor-value">0.00</p>
-            </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S8</p>
+            <p data-sensor-index="7" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S9</p>
+            <p data-sensor-index="8" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S10</p>
+            <p data-sensor-index="9" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S11</p>
+            <p data-sensor-index="10" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S12</p>
+            <p data-sensor-index="11" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S13</p>
+            <p data-sensor-index="12" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S14</p>
+            <p data-sensor-index="13" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S15</p>
+            <p data-sensor-index="14" class="sensor-value">0.00</p>
+          </div>
+          <div class="sensor-pill">
+            <p class="text-xs text-gray-400">S16</p>
+            <p data-sensor-index="15" class="sensor-value">0.00</p>
           </div>
         </div>
       </div>
+    </div>
     </div>
   </section>
 
