@@ -330,6 +330,37 @@
       </div>
     </div>
 
+    <!-- Flood-Fill Maze Solver Demo -->
+    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-6">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <span class="hud-chip">Micromouse-Style Flood Fill</span>
+        <span class="cue-badge">Top-down idealized robot, 16×16 grid</span>
+        <span class="cue-badge">Center goal (2×2)</span>
+      </div>
+
+      <div class="flex flex-col lg:flex-row gap-4">
+        <div class="flex-1 space-y-3">
+          <h3 class="text-xl font-semibold">Maze Solver</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            Generates a Robotex-style maze, then runs a simplified version of the flood-fill controller you used in Webots.
+            The robot senses ideal walls, updates its internal map, computes distances to the 2×2 center, and picks the best
+            neighbor on each step. Distances are visualized in-cell so you can see the wavefront propagate as walls are learned.
+          </p>
+
+          <div class="flex flex-wrap gap-2">
+            <button id="maze-generate" class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Generate Maze</button>
+            <button id="maze-run" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">Run</button>
+            <button id="maze-step" class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Step</button>
+            <button id="maze-reset" class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Reset</button>
+          </div>
+        </div>
+
+        <div class="flex-[1.2] bg-gray-950/60 border border-gray-800 rounded-xl p-3">
+          <canvas id="maze-canvas" class="w-full h-[520px] rounded-lg bg-gray-900"></canvas>
+        </div>
+      </div>
+    </div>
+
     <!-- Control Panel Below Track -->
     <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-3 space-y-2">
       <!-- PID Tuning Controls Grid (First) -->
@@ -803,6 +834,9 @@
   <script src="system_orchestrator.js"></script>
   <script src="llm_viz.js"></script>
   <script src="attention.js"></script>
+  <script src="maze-solver/maze.js"></script>
+  <script src="maze-solver/solver.js"></script>
+  <script src="maze-solver/view.js"></script>
   <script src="robot-demo/line_following.js"></script>
 
   <script>
