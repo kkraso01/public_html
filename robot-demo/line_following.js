@@ -21,17 +21,25 @@
   };
 
   const sensorOffsets = [
-    { angle: -0.9, distance: 30 },
-    { angle: -0.6, distance: 32 },
-    { angle: -0.35, distance: 34 },
-    { angle: -0.1, distance: 36 },
-    { angle: 0.1, distance: 36 },
-    { angle: 0.35, distance: 34 },
-    { angle: 0.6, distance: 32 },
-    { angle: 0.9, distance: 30 }
+    { angle: -0.42, distance: 34 },
+    { angle: -0.36, distance: 36 },
+    { angle: -0.31, distance: 38 },
+    { angle: -0.26, distance: 40 },
+    { angle: -0.21, distance: 42 },
+    { angle: -0.16, distance: 44 },
+    { angle: -0.11, distance: 46 },
+    { angle: -0.06, distance: 48 },
+    { angle: 0.06, distance: 48 },
+    { angle: 0.11, distance: 46 },
+    { angle: 0.16, distance: 44 },
+    { angle: 0.21, distance: 42 },
+    { angle: 0.26, distance: 40 },
+    { angle: 0.31, distance: 38 },
+    { angle: 0.36, distance: 36 },
+    { angle: 0.42, distance: 34 }
   ];
 
-  const weights = [-3, -2, -1, -0.5, 0.5, 1, 2, 3];
+  const weights = [-7.5, -6.5, -5.5, -4.5, -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
   const gains = { kp: 1.6, ki: 0.55, kd: 0.42 };
 
   const state = {
@@ -47,13 +55,14 @@
   let lastTime = performance.now();
 
   function buildTrackPath() {
-    const segments = 260;
+    const segments = 420;
     track.path = [];
 
     for (let i = 0; i < segments; i++) {
       const t = (i / segments) * Math.PI * 2;
-      const wobble = 0.18 * Math.sin(t * 2) + 0.12 * Math.cos(t * 3);
-      const radius = track.radius * (1 + wobble);
+      const wobble = 0.18 * Math.sin(t * 1.4 + 0.6) + 0.14 * Math.cos(t * 2.2) + 0.1 * Math.sin(t * 4.4 + 1.2);
+      const squiggle = 12 * Math.sin(t * 3.1) + 8 * Math.cos(t * 5.3);
+      const radius = track.radius * (1 + wobble) + squiggle;
       track.path.push({
         x: track.center.x + Math.cos(t) * radius,
         y: track.center.y + Math.sin(t) * radius
@@ -144,7 +153,7 @@
     sensorPositions.forEach((pos, idx) => {
       ctx.beginPath();
       ctx.fillStyle = `rgba(79,70,229,${0.25 + readings[idx] * 0.6})`;
-      ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
       ctx.fill();
     });
   }
