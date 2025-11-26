@@ -190,10 +190,6 @@
       this.explorerType = "dynamic"; // dynamic (Chinese FF) or bfs
       this.allowObliqueSprint = false;
       this.stepDelay = 200; // milliseconds between steps
-      this.mode = "explore"; // explore, plan, speedrun
-      this.plannedPath = null;
-      this.originalPlannedPath = null;
-      this.speedRunCount = 0;
       this.stats = {
         nodesExplored: 0,
         timeSeconds: 0,
@@ -217,9 +213,6 @@
       const runBtn = document.getElementById("maze-run");
       const stepBtn = document.getElementById("maze-step");
       const resetBtn = document.getElementById("maze-reset");
-      const exploreBtn = document.getElementById("maze-explore");
-      const planBtn = document.getElementById("maze-plan");
-      const speedRunBtn = document.getElementById("maze-speedrun");
 
       generateBtn?.addEventListener("click", () => {
         this.stop();
@@ -262,12 +255,6 @@
         if (this.explorer) {
           this.explorer.reset();
         }
-        // Clear all paths
-        this.plannedPath = [];
-        this.originalPlannedPath = [];
-        if (this.renderer.clearPath) {
-          this.renderer.clearPath();
-        }
         // Set the current solver in renderer
         if (this.renderer.setCurrentSolver) {
           this.renderer.setCurrentSolver(this.useLPA && this.lpaSolver ? this.lpaSolver : this.solver);
@@ -288,100 +275,78 @@
           this.stop();
           return;
         }
+        const now = Date.now();
+        this.stats.startTime = now - this.stats.timeSeconds * 1000;
         runBtn.textContent = "Pause";
-        if (this.mode === "explore") {
-          this.interval = setInterval(() => {
-            this._runExploreStep();
-          }, this.stepDelay);
-        } else if (this.mode === "plan") {
-          this._planOptimalPath();
-        } else if (this.mode === "speedrun") {
-          this._speedRun();
-        }
+        this.interval = setInterval(() => {
+          const result = this._runExploreStep();
+          if (result?.done) this.stop();
+        }, this.stepDelay);
       });
 
-      // Mode radio buttons removed - always explore mode now
     }
 
     _runExploreStep() {
       let result;
       if (this.useLPA && this.lpaSolver) {
+        result = this.lpaSolver.step();
+
+        this.stats.wallDiscoveries = this.lpaSolver.getWallUpdateHistory().length;
+        this.stats.nodesExplored = this.lpaSolver.searchCount;
+
         // Sync solver position with lpaSolver for rendering
         this.solver.position = { ...this.lpaSolver.position };
         this.solver.heading = this.lpaSolver.heading;
         this.solver.latestDistances = null; // LPA* doesn't use distances
+
+        // Set the active solver in renderer
+        if (this.renderer.setCurrentSolver) {
+          this.renderer.setCurrentSolver(this.lpaSolver);
+        }
+
+        // Update renderer with frontier
+        if (this.renderer.updateSearchFrontier) {
+          this.renderer.updateSearchFrontier(this.lpaSolver.getSearchFrontier());
+        }
+        if (this.renderer.updateWallUpdates) {
+          this.renderer.updateWallUpdates(this.lpaSolver.getWallUpdateHistory());
+        }
+
         if (this.renderer.recordRobotPosition) {
           this.renderer.recordRobotPosition(this.lpaSolver.position.x, this.lpaSolver.position.y);
         }
-        this.renderer.draw();
-        this._updateStatsDisplay();
-
-        result = this.lpaSolver.step();
       } else {
+        result = this.explorer.step();
+
         // Sync solver position with explorer for rendering
         this.solver.position = { ...this.explorer.position };
         this.solver.heading = this.explorer.heading;
         this.solver.latestDistances = this.explorer?.distances || this.solver.latestDistances;
+
+        // Set the active solver in renderer
+        if (this.renderer.setCurrentSolver) {
+          this.renderer.setCurrentSolver(this.solver);
+        }
+
+        // Track position change
         if (this.renderer.recordRobotPosition) {
           this.renderer.recordRobotPosition(this.explorer.position.x, this.explorer.position.y);
         }
-        this.renderer.draw();
-        this._updateStatsDisplay();
 
-        result = this.explorer.step();
+        this.stats.nodesExplored = this.explorer.traversalHistory?.length || this.stats.nodesExplored;
       }
 
-      if (result.done) {
+      this.stats.timeSeconds = (Date.now() - this.stats.startTime) / 1000;
+      this.renderer.draw();
+      this._updateStatsDisplay();
+
+      if (result?.done) {
         // Exploration complete
         this.stop();
-        
-        // After exploration, set wall map for planner
-        if (this.pathPlanner) {
-          const wallMap = this.useLPA && this.lpaSolver ? this.lpaSolver.knownWalls : this.explorer.knownWalls;
-          this.pathPlanner.setWallMap(wallMap);
-        }
-        
-        // Automatically compute and execute the optimal path
-        this._executeOptimalPath();
+        console.log("Exploration complete.");
       }
-    }
 
-    _executeOptimalPath() {
-      if (!this.pathPlanner || !this.pathPlanner.graph) {
-        console.warn("Path planner not available");
-        return;
-      }
-      
-      this.plannedPath = this.pathPlanner.computeOptimalPath();
-      if (this.plannedPath) {
-        this.originalPlannedPath = this.plannedPath.slice();
-        console.log("Exploration complete. Returning to start for optimal run...");
-        
-        // Return robot to start position
-        this.solver.position = { x: 0, y: 0 };
-        this.solver.heading = "east";
-        this.renderer.draw();
-        
-        // Wait a moment, then start the optimal run
-        setTimeout(() => {
-          this._executeSpeedRun();
-        }, 500);
-      } else {
-        console.warn("No path found to goal");
-      }
-    }
-
-    _executeSpeedRun() {
-      this.mode = "speedrun";
-      this.speedRunCount = 0;
-      this.plannedPath = this.originalPlannedPath.slice();
-      
-      // Run at high speed
-      this.stepDelay = 50;
-      this._updateSpeedButtonStates();
-      this.interval = setInterval(() => {
-        this._followPlannedPath();
-      }, this.stepDelay);
+      return result;
     }
 
     stop() {
@@ -669,63 +634,19 @@
       if (this.interval) {
         clearInterval(this.interval);
         const runBtn = document.getElementById("maze-run");
+        if (runBtn) runBtn.textContent = "Pause";
         this.interval = setInterval(() => {
-          const result = this._stepOnce();
+          const result = this._runExploreStep();
           if (result?.done) this.stop();
         }, this.stepDelay);
       }
     }
 
     _stepOnce() {
-      let result;
-      const prevPos = { ...this.solver.position };
-      
-      if (this.useLPA && this.lpaSolver) {
-        result = this.lpaSolver.step();
-        this.stats.wallDiscoveries = this.lpaSolver.getWallUpdateHistory().length;
-        
-        // Set the active solver in renderer
-        if (this.renderer.setCurrentSolver) {
-          this.renderer.setCurrentSolver(this.lpaSolver);
-        }
-        
-        // Update renderer with frontier
-        if (this.renderer.updateSearchFrontier) {
-          this.renderer.updateSearchFrontier(this.lpaSolver.getSearchFrontier());
-        }
-        if (this.renderer.updateWallUpdates) {
-          this.renderer.updateWallUpdates(this.lpaSolver.getWallUpdateHistory());
-        }
-        
-        this.stats.nodesExplored = this.lpaSolver.searchCount;
-        
-        // Track position change
-        if (this.renderer.recordRobotPosition) {
-          this.renderer.recordRobotPosition(this.lpaSolver.position.x, this.lpaSolver.position.y);
-        }
-      } else {
-        result = this.solver.step();
-        
-        // Set the active solver in renderer
-        if (this.renderer.setCurrentSolver) {
-          this.renderer.setCurrentSolver(this.solver);
-        }
-        
-        // Update solver's latestDistances for renderer
-        if (!this.solver.latestDistances) {
-          this.solver.computeDistances();
-        }
-        
-        // Track position change
-        if (this.renderer.recordRobotPosition) {
-          this.renderer.recordRobotPosition(this.solver.position.x, this.solver.position.y);
-        }
-      }
-      
-      this.stats.timeSeconds = (Date.now() - this.stats.startTime) / 1000;
-      this.renderer.draw();
-      this._updateStatsDisplay();
-      return result;
+      const now = Date.now();
+      this.stats.startTime = now - this.stats.timeSeconds * 1000;
+      this.stop();
+      return this._runExploreStep();
     }
 
     _updateStatsDisplay() {
@@ -745,72 +666,6 @@
           <p>Estimated Time Saved: ${timeSaved}s (LPA*)</p>
         </div>
       `;
-    }
-
-    _planOptimalPath() {
-      if (!this.pathPlanner || !this.pathPlanner.graph) {
-        alert("Please explore the maze first to build the wall map.");
-        return;
-      }
-      this.mode = "plan";
-      this.plannedPath = this.pathPlanner.computeOptimalPath();
-      if (this.plannedPath) {
-        this.originalPlannedPath = this.plannedPath.slice();
-        const compressed = this.pathPlanner.compressPath(this.plannedPath);
-        console.log("Planned path:", compressed);
-        // Visualize the path
-        if (this.renderer.setPlannedPath) {
-          this.renderer.setPlannedPath(this.plannedPath);
-        }
-        this.renderer.draw();
-      } else {
-        alert("No path found.");
-      }
-    }
-
-    _speedRun() {
-      if (!this.originalPlannedPath) {
-        alert("Please explore the maze first to auto-generate the optimal path.");
-        return;
-      }
-      this.stop();
-      this._executeSpeedRun();
-    }
-
-    _followPlannedPath() {
-      if (!this.plannedPath || this.plannedPath.length === 0) {
-        // Check if at goal
-        if (this.solver.atGoal()) {
-          this.speedRunCount++;
-          console.log(`Speed run ${this.speedRunCount} completed!`);
-          if (this.speedRunCount >= 3) {
-            this.stop();
-            return;
-          }
-          // Reset for next run
-          this.solver.reset();
-          this.plannedPath = this.originalPlannedPath.slice();
-          if (this.renderer.clearPath) {
-            this.renderer.clearPath();
-          }
-        }
-        return;
-      }
-
-      // Get next state
-      const nextStep = this.plannedPath.shift();
-      const [x, y, heading] = nextStep.state.split(',').map((v, i) => i < 2 ? parseInt(v) : v);
-
-      // Move solver to that position
-      this.solver.position = { x, y };
-      this.solver.heading = heading;
-
-      // Record position
-      if (this.renderer.recordRobotPosition) {
-        this.renderer.recordRobotPosition(x, y);
-      }
-
-      this.renderer.draw();
     }
 
     draw() {
