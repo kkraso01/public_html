@@ -186,8 +186,9 @@
       
       this.interval = null;
       this.useLPA = false;
-      this.currentAlgorithm = "flood-fill";
-      this.explorerType = "bfs"; // bfs or greedy
+      this.currentAlgorithm = "dynamic-explorer";
+      this.explorerType = "dynamic"; // dynamic (Chinese FF) or bfs
+      this.allowObliqueSprint = false;
       this.stepDelay = 200; // milliseconds between steps
       this.mode = "explore"; // explore, plan, speedrun
       this.plannedPath = null;
@@ -305,6 +306,7 @@
       // Sync solver position with explorer for rendering
       this.solver.position = { ...this.explorer.position };
       this.solver.heading = this.explorer.heading;
+      this.solver.latestDistances = this.explorer?.distances || this.solver.latestDistances;
       if (this.renderer.recordRobotPosition) {
         this.renderer.recordRobotPosition(this.explorer.position.x, this.explorer.position.y);
       }
@@ -393,16 +395,42 @@
       
       const radioGroup = document.createElement("div");
       radioGroup.className = "radio-group";
-      
-      // Flood Fill
+
+      // Dynamic flood-fill explorer (Chinese enhancements)
+      const dynamicOption = document.createElement("label");
+      dynamicOption.className = "radio-option";
+      const dynamicRadio = document.createElement("input");
+      dynamicRadio.type = "radio";
+      dynamicRadio.name = "maze-algorithm";
+      dynamicRadio.value = "dynamic-explorer";
+      dynamicRadio.checked = true;
+      dynamicRadio.addEventListener("change", () => {
+        this.useLPA = false;
+        this.currentAlgorithm = "dynamic-explorer";
+        this.explorerType = "dynamic";
+        this._resetStats();
+        this.stop();
+        this._initializeExplorer();
+        if (this.renderer.setVisualizationMode) {
+          this.renderer.setVisualizationMode("heatmap");
+        }
+        if (this.renderer.clearPath) {
+          this.renderer.clearPath();
+        }
+        this.renderer.draw();
+      });
+      dynamicOption.appendChild(dynamicRadio);
+      dynamicOption.appendChild(document.createTextNode("Dynamic Flood-Fill Explorer"));
+      radioGroup.appendChild(dynamicOption);
+
+      // Flood Fill (baseline)
       const floodOption = document.createElement("label");
       floodOption.className = "radio-option";
       const floodRadio = document.createElement("input");
       floodRadio.type = "radio";
       floodRadio.name = "maze-algorithm";
       floodRadio.value = "flood-fill";
-      floodRadio.checked = true;
-      floodRadio.addEventListener("change", (e) => {
+      floodRadio.addEventListener("change", () => {
         this.useLPA = false;
         this.currentAlgorithm = "flood-fill";
         this.explorerType = "bfs";
@@ -420,7 +448,7 @@
       floodOption.appendChild(floodRadio);
       floodOption.appendChild(document.createTextNode("Flood Fill"));
       radioGroup.appendChild(floodOption);
-      
+
       // LPA*
       const lpaOption = document.createElement("label");
       lpaOption.className = "radio-option";
@@ -428,7 +456,7 @@
       lpaRadio.type = "radio";
       lpaRadio.name = "maze-algorithm";
       lpaRadio.value = "lpa";
-      lpaRadio.addEventListener("change", (e) => {
+      lpaRadio.addEventListener("change", () => {
         this.useLPA = true;
         this.currentAlgorithm = "lpa";
         this.explorerType = "bfs";
@@ -446,7 +474,7 @@
       lpaOption.appendChild(lpaRadio);
       lpaOption.appendChild(document.createTextNode("LPA*"));
       radioGroup.appendChild(lpaOption);
-      
+
       // BFS Explorer
       const bfsOption = document.createElement("label");
       bfsOption.className = "radio-option";
@@ -454,7 +482,7 @@
       bfsRadio.type = "radio";
       bfsRadio.name = "maze-algorithm";
       bfsRadio.value = "bfs-explorer";
-      bfsRadio.addEventListener("change", (e) => {
+      bfsRadio.addEventListener("change", () => {
         this.useLPA = false;
         this.currentAlgorithm = "explore";
         this.explorerType = "bfs";
@@ -472,8 +500,26 @@
       bfsOption.appendChild(bfsRadio);
       bfsOption.appendChild(document.createTextNode("BFS Explorer"));
       radioGroup.appendChild(bfsOption);
-      
+
       section.appendChild(radioGroup);
+
+      const obliqueToggle = document.createElement("label");
+      obliqueToggle.className = "radio-option";
+      obliqueToggle.style.marginTop = "8px";
+      const obliqueCheckbox = document.createElement("input");
+      obliqueCheckbox.type = "checkbox";
+      obliqueCheckbox.checked = this.allowObliqueSprint;
+      obliqueCheckbox.addEventListener("change", (e) => {
+        this.allowObliqueSprint = e.target.checked;
+        if (this.explorer && this.explorer.allowOblique !== undefined) {
+          this.explorer.allowOblique = this.allowObliqueSprint;
+          this.explorer._dynamicFloodFill();
+          this.explorer._computeDeadZones();
+        }
+      });
+      obliqueToggle.appendChild(obliqueCheckbox);
+      obliqueToggle.appendChild(document.createTextNode("Enable Oblique Sprint (8-dir)"));
+      section.appendChild(obliqueToggle);
       container.appendChild(section);
       return null;
     }
@@ -482,7 +528,9 @@
       if (this.explorerType === "bfs" && typeof global.BFSExplorer !== 'undefined') {
         this.explorer = new global.BFSExplorer(this.maze);
       } else {
-        this.explorer = typeof global.MazeExplorer !== 'undefined' ? new global.MazeExplorer(this.maze) : null;
+        this.explorer = typeof global.MazeExplorer !== 'undefined'
+          ? new global.MazeExplorer(this.maze, { allowOblique: this.allowObliqueSprint })
+          : null;
       }
     }
 
