@@ -41,12 +41,15 @@
               const ny = y + DELTAS[heading].y * len;
               if (nx < 0 || ny < 0 || nx >= this.size || ny >= this.size) break;
 
-              // Check if path is clear
+              // Check if path is clear. Unknown walls (undefined) are treated as blocked
+              // so we never "guess" a shortcut through unexplored cells.
               let blocked = false;
               for (let i = 0; i < len; i++) {
                 const cx = x + DELTAS[heading].x * i;
                 const cy = y + DELTAS[heading].y * i;
-                if (this.knownWalls[cy][cx][heading]) {
+                const cellWalls = this.knownWalls?.[cy]?.[cx];
+                const hasWall = cellWalls ? cellWalls[heading] : undefined;
+                if (hasWall !== false) { // true or unknown -> block
                   blocked = true;
                   break;
                 }

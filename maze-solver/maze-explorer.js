@@ -30,7 +30,11 @@
       this.deadZones = this._createBooleanGrid(false);
       this.position = { x: 0, y: 0 };
       this.heading = "east";
+      this.phase = "to-goal"; // to-goal -> return -> done
       this.atGoal = false;
+      this.currentGoalSet = this.maze.goalCells;
+      this.traversalHistory = [];
+      this.primaryPath = new Set();
 
       this._dynamicFloodFill();
       this._computeDeadZones();
@@ -81,11 +85,11 @@
       return checks.every(([cx, cy, facing]) => this._inBounds(cx, cy) && !this.knownWalls[cy][cx][facing]);
     }
 
-    _dynamicFloodFill() {
+    _dynamicFloodFill(goalSet = this.currentGoalSet || this.maze.goalCells) {
       this.distances = this._createBooleanGrid(Infinity);
       const queue = [];
 
-      this.maze.goalCells.forEach(key => {
+      goalSet.forEach(key => {
         const [x, y] = key.split(',').map(Number);
         this.distances[y][x] = 0;
         queue.push({ x, y, cost: 0 });
@@ -170,7 +174,7 @@
         changed = false;
         for (let y = 0; y < this.size; y++) {
           for (let x = 0; x < this.size; x++) {
-            if (this.maze.goalCells.has(`${x},${y}`) || this.deadEnds[y][x]) continue;
+            if (this.maze.goalCells.has(`${x},${y}`) || (x === 0 && y === 0) || this.deadEnds[y][x]) continue;
 
             let openCount = 0;
             for (const dir of DIRS) {
@@ -256,20 +260,68 @@
       return bestDir;
     }
 
+    _chooseReturnMove() {
+      const dirs = this.allowOblique
+        ? DIAGONAL_DIRS
+        : DIRS.map(name => ({ name, dx: DELTAS[name].x, dy: DELTAS[name].y, diagonal: false, components: [name] }));
+
+      const currentDist = this.distances[this.position.y][this.position.x];
+      const candidates = [];
+
+      for (const dir of dirs) {
+        if (dir.diagonal && !this._diagonalMoveAllowed(this.position.x, this.position.y, dir)) continue;
+
+        const nx = this.position.x + dir.dx;
+        const ny = this.position.y + dir.dy;
+        if (!this._inBounds(nx, ny)) continue;
+        if (!dir.diagonal && this.knownWalls[this.position.y][this.position.x][dir.name]) continue;
+        if (this.deadZones[ny][nx]) continue;
+
+        const visited = this.visited[ny][nx];
+        const onPrimary = this.primaryPath.has(`${nx},${ny}`);
+        const dist = this.distances[ny][nx];
+        const isDeadEnd = this.deadEnds[ny][nx];
+        const sidewaysPenalty = Math.abs(dist - currentDist);
+
+        candidates.push({ dir, visited, onPrimary, dist, sidewaysPenalty, isDeadEnd });
+      }
+
+      candidates.sort((a, b) => {
+        if (a.visited !== b.visited) return a.visited ? 1 : -1; // prefer unvisited
+        if (a.onPrimary !== b.onPrimary) return a.onPrimary ? 1 : -1; // avoid original path
+        if (a.isDeadEnd !== b.isDeadEnd) return a.isDeadEnd ? 1 : -1; // avoid dead-ends unless required
+        if (a.sidewaysPenalty !== b.sidewaysPenalty) return a.sidewaysPenalty - b.sidewaysPenalty; // sideways over backtracking
+        return a.dist - b.dist;
+      });
+
+      return candidates.length ? candidates[0].dir : null;
+    }
+
     step() {
       this.visited[this.position.y][this.position.x] = true;
+      this.traversalHistory.push(`${this.position.x},${this.position.y}`);
       this._senseWalls();
 
       this._updateDeadEnds();
       this._dynamicFloodFill();
       this._computeDeadZones();
 
-      if (this.maze.goalCells.has(`${this.position.x},${this.position.y}`)) {
+      if (this.phase === "to-goal" && this.maze.goalCells.has(`${this.position.x},${this.position.y}`)) {
         this.atGoal = true;
-        return { done: true };
+        this.phase = "return";
+        this.primaryPath = new Set(this.traversalHistory);
+        this.currentGoalSet = new Set(["0,0"]);
+        this._dynamicFloodFill();
+        this._computeDeadZones();
+        return { done: false, reachedGoal: true };
       }
 
-      const nextDir = this._chooseNextMove();
+      if (this.phase === "return" && this.position.x === 0 && this.position.y === 0) {
+        this.phase = "done";
+        return { done: true, returned: true };
+      }
+
+      const nextDir = this.phase === "return" ? this._chooseReturnMove() : this._chooseNextMove();
       if (!nextDir) {
         return { done: true };
       }
@@ -288,7 +340,11 @@
       this.deadZones = this._createBooleanGrid(false);
       this.position = { x: 0, y: 0 };
       this.heading = "east";
+      this.phase = "to-goal";
       this.atGoal = false;
+      this.currentGoalSet = this.maze.goalCells;
+      this.traversalHistory = [];
+      this.primaryPath = new Set();
       this._dynamicFloodFill();
       this._computeDeadZones();
     }
