@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Konstantin Krasovitskiy | AI Portfolio</title>
 
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS - Production via jsDelivr Play CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
   <!-- Lottie (kept from your template, currently unused but available) -->
   <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
@@ -29,6 +30,7 @@
       backdrop-filter: blur(8px);
       background-color: rgba(79, 70, 229, 0.85);
     }
+
     .glass-outline {
       backdrop-filter: blur(8px);
       background-color: rgba(15, 23, 42, 0.7);
@@ -39,6 +41,7 @@
       animation: fadeIn 1.2s ease-out forwards;
       opacity: 0;
     }
+
     @keyframes fadeIn {
       to {
         opacity: 1;
@@ -97,9 +100,17 @@
     }
 
     @keyframes flash {
-      0% { color: #a5b4fc; }
-      50% { color: #22c55e; }
-      100% { color: #e5e7eb; }
+      0% {
+        color: #a5b4fc;
+      }
+
+      50% {
+        color: #22c55e;
+      }
+
+      100% {
+        color: #e5e7eb;
+      }
     }
 
     .lf-robot {
@@ -155,9 +166,20 @@
     }
 
     @keyframes pulse {
-      0% { transform: scale(0.92); opacity: 0.7; }
-      50% { transform: scale(1.05); opacity: 0.4; }
-      100% { transform: scale(0.92); opacity: 0.7; }
+      0% {
+        transform: scale(0.92);
+        opacity: 0.7;
+      }
+
+      50% {
+        transform: scale(1.05);
+        opacity: 0.4;
+      }
+
+      100% {
+        transform: scale(0.92);
+        opacity: 0.7;
+      }
     }
 
     .sensor-pill {
@@ -172,8 +194,146 @@
       font-weight: 600;
       color: #a5b4fc;
     }
+
+    /* Maze Controls Styling */
+    #maze-controls {
+      font-size: 0.875rem;
+    }
+
+    #maze-controls label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #cbd5e1;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    #maze-controls select {
+      width: 100%;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+      border: 1px solid rgba(99, 102, 241, 0.5);
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #maze-controls select:hover {
+      border-color: rgba(129, 140, 248, 0.8);
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+    }
+
+    #maze-controls select:focus {
+      outline: none;
+      border-color: rgba(129, 140, 248, 1);
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.5);
+    }
+
+    #speed-fast,
+    #speed-normal,
+    #speed-slow,
+    #speed-slowest {
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      border: 1px solid rgba(99, 102, 241, 0.6);
+      border-radius: 6px;
+      color: #e2e8f0;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    #speed-fast:hover,
+    #speed-normal:hover,
+    #speed-slow:hover,
+    #speed-slowest:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
+    #speed-normal {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+    }
+
+    #maze-stats {
+      font-size: 12px;
+      color: #64748b;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+      font-family: "IBM Plex Mono", "Fira Code", monospace;
+    }
+
+    #maze-stats p {
+      margin: 4px 0;
+    }
+
+    /* Radio Button Styling */
+    #maze-controls .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #maze-controls .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    #maze-controls .radio-option:hover {
+      background-color: rgba(99, 102, 241, 0.1);
+    }
+
+    #maze-controls input[type="radio"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      accent-color: #4f46e5;
+    }
+
+    #maze-controls input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      accent-color: #4f46e5;
+    }
+
+    #maze-controls .checkbox-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    #maze-controls .checkbox-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      font-size: 0.85rem;
+    }
+
+    #maze-controls .checkbox-option:hover {
+      background-color: rgba(99, 102, 241, 0.1);
+    }
   </style>
 </head>
+
 <body class="bg-gray-950 text-gray-100 font-sans scroll-smooth">
 
   <!-- Neural Network / Constellation Background -->
@@ -196,7 +356,7 @@
   <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
     <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Command</div>
     <a href="#research-systems" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Research Systems</a>
-    <a href="#playful-demo" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Playful Demo</a>
+    <a href="#playful-demos" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Playful Demos</a>
     <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects</a>
   </nav>
 
@@ -204,8 +364,8 @@
   <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in">
     <div class="max-w-3xl">
       <div id="system-status" class="text-xs text-indigo-300 mb-4 tracking-widest opacity-80">
-        NODE STATUS: <span id="sys-state">ACTIVE</span> • 
-        TOKENS/s: <span id="sys-tps">0</span> • 
+        NODE STATUS: <span id="sys-state">ACTIVE</span> •
+        TOKENS/s: <span id="sys-tps">0</span> •
         LAT: <span id="sys-lat">0</span>ms
       </div>
       <p class="text-xs tracking-[0.3em] uppercase text-indigo-300 mb-4">
@@ -218,8 +378,7 @@
         MSc Artificial Intelligence &middot; AI Researcher &middot; QA & Systems Engineer
       </p>
       <div class="flex flex-wrap justify-center gap-4">
-        <a href="#projects"
-           class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
+        <a href="#projects" class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
           View Projects
         </a>
         <!-- Dont use this  -->
@@ -228,7 +387,7 @@
           Dive In
         </a> -->
         <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf"
-           class="glass-outline px-6 py-3 border border-gray-500 rounded-full hover:bg-gray-800 transition-colors">
+          class="glass-outline px-6 py-3 border border-gray-500 rounded-full hover:bg-gray-800 transition-colors">
           Download CV
         </a>
       </div>
@@ -271,8 +430,10 @@
           <p class="text-gray-400">Router-dispatch visualization showing vector DB lookups, model selection,
             and merge policies under latency/cost constraints.</p>
         </div>
-        <canvas id="orchestratorCanvas" class="w-full h-[320px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
-        <p class="mt-1 text-xs text-gray-500">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge → Response</p>
+        <canvas id="orchestratorCanvas"
+          class="w-full h-[320px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
+        <p class="mt-1 text-xs text-gray-500">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge →
+          Response</p>
       </article>
 
       <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
@@ -298,15 +459,17 @@
           <p class="text-gray-400">Parallel attention heads computing token relationships and convergence
             patterns — the research signal that informs tuning.</p>
         </div>
-        <canvas id="attentionCanvas" class="w-full h-[300px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
+        <canvas id="attentionCanvas"
+          class="w-full h-[300px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
       </article>
     </div>
   </section>
 
-  <!-- Playful Line-Following Lab -->
-  <section id="playful-demo" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <!-- Playful Lab -->
+  <section id="playful-demos" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Mission: A playful robotics demo that reuses the HUD + metrics fabric.</p>
+      <p class="mission-brief text-indigo-300/80">Mission: A playful robotics demo that reuses the HUD + metrics fabric.
+      </p>
       <h2 class="text-3xl font-bold">Line-Following Robot Lab</h2>
       <p class="text-gray-400 max-w-3xl">
         Drag-and-drop the bot anywhere on the track, watch sixteen IR sensors sample the canvas, and follow the
@@ -322,7 +485,8 @@
         <span class="cue-badge">Grab to reposition on the track</span>
       </div>
       <div class="relative">
-        <canvas id="line-following-canvas" class="w-full h-[480px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
+        <canvas id="line-following-canvas"
+          class="w-full h-[480px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
         <div id="line-following-robot" class="lf-robot" title="Drag me">
           <div class="lf-robot-core" aria-hidden="true"></div>
           <div class="lf-robot-ring"></div>
@@ -330,43 +494,13 @@
       </div>
     </div>
 
-    <!-- Flood-Fill Maze Solver Demo -->
-    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-6">
-      <div class="flex items-center gap-3 mb-4 flex-wrap">
-        <span class="hud-chip">Micromouse-Style Flood Fill</span>
-        <span class="cue-badge">Top-down idealized robot, 16×16 grid</span>
-        <span class="cue-badge">Center goal (2×2)</span>
-      </div>
-
-      <div class="flex flex-col lg:flex-row gap-4">
-        <div class="flex-1 space-y-3">
-          <h3 class="text-xl font-semibold">Maze Solver</h3>
-          <p class="text-gray-400 text-sm leading-relaxed">
-            Generates a Robotex-style maze, then runs a simplified version of the flood-fill controller you used in Webots.
-            The robot senses ideal walls, updates its internal map, computes distances to the 2×2 center, and picks the best
-            neighbor on each step. Distances are visualized in-cell so you can see the wavefront propagate as walls are learned.
-          </p>
-
-          <div class="flex flex-wrap gap-2">
-            <button id="maze-generate" class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Generate Maze</button>
-            <button id="maze-run" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">Run</button>
-            <button id="maze-step" class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Step</button>
-            <button id="maze-reset" class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Reset</button>
-          </div>
-        </div>
-
-        <div class="flex-[1.2] bg-gray-950/60 border border-gray-800 rounded-xl p-3">
-          <canvas id="maze-canvas" class="w-full h-[520px] rounded-lg bg-gray-900"></canvas>
-        </div>
-      </div>
-    </div>
 
     <!-- Control Panel Below Track -->
     <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-3 space-y-2">
       <!-- PID Tuning Controls Grid (First) -->
       <div>
         <h3 class="text-sm font-semibold mb-2">PID Tuning & Configuration</h3>
-        
+
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
           <!-- Kp -->
           <div class="space-y-1">
@@ -374,15 +508,7 @@
               <label class="text-xs text-gray-300">Proportional (Kp)</label>
               <span id="kp-value" class="text-xs font-mono text-indigo-300">1.30</span>
             </div>
-            <input 
-              id="kp-slider" 
-              type="range" 
-              min="0" 
-              max="3" 
-              step="0.01" 
-              value="1.3" 
-              class="pid-slider w-full"
-            >
+            <input id="kp-slider" type="range" min="0" max="3" step="0.01" value="1.3" class="pid-slider w-full">
           </div>
 
           <!-- Ki -->
@@ -391,15 +517,7 @@
               <label class="text-xs text-gray-300">Integral (Ki)</label>
               <span id="ki-value" class="text-xs font-mono text-indigo-300">0.42</span>
             </div>
-            <input 
-              id="ki-slider" 
-              type="range" 
-              min="0" 
-              max="1" 
-              step="0.01" 
-              value="0.42" 
-              class="pid-slider w-full"
-            >
+            <input id="ki-slider" type="range" min="0" max="1" step="0.01" value="0.42" class="pid-slider w-full">
           </div>
 
           <!-- Kd -->
@@ -408,15 +526,7 @@
               <label class="text-xs text-gray-300">Derivative (Kd)</label>
               <span id="kd-value" class="text-xs font-mono text-indigo-300">0.32</span>
             </div>
-            <input 
-              id="kd-slider" 
-              type="range" 
-              min="0" 
-              max="1" 
-              step="0.01" 
-              value="0.32" 
-              class="pid-slider w-full"
-            >
+            <input id="kd-slider" type="range" min="0" max="1" step="0.01" value="0.32" class="pid-slider w-full">
           </div>
 
           <!-- Speed -->
@@ -425,15 +535,7 @@
               <label class="text-xs text-gray-300">Speed</label>
               <span id="speed-value" class="text-xs font-mono text-indigo-300">90 px/s</span>
             </div>
-            <input 
-              id="speed-slider" 
-              type="range" 
-              min="45" 
-              max="180" 
-              step="5" 
-              value="90" 
-              class="pid-slider w-full"
-            >
+            <input id="speed-slider" type="range" min="45" max="180" step="5" value="90" class="pid-slider w-full">
           </div>
         </div>
       </div>
@@ -443,39 +545,22 @@
         <h4 class="text-xs font-semibold mb-2">Advanced Options</h4>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
           <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input 
-              id="noise-toggle" 
-              type="checkbox" 
-              class="pid-checkbox" 
-            >
+            <input id="noise-toggle" type="checkbox" class="pid-checkbox">
             <span class="text-xs text-gray-300">Sensor Noise</span>
           </label>
 
           <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input 
-              id="anti-windup-toggle" 
-              type="checkbox" 
-              checked 
-              class="pid-checkbox"
-            >
+            <input id="anti-windup-toggle" type="checkbox" checked class="pid-checkbox">
             <span class="text-xs text-gray-300">Anti-Windup</span>
           </label>
 
           <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input 
-              id="d-filter-toggle" 
-              type="checkbox" 
-              class="pid-checkbox"
-            >
+            <input id="d-filter-toggle" type="checkbox" class="pid-checkbox">
             <span class="text-xs text-gray-300">D-Filter</span>
           </label>
 
           <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input 
-              id="adaptive-speed-toggle" 
-              type="checkbox" 
-              class="pid-checkbox"
-            >
+            <input id="adaptive-speed-toggle" type="checkbox" class="pid-checkbox">
             <span class="text-xs text-gray-300">Adaptive Speed</span>
           </label>
         </div>
@@ -483,10 +568,8 @@
 
       <!-- Reset Button -->
       <div class="flex gap-2 pt-2 border-t border-gray-700">
-        <button 
-          id="pid-reset-btn" 
-          class="pid-reset-btn flex-1 py-1.5 px-2 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700 rounded-lg transition text-xs font-semibold text-rose-300"
-        >
+        <button id="pid-reset-btn"
+          class="pid-reset-btn flex-1 py-1.5 px-2 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700 rounded-lg transition text-xs font-semibold text-rose-300">
           ⟲ Reset to Default
         </button>
       </div>
@@ -592,7 +675,53 @@
         </div>
       </div>
     </div>
+
+    <!-- Flood-Fill Maze Solver Demo -->
+    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-6">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <span class="hud-chip">Micromouse-Style Flood Fill</span>
+        <span class="cue-badge">Top-down idealized robot, 16×16 grid</span>
+        <span class="cue-badge">Center goal (2×2)</span>
+      </div>
+
+      <div class="flex flex-col lg:flex-row gap-4">
+        <div class="flex-1 space-y-3">
+          <h3 class="text-xl font-semibold">Maze Solver</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            Generates a Robotex-style maze, then runs a simplified version of the flood-fill controller you used in
+            Webots.
+            The robot senses ideal walls, updates its internal map, computes distances to the 2×2 center, and picks the
+            best
+            neighbor on each step. Distances are visualized in-cell so you can see the wavefront propagate as walls are
+            learned.
+          </p>
+
+          <div class="flex flex-wrap gap-2">
+            <button id="maze-generate"
+              class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Generate
+              Maze</button>
+            <button id="maze-run"
+              class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">Run</button>
+            <button id="maze-step"
+              class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Step</button>
+            <button id="maze-reset"
+              class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Reset</button>
+          </div>
+
+          <!-- Maze Controls Container for Speed, Algorithm, and Visualization Options -->
+          <div id="maze-controls" class="space-y-3 mt-4 pt-4 border-t border-gray-700"></div>
+
+          <!-- Maze Stats Display -->
+          <div id="maze-stats" class="mt-3"></div>
+        </div>
+
+        <div class="flex-[1.2] bg-gray-950/60 border border-gray-800 rounded-xl p-3">
+          <canvas id="maze-canvas" class="w-full h-[520px] rounded-lg bg-gray-900"></canvas>
+        </div>
+      </div>
+    </div>
   </section>
+
 
   <!-- About -->
   <section id="about" class="max-w-4xl mx-auto py-20 px-6 relative">
@@ -602,7 +731,8 @@
       <span class="text-indigo-400">multi-model LLM systems</span>,
       <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
       <span class="text-indigo-400">scalable AI architectures</span>.
-      Professionally, I bring hands-on experience in software engineering, QA automation, DevOps, and research deployment.
+      Professionally, I bring hands-on experience in software engineering, QA automation, DevOps, and research
+      deployment.
     </p>
     <p class="text-gray-300 leading-relaxed">
       My background spans full-stack development, infrastructure management, and collaborative research environments.
@@ -718,10 +848,11 @@
           Research system orchestrating multiple LLMs with token-aware selection strategies and vector-based
           retrieval using ChromaDB.
         </p>
-        <a href="https://chatucy.cs.ucy.ac.cy/llmms.html" target="_blank" class="text-indigo-400 hover:underline">Demo</a>
+        <a href="https://chatucy.cs.ucy.ac.cy/llmms.html" target="_blank"
+          class="text-indigo-400 hover:underline">Demo</a>
         <span class="text-gray-500 mx-1">|</span>
         <a href="https://www.cs.ucy.ac.cy/~dzeina/papers/llmvdb25-llmmeta.pdf" target="_blank"
-           class="text-indigo-400 hover:underline">Paper</a>
+          class="text-indigo-400 hover:underline">Paper</a>
       </div>
 
       <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
@@ -821,8 +952,9 @@
   <footer class="py-6 text-center text-gray-600 bg-gray-950/90 relative">
     © 2025 Konstantin Krasovitskiy
   </footer>
-  
+
   <!-- External JS for Background Animation -->
+  <!-- Disabled old animations - using maze-solver instead -->
   <script src="viewport-observer.js"></script>
   <script src="shared_bus.js"></script>
   <script src="background.js"></script>
@@ -835,10 +967,18 @@
   <script src="system_orchestrator.js"></script>
   <script src="llm_viz.js"></script>
   <script src="attention.js"></script>
+  <script src="robot-demo/line_following.js"></script>
+  
+  <!-- New: Advanced Maze Solver Scripts -->
   <script src="maze-solver/maze.js"></script>
   <script src="maze-solver/solver.js"></script>
+  <script src="maze-solver/lpa-solver.js"></script>
+  <script src="maze-solver/motion-profile.js"></script>
+  <script src="maze-solver/maze-explorer.js"></script>
+  <script src="maze-solver/bfs-explorer.js"></script>
+  <script src="maze-solver/path-planner.js"></script>
+  <script src="maze-solver/advanced-renderer.js"></script>
   <script src="maze-solver/view.js"></script>
-  <script src="robot-demo/line_following.js"></script>
 
   <script>
     // Scroll-linked navigation glow
@@ -875,7 +1015,15 @@
       parentSection.addEventListener('pointerenter', handleInteraction, { once: true });
       parentSection.addEventListener('click', handleInteraction, { once: true });
     });
+
+    // Maze Solver UI initialization
+    window.addEventListener('DOMContentLoaded', function () {
+      if (window.MazeUI) {
+        window.mazeUI = new window.MazeUI("maze-canvas");
+      }
+    });
   </script>
 
 </body>
+
 </html>
