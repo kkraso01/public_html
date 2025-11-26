@@ -177,7 +177,7 @@
       this.trajectoryOptimizer = typeof global.TrajectoryOptimizer !== 'undefined' && this.motionProfile 
         ? new global.TrajectoryOptimizer(this.motionProfile) : null;
       this.pathPlanner = typeof global.PathPlanner !== 'undefined' && this.motionProfile 
-        ? new global.PathPlanner(this.maze, this.motionProfile) : null;
+        ? new global.PathPlanner(this.maze, this.motionProfile, { allowOblique: this.allowObliqueSprint }) : null;
       
       // Use advanced renderer
       this.renderer = typeof global.AdvancedMazeRenderer !== 'undefined' 
@@ -224,6 +224,7 @@
       generateBtn?.addEventListener("click", () => {
         this.stop();
         this.maze.generate();
+        if (this.explorer) this.explorer.reset();
         this.solver = new global.FloodSolver(this.maze);
         if (this.lpaSolver && typeof global.LPASolver !== 'undefined') {
           this.lpaSolver = new global.LPASolver(this.maze);
@@ -303,24 +304,41 @@
     }
 
     _runExploreStep() {
-      // Sync solver position with explorer for rendering
-      this.solver.position = { ...this.explorer.position };
-      this.solver.heading = this.explorer.heading;
-      this.solver.latestDistances = this.explorer?.distances || this.solver.latestDistances;
-      if (this.renderer.recordRobotPosition) {
-        this.renderer.recordRobotPosition(this.explorer.position.x, this.explorer.position.y);
-      }
-      this.renderer.draw();
-      this._updateStatsDisplay();
+      let result;
+      if (this.useLPA && this.lpaSolver) {
+        // Sync solver position with lpaSolver for rendering
+        this.solver.position = { ...this.lpaSolver.position };
+        this.solver.heading = this.lpaSolver.heading;
+        this.solver.latestDistances = null; // LPA* doesn't use distances
+        if (this.renderer.recordRobotPosition) {
+          this.renderer.recordRobotPosition(this.lpaSolver.position.x, this.lpaSolver.position.y);
+        }
+        this.renderer.draw();
+        this._updateStatsDisplay();
 
-      const result = this.explorer.step();
+        result = this.lpaSolver.step();
+      } else {
+        // Sync solver position with explorer for rendering
+        this.solver.position = { ...this.explorer.position };
+        this.solver.heading = this.explorer.heading;
+        this.solver.latestDistances = this.explorer?.distances || this.solver.latestDistances;
+        if (this.renderer.recordRobotPosition) {
+          this.renderer.recordRobotPosition(this.explorer.position.x, this.explorer.position.y);
+        }
+        this.renderer.draw();
+        this._updateStatsDisplay();
+
+        result = this.explorer.step();
+      }
+
       if (result.done) {
         // Exploration complete
         this.stop();
         
         // After exploration, set wall map for planner
         if (this.pathPlanner) {
-          this.pathPlanner.setWallMap(this.explorer.knownWalls);
+          const wallMap = this.useLPA && this.lpaSolver ? this.lpaSolver.knownWalls : this.explorer.knownWalls;
+          this.pathPlanner.setWallMap(wallMap);
         }
         
         // Automatically compute and execute the optimal path
@@ -517,6 +535,10 @@
           this.explorer.allowOblique = this.allowObliqueSprint;
           this.explorer._dynamicFloodFill();
           this.explorer._computeDeadZones();
+        }
+        if (this.pathPlanner) {
+          this.pathPlanner.allowOblique = this.allowObliqueSprint;
+          if (this.pathPlanner.knownWalls) this.pathPlanner._buildGraph();
         }
       });
       obliqueToggle.appendChild(obliqueCheckbox);

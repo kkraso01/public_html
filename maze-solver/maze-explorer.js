@@ -69,7 +69,7 @@
       const ny = y + dir.dy;
       if (!this._inBounds(nx, ny)) return false;
 
-      if (primary.some(d => this.knownWalls[y][x][d])) return false;
+      if (primary.some(d => this.knownWalls[y][x][d] !== false)) return false;
 
       const checks = [];
       if (dir.name === "northEast") {
@@ -86,7 +86,7 @@
     }
 
     _dynamicFloodFill(goalSet = this.currentGoalSet || this.maze.goalCells) {
-      this.distances = this._createBooleanGrid(Infinity);
+      this.distances = Array.from({ length: this.size }, () => Array(this.size).fill(Infinity));
       const queue = [];
 
       goalSet.forEach(key => {
@@ -190,44 +190,45 @@
       } while (changed);
     }
 
-    _hasMonotonicPathToGoal(x, y) {
-      let cx = x;
-      let cy = y;
-      const guard = this.size * this.size * 2;
-      let steps = 0;
+    _computeDeadZones() {
+      const reachable = new Set();
+      const queue = [];
 
-      while (this.distances[cy][cx] !== 0 && steps < guard) {
-        const currentDist = this.distances[cy][cx];
-        const neighbors = [];
-        for (const dir of DIRS) {
-          if (this.knownWalls[cy][cx][dir]) continue;
-          const nx = cx + DELTAS[dir].x;
-          const ny = cy + DELTAS[dir].y;
-          if (!this._inBounds(nx, ny)) continue;
-          neighbors.push({ nx, ny, dist: this.distances[ny][nx] });
-        }
-
-        neighbors.sort((a, b) => a.dist - b.dist);
-        const lower = neighbors.find(n => n.dist < currentDist);
-        if (!lower) return false;
-
-        cx = lower.nx;
-        cy = lower.ny;
-        steps += 1;
+      // Start from goal cells
+      for (const key of this.currentGoalSet) {
+        const [gx, gy] = key.split(',').map(Number);
+        reachable.add(key);
+        queue.push({ x: gx, y: gy });
       }
 
-      return this.distances[cy][cx] === 0;
-    }
+      const dirs = this.allowOblique
+        ? DIAGONAL_DIRS
+        : DIRS.map(name => ({ name, dx: DELTAS[name].x, dy: DELTAS[name].y, diagonal: false, components: [name] }));
 
-    _computeDeadZones() {
+      while (queue.length) {
+        const { x, y } = queue.shift();
+
+        for (const dir of dirs) {
+          if (dir.diagonal && !this._diagonalMoveAllowed(x, y, dir)) continue;
+          if (!dir.diagonal && this.knownWalls[y][x][dir.name]) continue;
+
+          const nx = x + dir.dx;
+          const ny = y + dir.dy;
+          if (!this._inBounds(nx, ny)) continue;
+
+          const k = `${nx},${ny}`;
+          if (!reachable.has(k)) {
+            reachable.add(k);
+            queue.push({ x: nx, y: ny });
+          }
+        }
+      }
+
+      // Mark dead zones = not reachable from goals
       for (let y = 0; y < this.size; y++) {
         for (let x = 0; x < this.size; x++) {
-          if (this.deadEnds[y][x]) {
-            this.deadZones[y][x] = false;
-            continue;
-          }
-          const hasPath = this._hasMonotonicPathToGoal(x, y);
-          this.deadZones[y][x] = !hasPath;
+          const k = `${x},${y}`;
+          this.deadZones[y][x] = !this.deadEnds[y][x] && !reachable.has(k);
         }
       }
     }
@@ -263,11 +264,17 @@
     _chooseReturnMove() {
       const dirs = this.allowOblique
         ? DIAGONAL_DIRS
-        : DIRS.map(name => ({ name, dx: DELTAS[name].x, dy: DELTAS[name].y, diagonal: false, components: [name] }));
+        : DIRS.map(name => ({
+            name,
+            dx: DELTAS[name].x,
+            dy: DELTAS[name].y,
+            diagonal: false,
+            components: [name]
+          }));
 
-      const currentDist = this.distances[this.position.y][this.position.x];
-      const candidates = [];
-      const primaryFallback = [];
+      let candidates = [];
+
+      const currDist = this.distances[this.position.y][this.position.x];
 
       for (const dir of dirs) {
         if (dir.diagonal && !this._diagonalMoveAllowed(this.position.x, this.position.y, dir)) continue;
@@ -276,52 +283,87 @@
         const ny = this.position.y + dir.dy;
         if (!this._inBounds(nx, ny)) continue;
         if (!dir.diagonal && this.knownWalls[this.position.y][this.position.x][dir.name]) continue;
-        if (this.deadZones[ny][nx]) continue;
 
-        const visited = this.visited[ny][nx];
-        const onPrimary = this.primaryPath.has(`${nx},${ny}`);
-        const dist = this.distances[ny][nx];
+        const key = `${nx},${ny}`;
+        const onPrimary = this.primaryPath.has(key);
+        const isVisited = this.visited[ny][nx];
         const isDeadEnd = this.deadEnds[ny][nx];
-        const sidewaysPenalty = Math.abs(dist - currentDist);
+        const nd = this.distances[ny][nx];
 
-        const bucket = onPrimary ? primaryFallback : candidates;
-        bucket.push({ dir, visited, dist, sidewaysPenalty, isDeadEnd });
+        const entry = {
+          dir,
+          nx, ny,
+          onPrimary,
+          isVisited,
+          isDeadEnd,
+          nd,
+          decreasesFlood: nd < currDist
+        };
+
+        candidates.push(entry);
       }
 
-      const sortReturnOptions = (a, b) => {
-        if (a.visited !== b.visited) return a.visited ? 1 : -1; // prefer unvisited
-        if (a.isDeadEnd !== b.isDeadEnd) return a.isDeadEnd ? 1 : -1; // avoid dead-ends unless required
-        if (a.sidewaysPenalty !== b.sidewaysPenalty) return a.sidewaysPenalty - b.sidewaysPenalty; // sideways over backtracking
-        return a.dist - b.dist;
-      };
+      if (!candidates.length) return null;
 
-      candidates.sort(sortReturnOptions);
+      // -----------------------
+      // 1. HARD BLOCK: don't go deeper into dead-ends
+      // -----------------------
+      candidates = candidates.filter(c => !c.isDeadEnd || c.decreasesFlood);
+      if (!candidates.length) return null;
 
-      if (candidates.length) {
-        return candidates[0].dir;
+      // -----------------------
+      // 2. PRIORITY: flood-fill descent (strongest rule)
+      // -----------------------
+      const descending = candidates.filter(c => c.decreasesFlood);
+      if (descending.length) {
+        descending.sort((a, b) => a.nd - b.nd);
+        return descending[0].dir;
       }
 
-      // As a fallback, allow stepping onto the original primary path to avoid deadlock.
-      primaryFallback.sort(sortReturnOptions);
-      return primaryFallback.length ? primaryFallback[0].dir : null;
+      // -----------------------
+      // 3. EXPLORE unvisited branches
+      // -----------------------
+      const unvisited = candidates.filter(c => !c.isVisited);
+      if (unvisited.length) {
+        unvisited.sort((a, b) => a.nd - b.nd);
+        return unvisited[0].dir;
+      }
+
+      // -----------------------
+      // 4. Otherwise revert to primary-path following
+      // -----------------------
+      const primaryMoves = candidates.filter(c => c.onPrimary);
+      if (primaryMoves.length) {
+        primaryMoves.sort((a, b) => a.nd - b.nd);
+        return primaryMoves[0].dir;
+      }
+
+      // -----------------------
+      // 5. Last resort: any visited neighbor with smallest distance
+      // -----------------------
+      candidates.sort((a, b) => a.nd - b.nd);
+      return candidates[0].dir;
     }
 
     step() {
       this.visited[this.position.y][this.position.x] = true;
+      if (this.phase === "to-goal") {
+        this.primaryPath.add(`${this.position.x},${this.position.y}`);
+      }
       this.traversalHistory.push(`${this.position.x},${this.position.y}`);
       this._senseWalls();
 
-      this._updateDeadEnds();
-      this._dynamicFloodFill();
-      this._computeDeadZones();
+      if (this.phase === "to-goal") {
+        this._updateDeadEnds();
+        this._computeDeadZones();
+      }
 
       if (this.phase === "to-goal" && this.maze.goalCells.has(`${this.position.x},${this.position.y}`)) {
         this.atGoal = true;
         this.phase = "return";
-        this.primaryPath = new Set(this.traversalHistory);
         this.currentGoalSet = new Set(["0,0"]);
         this._dynamicFloodFill();
-        this._computeDeadZones();
+        // Don't recompute dead zones during return to preserve forward corridor classification
         return { done: false, reachedGoal: true };
       }
 

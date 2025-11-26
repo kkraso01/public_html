@@ -157,6 +157,18 @@
       
       return totalTime;
     }
+
+    /**
+     * Calculate time for a turn
+     */
+    getTurnTime(angleDegrees = 90) {
+      // Assume max angular acceleration for in-place turn
+      const maxAngularAccel = 20; // rad/s², typical for micromouse
+      const angleRad = angleDegrees * Math.PI / 180;
+      // Time for constant accel: t = sqrt(2 * theta / alpha)
+      const time = Math.sqrt(2 * angleRad / maxAngularAccel);
+      return time;
+    }
   }
 
   /**

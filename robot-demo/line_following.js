@@ -79,7 +79,11 @@
     speed: 90,
     integral: 0,
     prevError: 0,
-    prevDeriv: null
+    prevDeriv: null,
+    // --- simulation state ---
+    vL: 90,   // left wheel speed (px/s)
+    vR: 90,   // right wheel speed (px/s)
+    omega: 0  // angular velocity (rad/s)
   };
   
   // Feature flags and configuration
@@ -266,43 +270,84 @@
   let lastErrorSign = 0;
   let lastSpeed = state.speed;
   function updateRobot(dt, control, hasSignal) {
-    // If in recovery mode, keep turning in last error direction
+    // Base forward speed from slider / adaptive logic
     let speed = state.speed;
     if (features.enableAdaptiveSpeed) {
       const errorMagnitude = Math.abs(state.prevError);
       const k = 0.7;
       speed = state.speed * (0.2 + 0.8 * Math.exp(-k * Math.pow(errorMagnitude, 3)));
     }
-    lastSpeed = speed;
 
+    // --- line lost / recovery mode logic preserved ---
     if (!hasSignal) {
-      // Lost line: enter recovery mode
       recoveryMode = true;
     } else {
-      // Line found: exit recovery mode
       recoveryMode = false;
     }
 
-    let angleDelta;
-    if (recoveryMode) {
-      // Turn in last error direction (default to right if unknown)
-      const turnDir = lastErrorSign !== 0 ? Math.sign(lastErrorSign) : 1;
-      angleDelta = turnDir * 2.2 * dt; // 2.2 is a reasonable turn rate
-    } else {
-      angleDelta = control * dt;
-    }
-    state.angle += angleDelta;
+    // --- initialise extra simulation state if needed ---
+    if (state.vL == null) state.vL = speed;
+    if (state.vR == null) state.vR = speed;
+    if (state.omega == null) state.omega = 0;
 
-    state.x += Math.cos(state.angle) * speed * dt;
-    state.y += Math.sin(state.angle) * speed * dt;
+    // --- lightweight "physics" parameters ---
+    const wheelBase     = 80;     // distance between wheels (pixels, just a scale factor)
+    const motorAccel    = 10;     // how fast wheels can change speed (1/s)
+    const rotResponse   = 18;     // how fast robot follows commanded turn (1/s)
+    const slipFactor    = 0.0009; // how strongly high speed + high turn cause slip
+    const maxSlip       = 0.7;    // cap slip to avoid crazy behaviour
+    const steeringGain  = 20;     // how strongly PID control affects wheel speed difference
+
+    // --- steering command from PID ---
+    let steering = control; // PID output is roughly in [-3.2, 3.2]
+
+    // Keep your original recovery behaviour, but expressed as steering
+    if (recoveryMode) {
+      const turnDir = lastErrorSign !== 0 ? Math.sign(lastErrorSign) : 1;
+      steering = turnDir * 2.2; // same 2.2 you used before, just as steering now
+    }
+
+    // --- target wheel speeds (differential drive) ---
+    const targetVL = speed - steeringGain * steering;
+    const targetVR = speed + steeringGain * steering;
+
+    // --- motor acceleration / inertia (no instant changes) ---
+    const motorBlend = clamp(motorAccel * dt, 0, 1);
+    state.vL += (targetVL - state.vL) * motorBlend;
+    state.vR += (targetVR - state.vR) * motorBlend;
+
+    // --- forward & angular velocities from wheel speeds ---
+    let vForward = 0.5 * (state.vL + state.vR);
+    let omegaCmd = (state.vR - state.vL) / wheelBase;
+
+    // --- simple slip model: big turns at high speed reduce effective turning ---
+    const slip = clamp(Math.abs(omegaCmd * vForward) * slipFactor, 0, maxSlip);
+    const grip = 1 - slip * 0.85;   // keep a bit of turn even when slipping
+    omegaCmd *= grip;
+
+    // --- angular inertia: robot doesn't instantly match omegaCmd ---
+    const rotBlend = clamp(rotResponse * dt, 0, 1);
+    state.omega += (omegaCmd - state.omega) * rotBlend;
+
+    // --- integrate pose ---
+    state.angle += state.omega * dt;
+    state.x += Math.cos(state.angle) * vForward * dt;
+    state.y += Math.sin(state.angle) * vForward * dt;
+
+    // --- clamp to canvas bounds (unchanged) ---
     const rect = canvas.getBoundingClientRect();
     state.x = clamp(state.x, 20, rect.width - 20);
     state.y = clamp(state.y, 20, rect.height - 20);
+
+    // --- DOM updates (unchanged except using new angle) ---
     robotEl.style.left = `${state.x}px`;
     robotEl.style.top = `${state.y}px`;
-    // Rotate robot to face the direction it's heading
+
     const adjustedAngle = state.angle - Math.PI * 1;
     robotEl.style.transform = `translate(-50%, -50%) rotate(${adjustedAngle}rad)`;
+
+    // Report *actual* forward speed for UI
+    lastSpeed = Math.abs(vForward);
   }
 
   function computeError(readings) {
