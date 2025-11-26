@@ -19,9 +19,14 @@
       this.showTrajectory = false;
       this.searchFrontier = [];
       this.wallUpdates = [];
-      this.robotPath = [{ x: 0, y: 0 }]; // Track robot path, starting from (0,0)
+      this.forwardPath = [{ x: 0, y: 0 }];  // Forward exploration path (TO-GOAL phase)
+      this.backwardPath = [];                 // Return path (RETURN phase)
+      this.racingPath = [];                   // Racing line path (RACE phase)
       this.currentSolver = null; // Track the active solver (FloodSolver or LPASolver)
       this.plannedPath = null; // Planned optimal path
+      this.currentPhase = "to-goal";
+      this.discreteOptimalPath = null;       // Racing path from optimizer
+      this.racingPathIndex = 0;               // Current position in racing path
       
       this._onResize = () => this._resize();
       this._resize();
@@ -48,10 +53,31 @@
     }
 
     _drawHeatmap() {
-      if (!this.solver.latestDistances && !this.searchFrontier.length) return;
-      
       const { ctx } = this;
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
+      
+      // During racing phase, ONLY show racing path progress, ignore all old exploration data
+      const isRacing = this.currentPhase === "race" && this.discreteOptimalPath && this.discreteOptimalPath.length > 0;
+      
+      if (isRacing) {
+        // Racing phase: show only the racing path colored by progress (blue → red)
+        for (let i = 0; i < this.discreteOptimalPath.length; i++) {
+          const cell = this.discreteOptimalPath[i];
+          const progress = i / (this.discreteOptimalPath.length - 1 || 1); // 0 at start, 1 at end
+          
+          // Heat gradient: cold (blue) -> hot (red)
+          const t = progress;
+          const hue = 240 * (1 - t); // 240=blue, 0=red
+          const brightness = 45 + 25 * (1 - t);
+          const saturation = 80 + 20 * t;
+          ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${brightness}%, 0.6)`;
+          ctx.fillRect(cell.x * cellSize, cell.y * cellSize, cellSize, cellSize);
+        }
+        return; // Exit early - don't draw old exploration data during racing
+      }
+      
+      // Exploration phase: show distance/frontier heatmap
+      if (!this.solver.latestDistances && !this.searchFrontier.length) return;
       
       // Use search frontier if available (LPA*)
       if (this.searchFrontier.length > 0) {
@@ -72,6 +98,7 @@
             if (!Number.isFinite(val)) continue;
             
             const t = max === 0 ? 0 : val / max;
+            
             // Heat gradient: cold (blue) -> hot (red)
             const hue = 240 * (1 - t); // 240=blue, 0=red
             const brightness = 45 + 25 * (1 - t);
@@ -104,6 +131,7 @@
             if (!Number.isFinite(d)) continue;
             
             const t = max === 0 ? 0 : d / max;
+            
             const hue = 240 * (1 - t);
             const brightness = 45 + 25 * (1 - t);
             ctx.fillStyle = `hsla(${hue}, 80%, ${brightness}%, 0.5)`;
@@ -258,27 +286,60 @@
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
       const centerX = x * cellSize + cellSize / 2;
       const centerY = y * cellSize + cellSize / 2;
-      const r = cellSize * 0.25;
+      const r = cellSize * 0.25 * 0.75;  // Reduced to 75% of original size
       
-      // Draw path trail
-      if (this.robotPath.length > 1) {
-        ctx.strokeStyle = "rgba(251, 191, 36, 0.4)";
-        ctx.lineWidth = cellSize * 0.3;
+      // Draw path trails with different colors for phases
+      // Forward path (TO-GOAL) - Blue
+      if (this.forwardPath.length > 1) {
+        ctx.strokeStyle = "rgba(59, 90, 246, 0.5)";  // Blue
+        ctx.lineWidth = cellSize * 0.15;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.beginPath();
-        const start = this.robotPath[0];
+        const start = this.forwardPath[0];
         ctx.moveTo(start.x * cellSize + cellSize / 2, start.y * cellSize + cellSize / 2);
-        for (let i = 1; i < this.robotPath.length; i++) {
-          const pos = this.robotPath[i];
+        for (let i = 1; i < this.forwardPath.length; i++) {
+          const pos = this.forwardPath[i];
+          ctx.lineTo(pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2);
+        }
+        ctx.stroke();
+      }
+
+      // Backward path (RETURN) - Red
+      if (this.backwardPath.length > 1) {
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.5)";  // Red
+        ctx.lineWidth = cellSize * 0.15;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        const start = this.backwardPath[0];
+        ctx.moveTo(start.x * cellSize + cellSize / 2, start.y * cellSize + cellSize / 2);
+        for (let i = 1; i < this.backwardPath.length; i++) {
+          const pos = this.backwardPath[i];
+          ctx.lineTo(pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2);
+        }
+        ctx.stroke();
+      }
+
+      // Racing path (RACE) - Green
+      if (this.racingPath.length > 1) {
+        ctx.strokeStyle = "rgba(16, 185, 129, 0.6)";  // Green
+        ctx.lineWidth = cellSize * 0.2;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        const start = this.racingPath[0];
+        ctx.moveTo(start.x * cellSize + cellSize / 2, start.y * cellSize + cellSize / 2);
+        for (let i = 1; i < this.racingPath.length; i++) {
+          const pos = this.racingPath[i];
           ctx.lineTo(pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2);
         }
         ctx.stroke();
       }
       
       // Draw start position marker
-      if (this.robotPath.length > 0) {
-        const startPos = this.robotPath[0];
+      if (this.forwardPath.length > 0) {
+        const startPos = this.forwardPath[0];
         const startCenterX = startPos.x * cellSize + cellSize / 2;
         const startCenterY = startPos.y * cellSize + cellSize / 2;
         
@@ -332,21 +393,49 @@
       ctx.stroke();
     }
 
-    recordRobotPosition(x, y) {
-      // Only record if position changed
-      if (this.robotPath.length === 0 || 
-          this.robotPath[this.robotPath.length - 1].x !== x || 
-          this.robotPath[this.robotPath.length - 1].y !== y) {
-        this.robotPath.push({ x, y });
+    recordRobotPosition(x, y, phase = "to-goal") {
+      this.currentPhase = phase;
+      
+      if (phase === "to-goal") {
+        if (this.forwardPath.length === 0 || 
+            this.forwardPath[this.forwardPath.length - 1].x !== x || 
+            this.forwardPath[this.forwardPath.length - 1].y !== y) {
+          this.forwardPath.push({ x, y });
+        }
+      } else if (phase === "return") {
+        if (this.backwardPath.length === 0 || 
+            this.backwardPath[this.backwardPath.length - 1].x !== x || 
+            this.backwardPath[this.backwardPath.length - 1].y !== y) {
+          this.backwardPath.push({ x, y });
+        }
+      } else if (phase === "race") {
+        if (this.racingPath.length === 0 || 
+            this.racingPath[this.racingPath.length - 1].x !== x || 
+            this.racingPath[this.racingPath.length - 1].y !== y) {
+          this.racingPath.push({ x, y });
+        }
       }
     }
 
     clearPath() {
-      this.robotPath = [];
-      // Initialize with robot's current starting position (0, 0)
+      this.forwardPath = [{ x: 0, y: 0 }];
+      this.backwardPath = [];
+      this.racingPath = [];
+      
       if (this.solver && this.solver.position) {
-        this.robotPath.push({ x: this.solver.position.x, y: this.solver.position.y });
+        this.forwardPath.push({ x: this.solver.position.x, y: this.solver.position.y });
       }
+    }
+
+    clearBackwardPath() {
+      this.backwardPath = [];
+    }
+
+    setRacingPathInfo(discreteOptimalPath, racingPathIndex, phase) {
+      this.discreteOptimalPath = discreteOptimalPath;
+      this.racingPathIndex = racingPathIndex;
+      this.currentPhase = phase;
+      this.draw();
     }
 
     draw() {

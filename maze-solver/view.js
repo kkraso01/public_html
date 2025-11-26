@@ -323,6 +323,19 @@
         this.solver.heading = this.explorer.heading;
         this.solver.latestDistances = this.explorer?.distances || this.solver.latestDistances;
 
+        // Track phase for UI feedback
+        if (this.explorer.phase === "optimize") {
+          this.stats.currentPhase = "Optimizing Path...";
+        } else if (this.explorer.phase === "race") {
+          // Clear backward path when starting racing
+          if (this.renderer.clearBackwardPath) {
+            this.renderer.clearBackwardPath();
+          }
+          this.stats.currentPhase = `Racing: ${result.progress || "..."}`;
+        } else {
+          this.stats.currentPhase = this.explorer.phase.toUpperCase();
+        }
+
         // Set the active solver in renderer
         if (this.renderer.setCurrentSolver) {
           this.renderer.setCurrentSolver(this.solver);
@@ -330,7 +343,12 @@
 
         // Track position change
         if (this.renderer.recordRobotPosition) {
-          this.renderer.recordRobotPosition(this.explorer.position.x, this.explorer.position.y);
+          this.renderer.recordRobotPosition(this.explorer.position.x, this.explorer.position.y, this.explorer.phase);
+        }
+
+        // Update racing path visualization during race phase
+        if (this.explorer.phase === "race" && this.renderer.setRacingPathInfo) {
+          this.renderer.setRacingPathInfo(this.explorer.discreteOptimalPath, this.explorer.racingPathIndex, this.explorer.phase);
         }
 
         this.stats.nodesExplored = this.explorer.traversalHistory?.length || this.stats.nodesExplored;
@@ -531,7 +549,8 @@
         timeSeconds: 0,
         wallDiscoveries: 0,
         timeSaved: 0,
-        startTime: Date.now()
+        startTime: Date.now(),
+        currentPhase: "TO-GOAL"
       };
     }
 
@@ -657,15 +676,35 @@
         ? Math.max(0, (this.stats.nodesExplored * 0.05 - this.stats.timeSeconds)).toFixed(2)
         : 0;
       
-      statsEl.innerHTML = `
+      // Include optimization stats from explorer if available
+      const optimStats = this.explorer && this.explorer.optimizationStats 
+        ? this.explorer.optimizationStats 
+        : null;
+
+      let html = `
         <div style="font-size: 12px; color: #64748b;">
-          <p>Algorithm: ${this.currentAlgorithm.toUpperCase()}</p>
+          <p><strong>Phase:</strong> <span style="color: #3b82f6;">${this.stats.currentPhase || "..."}</span></p>
+          <p><strong>Algorithm:</strong> ${this.currentAlgorithm.toUpperCase()}</p>
           <p>Nodes Explored: ${this.stats.nodesExplored}</p>
           <p>Wall Discoveries: ${this.stats.wallDiscoveries}</p>
-          <p>Elapsed: ${this.stats.timeSeconds.toFixed(2)}s</p>
+          <p>Elapsed: ${this.stats.timeSeconds.toFixed(2)}s</p>`;
+
+      if (optimStats) {
+        html += `
+          <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
+          <p><strong>🏁 Path Optimization (Stage 1&2):</strong></p>
+          <p>Exploration Steps: ${optimStats.explorationSteps}</p>
+          <p>Optimal Path Steps: ${optimStats.optimalSteps}</p>
+          <p>Improvement: ${optimStats.improvementFactor}x faster</p>
+          <p>Time Saved: <span style="color: #10b981; font-weight: bold;">${optimStats.timeSavedPercent}%</span></p>`;
+      }
+
+      html += `
           <p>Estimated Time Saved: ${timeSaved}s (LPA*)</p>
         </div>
       `;
+      
+      statsEl.innerHTML = html;
     }
 
     draw() {
