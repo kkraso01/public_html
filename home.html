@@ -49,6 +49,16 @@
     }
 
     /* HUD side navigation */
+    .hud-nav {
+      opacity: 0.25;
+      transition: opacity 0.4s ease;
+    }
+
+    .hud-nav:hover,
+    .hud-nav:focus-within {
+      opacity: 1;
+    }
+
     .hud-nav .nav-link {
       backdrop-filter: blur(10px);
       background: linear-gradient(120deg, rgba(15, 23, 42, 0.65), rgba(51, 65, 85, 0.4));
@@ -355,9 +365,12 @@
   <!-- Side Navigation (Command Links) -->
   <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
     <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Command</div>
-    <a href="#research-systems" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Research Systems</a>
-    <a href="#playful-demos" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Playful Demos</a>
-    <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects</a>
+    <a href="#research-systems" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Research Systems
+      <span class="text-[11px] text-indigo-300/80 ml-2">⌥1</span></a>
+    <a href="#playful-demos" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Playful Demos
+      <span class="text-[11px] text-indigo-300/80 ml-2">⌥2</span></a>
+    <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects
+      <span class="text-[11px] text-indigo-300/80 ml-2">⌥3</span></a>
   </nav>
 
   <!-- Hero -->
@@ -986,6 +999,12 @@
     const navLinks = Array.from(document.querySelectorAll('.nav-link'));
     const sections = Array.from(document.querySelectorAll('[data-nav-section]'));
 
+    const shortcutMap = new Map([
+      ['1', '#research-systems'],
+      ['2', '#playful-demos'],
+      ['3', '#projects']
+    ]);
+
     const activateLink = (id) => {
       navLinks.forEach((link) => {
         const target = link.getAttribute('href').replace('#', '');
@@ -1002,6 +1021,24 @@
     }, { threshold: 0.4 });
 
     sections.forEach((section) => observer.observe(section));
+
+    // Keyboard shortcuts for quick navigation
+    document.addEventListener('keydown', (event) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey) return;
+
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      const targetSelector = shortcutMap.get(event.key);
+      if (!targetSelector) return;
+
+      const target = document.querySelector(targetSelector);
+      if (target) {
+        event.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        activateLink(target.id);
+      }
+    });
 
     // Fade interaction cues after first engagement
     const cueBadges = document.querySelectorAll('.cue-badge');
