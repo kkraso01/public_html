@@ -267,6 +267,7 @@
 
       const currentDist = this.distances[this.position.y][this.position.x];
       const candidates = [];
+      const primaryFallback = [];
 
       for (const dir of dirs) {
         if (dir.diagonal && !this._diagonalMoveAllowed(this.position.x, this.position.y, dir)) continue;
@@ -283,18 +284,26 @@
         const isDeadEnd = this.deadEnds[ny][nx];
         const sidewaysPenalty = Math.abs(dist - currentDist);
 
-        candidates.push({ dir, visited, onPrimary, dist, sidewaysPenalty, isDeadEnd });
+        const bucket = onPrimary ? primaryFallback : candidates;
+        bucket.push({ dir, visited, dist, sidewaysPenalty, isDeadEnd });
       }
 
-      candidates.sort((a, b) => {
+      const sortReturnOptions = (a, b) => {
         if (a.visited !== b.visited) return a.visited ? 1 : -1; // prefer unvisited
-        if (a.onPrimary !== b.onPrimary) return a.onPrimary ? 1 : -1; // avoid original path
         if (a.isDeadEnd !== b.isDeadEnd) return a.isDeadEnd ? 1 : -1; // avoid dead-ends unless required
         if (a.sidewaysPenalty !== b.sidewaysPenalty) return a.sidewaysPenalty - b.sidewaysPenalty; // sideways over backtracking
         return a.dist - b.dist;
-      });
+      };
 
-      return candidates.length ? candidates[0].dir : null;
+      candidates.sort(sortReturnOptions);
+
+      if (candidates.length) {
+        return candidates[0].dir;
+      }
+
+      // As a fallback, allow stepping onto the original primary path to avoid deadlock.
+      primaryFallback.sort(sortReturnOptions);
+      return primaryFallback.length ? primaryFallback[0].dir : null;
     }
 
     step() {
