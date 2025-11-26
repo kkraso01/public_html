@@ -272,9 +272,10 @@
             components: [name]
           }));
 
-      let candidates = [];
-
       const currDist = this.distances[this.position.y][this.position.x];
+      const currManhattan = Math.abs(this.position.x) + Math.abs(this.position.y);
+
+      let candidates = [];
 
       for (const dir of dirs) {
         if (dir.diagonal && !this._diagonalMoveAllowed(this.position.x, this.position.y, dir)) continue;
@@ -289,59 +290,53 @@
         const isVisited = this.visited[ny][nx];
         const isDeadEnd = this.deadEnds[ny][nx];
         const nd = this.distances[ny][nx];
+        const manhattan = Math.abs(nx) + Math.abs(ny);
 
-        const entry = {
+        candidates.push({
           dir,
-          nx, ny,
           onPrimary,
           isVisited,
           isDeadEnd,
           nd,
-          decreasesFlood: nd < currDist
-        };
-
-        candidates.push(entry);
+          manhattan,
+          decreasesFlood: nd < currDist,
+          decreasesManhattan: manhattan < currManhattan
+        });
       }
 
       if (!candidates.length) return null;
 
-      // -----------------------
-      // 1. HARD BLOCK: don't go deeper into dead-ends
-      // -----------------------
+      // 1) Never go deeper into a dead-end unless it still descends flood distance.
       candidates = candidates.filter(c => !c.isDeadEnd || c.decreasesFlood);
       if (!candidates.length) return null;
 
-      // -----------------------
-      // 2. PRIORITY: flood-fill descent (strongest rule)
-      // -----------------------
+      // 2) Prefer strict flood-distance descent. Within those, pick unvisited, then primary, then smallest dist.
       const descending = candidates.filter(c => c.decreasesFlood);
       if (descending.length) {
-        descending.sort((a, b) => a.nd - b.nd);
+        descending.sort((a, b) => {
+          if (a.isVisited !== b.isVisited) return a.isVisited ? 1 : -1;
+          if (a.onPrimary !== b.onPrimary) return a.onPrimary ? -1 : 1;
+          return a.nd - b.nd;
+        });
         return descending[0].dir;
       }
 
-      // -----------------------
-      // 3. EXPLORE unvisited branches
-      // -----------------------
-      const unvisited = candidates.filter(c => !c.isVisited);
-      if (unvisited.length) {
-        unvisited.sort((a, b) => a.nd - b.nd);
-        return unvisited[0].dir;
+      // 3) Safe exploration: unvisited neighbors that reduce Manhattan distance to start.
+      const explore = candidates.filter(c => !c.isVisited && c.decreasesManhattan);
+      if (explore.length) {
+        explore.sort((a, b) => a.manhattan - b.manhattan);
+        return explore[0].dir;
       }
 
-      // -----------------------
-      // 4. Otherwise revert to primary-path following
-      // -----------------------
+      // 4) Follow the forward primary path back toward start when available.
       const primaryMoves = candidates.filter(c => c.onPrimary);
       if (primaryMoves.length) {
         primaryMoves.sort((a, b) => a.nd - b.nd);
         return primaryMoves[0].dir;
       }
 
-      // -----------------------
-      // 5. Last resort: any visited neighbor with smallest distance
-      // -----------------------
-      candidates.sort((a, b) => a.nd - b.nd);
+      // 5) Final fallback: any neighbor closest in Manhattan distance.
+      candidates.sort((a, b) => a.manhattan - b.manhattan);
       return candidates[0].dir;
     }
 
@@ -353,14 +348,16 @@
       this.traversalHistory.push(`${this.position.x},${this.position.y}`);
       this._senseWalls();
 
+      this._updateDeadEnds();
+
       if (this.phase === "to-goal") {
-        this._updateDeadEnds();
         this._computeDeadZones();
       }
 
       if (this.phase === "to-goal" && this.maze.goalCells.has(`${this.position.x},${this.position.y}`)) {
         this.atGoal = true;
         this.phase = "return";
+        this.primaryPath = new Set(this.traversalHistory);
         this.currentGoalSet = new Set(["0,0"]);
         this._dynamicFloodFill();
         // Don't recompute dead zones during return to preserve forward corridor classification
