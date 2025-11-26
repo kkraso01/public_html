@@ -475,6 +475,7 @@
       lpaOption.appendChild(document.createTextNode("LPA*"));
       radioGroup.appendChild(lpaOption);
 
+      /*
       // BFS Explorer
       const bfsOption = document.createElement("label");
       bfsOption.className = "radio-option";
@@ -500,6 +501,7 @@
       bfsOption.appendChild(bfsRadio);
       bfsOption.appendChild(document.createTextNode("BFS Explorer"));
       radioGroup.appendChild(bfsOption);
+      */
 
       section.appendChild(radioGroup);
 
