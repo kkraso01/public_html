@@ -6,6 +6,24 @@ import { clamp } from './drone_math.js';
 
 const GRAVITY = new THREE.Vector3(0, -9.81, 0);
 
+function ammoVec3(v) {
+  return new Ammo.btVector3(v.x, v.y, v.z);
+}
+
+export function createAmmoWorld(gravity = new THREE.Vector3(0, 0, 0)) {
+  if (typeof Ammo === 'undefined') {
+    console.warn('Ammo.js not loaded; collisions disabled');
+    return null;
+  }
+  const config = new Ammo.btDefaultCollisionConfiguration();
+  const dispatcher = new Ammo.btCollisionDispatcher(config);
+  const broadphase = new Ammo.btDbvtBroadphase();
+  const solver = new Ammo.btSequentialImpulseConstraintSolver();
+  const world = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, config);
+  world.setGravity(ammoVec3(gravity));
+  return world;
+}
+
 export class Quadrotor {
   constructor(params = {}) {
     this.params = Object.assign(
@@ -17,6 +35,7 @@ export class Quadrotor {
         motorTimeConstant: 0.025,
         maxThrust: 28, // N, total across motors
         maxTorque: new THREE.Vector3(1.8, 1.8, 0.9),
+        ammoWorld: null,
       },
       params,
     );
@@ -29,6 +48,8 @@ export class Quadrotor {
     };
 
     this.motorThrusts = [0, 0, 0, 0];
+
+    this._initAmmoBody();
   }
 
   reset(initialState = {}) {
@@ -37,6 +58,35 @@ export class Quadrotor {
     this.state.quaternion.copy(initialState.quaternion || new THREE.Quaternion());
     this.state.omega.copy(initialState.omega || new THREE.Vector3());
     this.motorThrusts = [0, 0, 0, 0];
+    if (this.ammoBody) {
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(ammoVec3(this.state.position));
+      transform.setRotation(
+        new Ammo.btQuaternion(this.state.quaternion.x, this.state.quaternion.y, this.state.quaternion.z, this.state.quaternion.w),
+      );
+      this.ammoBody.setWorldTransform(transform);
+      this.ammoBody.setLinearVelocity(new Ammo.btVector3(0, 0, 0));
+      this.ammoBody.setAngularVelocity(new Ammo.btVector3(0, 0, 0));
+    }
+  }
+
+  _initAmmoBody() {
+    if (!this.params.ammoWorld) return;
+    if (typeof Ammo === 'undefined') return;
+    const shape = new Ammo.btBoxShape(new Ammo.btVector3(0.12, 0.05, 0.12));
+    const transform = new Ammo.btTransform();
+    transform.setIdentity();
+    transform.setOrigin(new Ammo.btVector3(0, 0, 0));
+    const motionState = new Ammo.btDefaultMotionState(transform);
+    const localInertia = new Ammo.btVector3(0, 0, 0);
+    shape.calculateLocalInertia(this.params.mass, localInertia);
+    const info = new Ammo.btRigidBodyConstructionInfo(this.params.mass, motionState, shape, localInertia);
+    info.set_m_friction(0.5);
+    const body = new Ammo.btRigidBody(info);
+    body.setActivationState(4); // disable deactivation
+    this.params.ammoWorld.addRigidBody(body);
+    this.ammoBody = body;
   }
 
   _motorMix(controlInput) {
@@ -189,6 +239,33 @@ export class Quadrotor {
     const h = dt / substeps;
     for (let i = 0; i < substeps; i++) {
       this._rk4Step(controlInput, h);
+      if (this.ammoBody) {
+        // Push the rotor-integrated state into Ammo, step collisions, and pull back corrected velocities.
+        const transform = this.ammoBody.getWorldTransform();
+        transform.setOrigin(ammoVec3(this.state.position));
+        transform.setRotation(
+          new Ammo.btQuaternion(
+            this.state.quaternion.x,
+            this.state.quaternion.y,
+            this.state.quaternion.z,
+            this.state.quaternion.w,
+          ),
+        );
+        this.ammoBody.setWorldTransform(transform);
+        this.ammoBody.setLinearVelocity(ammoVec3(this.state.velocity));
+        this.ammoBody.setAngularVelocity(ammoVec3(this.state.omega));
+        this.params.ammoWorld.stepSimulation(h, 1, h);
+
+        const transOut = this.ammoBody.getWorldTransform();
+        const origin = transOut.getOrigin();
+        const rot = transOut.getRotation();
+        this.state.position.set(origin.x(), origin.y(), origin.z());
+        this.state.quaternion.set(rot.x(), rot.y(), rot.z(), rot.w());
+        const lv = this.ammoBody.getLinearVelocity();
+        const av = this.ammoBody.getAngularVelocity();
+        this.state.velocity.set(lv.x(), lv.y(), lv.z());
+        this.state.omega.set(av.x(), av.y(), av.z());
+      }
     }
   }
 
@@ -199,5 +276,21 @@ export class Quadrotor {
       quaternion: this.state.quaternion.clone(),
       omega: this.state.omega.clone(),
     };
+  }
+
+  sampleImu(noise = { accel: 0.25, gyro: 0.02 }, bias = { accel: new THREE.Vector3(), gyro: new THREE.Vector3() }) {
+    const deriv = this._derivatives(this.state, this.motorThrusts);
+    const bodyAcc = deriv.velDot.clone().sub(GRAVITY).applyQuaternion(this.state.quaternion.clone().invert());
+    const accelMeas = new THREE.Vector3(
+      bodyAcc.x + bias.accel.x + noise.accel * (Math.random() * 2 - 1),
+      bodyAcc.y + bias.accel.y + noise.accel * (Math.random() * 2 - 1),
+      bodyAcc.z + bias.accel.z + noise.accel * (Math.random() * 2 - 1),
+    );
+    const gyroMeas = new THREE.Vector3(
+      this.state.omega.x + bias.gyro.x + noise.gyro * (Math.random() * 2 - 1),
+      this.state.omega.y + bias.gyro.y + noise.gyro * (Math.random() * 2 - 1),
+      this.state.omega.z + bias.gyro.z + noise.gyro * (Math.random() * 2 - 1),
+    );
+    return { accel: accelMeas, gyro: gyroMeas };
   }
 }

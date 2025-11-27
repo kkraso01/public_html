@@ -43,3 +43,13 @@ export function worldToBody(q, vWorld) {
   const inv = q.clone().invert();
   return vWorld.clone().applyQuaternion(inv);
 }
+
+// Gaussian noise helper used by sensors.
+export function gaussianNoise(mean = 0, std = 1) {
+  // Box-Muller transform
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}

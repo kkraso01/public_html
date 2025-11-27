@@ -1,18 +1,21 @@
-// Autonomous cave exploration demo with LiDAR mapping and frontier-based planning.
-// Exposes initDroneCaveDemo(container, options) with pause/resume/restart/setPausedFromVisibility.
+// Autonomous cave exploration demo with LiDAR mapping, frontier planning, and Ammo.js collisions.
+// Entry point: initDroneCaveDemo(container, options)
 
-import { Quadrotor } from './drone_core_physics.js';
+import { Quadrotor, createAmmoWorld } from './drone_core_physics.js';
 import { GeometricController } from './drone_control.js';
+import { clamp, gaussianNoise } from './drone_math.js';
+
+const ammoVec3 = (v) => new Ammo.btVector3(v.x, v.y, v.z);
 
 class ReferenceTrajectory {
   constructor(points, totalTime) {
     this.points = points.map((p) => p.clone());
-    this.totalTime = totalTime;
-    this.segmentTime = totalTime / Math.max(1, this.points.length - 1);
+    this.totalTime = Math.max(totalTime, 0.01);
+    this.segmentTime = this.totalTime / Math.max(1, this.points.length - 1);
   }
 
   sample(time) {
-    const t = Math.min(Math.max(time, 0), this.totalTime);
+    const t = clamp(time, 0, this.totalTime);
     const idx = Math.min(this.points.length - 2, Math.floor(t / this.segmentTime));
     const local = (t - idx * this.segmentTime) / this.segmentTime;
     const p0 = this.points[idx];
@@ -27,8 +30,8 @@ class ReferenceTrajectory {
 
 class OccupancyGrid {
   constructor(resolution, size) {
-    this.resolution = resolution; // meters per cell
-    this.size = size; // cells per side
+    this.resolution = resolution;
+    this.size = size;
     this.origin = new THREE.Vector2(-((size * resolution) / 2), -((size * resolution) / 2));
     this.grid = new Float32Array(size * size).fill(0);
   }
@@ -46,7 +49,7 @@ class OccupancyGrid {
   updateCell(x, y, delta) {
     if (!this.isInside(x, y)) return;
     const idx = y * this.size + x;
-    this.grid[idx] = Math.max(-4, Math.min(4, this.grid[idx] + delta));
+    this.grid[idx] = clamp(this.grid[idx] + delta, -4, 4);
   }
 
   value(x, y) {
@@ -68,8 +71,7 @@ class OccupancyGrid {
     const cells = [];
     for (let y = 1; y < this.size - 1; y++) {
       for (let x = 1; x < this.size - 1; x++) {
-        const v = this.value(x, y);
-        if (v < -0.2) {
+        if (this.value(x, y) < -0.2) {
           const unknownNbr =
             Math.abs(this.value(x + 1, y)) < 0.01 ||
             Math.abs(this.value(x - 1, y)) < 0.01 ||
@@ -83,29 +85,230 @@ class OccupancyGrid {
   }
 }
 
+class VIOLocalizer {
+  constructor() {
+    this.estimatedPose = {
+      position: new THREE.Vector3(),
+      quaternion: new THREE.Quaternion(),
+    };
+    this.velocity = new THREE.Vector3();
+    this.bias = {
+      position: new THREE.Vector3(),
+      yaw: 0,
+    };
+  }
+
+  reset(pose) {
+    this.estimatedPose.position.copy(pose.position);
+    this.estimatedPose.quaternion.copy(pose.quaternion);
+    this.velocity.set(0, 0, 0);
+    this.bias.position.set(0, 0, 0);
+    this.bias.yaw = 0;
+  }
+
+  update(trueState, dt) {
+    // Slow random walk bias to mimic drift
+    this.bias.position.add(new THREE.Vector3(gaussianNoise(0, 0.002), 0, gaussianNoise(0, 0.002)).multiplyScalar(dt * 60));
+    this.bias.yaw += gaussianNoise(0, 0.0005) * dt;
+
+    const yawDrift = new THREE.Quaternion();
+    yawDrift.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.bias.yaw);
+
+    this.estimatedPose.position.copy(trueState.position).add(this.bias.position);
+    this.estimatedPose.quaternion.copy(trueState.quaternion).premultiply(yawDrift);
+    this.velocity.copy(trueState.velocity);
+  }
+
+  correctWithLandmark(truePose, weight = 0.1) {
+    this.bias.position.lerp(new THREE.Vector3(), weight);
+    this.bias.yaw *= 1 - weight;
+    this.estimatedPose.position.lerp(truePose.position, weight);
+    this.estimatedPose.quaternion.slerp(truePose.quaternion, weight);
+  }
+}
+
 class LidarSimulator {
-  constructor(scene, caveMesh) {
-    this.scene = scene;
-    this.caveMesh = caveMesh;
-    this.raycaster = new THREE.Raycaster();
-    this.numRays = 80;
+  constructor(ammoWorld) {
+    this.world = ammoWorld;
+    this.numRays = 24;
     this.maxRange = 18;
+    this.verticalSpread = 0.2;
   }
 
   scan(pose) {
+    if (!this.world) return [];
     const hits = [];
+    const start = ammoVec3(pose.position);
     for (let i = 0; i < this.numRays; i++) {
       const theta = (i / this.numRays) * Math.PI * 2;
-      const dir = new THREE.Vector3(Math.cos(theta), 0, Math.sin(theta)).applyQuaternion(pose.quaternion);
-      this.raycaster.set(pose.position, dir);
-      this.raycaster.far = this.maxRange;
-      const res = this.raycaster.intersectObject(this.caveMesh, false);
-      if (res.length > 0) {
-        const d = res[0].distance + (Math.random() - 0.5) * 0.1;
-        hits.push({ distance: d, direction: dir.clone(), point: res[0].point });
+      const pitch = (Math.random() - 0.5) * this.verticalSpread;
+      const dir = new THREE.Vector3(Math.cos(theta), pitch, Math.sin(theta)).applyQuaternion(pose.quaternion);
+      const end = ammoVec3(pose.position.clone().add(dir.normalize().multiplyScalar(this.maxRange)));
+      const callback = new Ammo.ClosestRayResultCallback(start, end);
+      this.world.rayTest(start, end, callback);
+      if (callback.hasHit()) {
+        const pt = callback.get_hitPointWorld();
+        const distance = pose.position.distanceTo(new THREE.Vector3(pt.x(), pt.y(), pt.z()));
+        const noisy = distance + gaussianNoise(0, 0.05);
+        hits.push({
+          distance: noisy,
+          direction: dir,
+          point: new THREE.Vector3(pt.x(), pt.y(), pt.z()),
+        });
+      }
+      Ammo.destroy(callback);
+      Ammo.destroy(end);
+    }
+    Ammo.destroy(start);
+    return hits;
+  }
+}
+
+class FrontierPlanner {
+  constructor(grid) {
+    this.grid = grid;
+    this.path = [];
+  }
+
+  plan(startCell, goalCell) {
+    const open = [startCell];
+    const cameFrom = new Map();
+    const gScore = new Map();
+    const key = (c) => `${c.x},${c.y}`;
+    gScore.set(key(startCell), 0);
+
+    const neighbors = (c) => [
+      { x: c.x + 1, y: c.y },
+      { x: c.x - 1, y: c.y },
+      { x: c.x, y: c.y + 1 },
+      { x: c.x, y: c.y - 1 },
+    ].filter((n) => this.grid.isInside(n.x, n.y) && this.grid.value(n.x, n.y) < 0.2);
+
+    while (open.length) {
+      open.sort((a, b) => gScore.get(key(a)) - gScore.get(key(b)));
+      const current = open.shift();
+      if (current.x === goalCell.x && current.y === goalCell.y) {
+        return this._reconstruct(cameFrom, current);
+      }
+      for (const nb of neighbors(current)) {
+        const tentative = gScore.get(key(current)) + 1;
+        if (!gScore.has(key(nb)) || tentative < gScore.get(key(nb))) {
+          cameFrom.set(key(nb), current);
+          gScore.set(key(nb), tentative);
+          open.push(nb);
+        }
       }
     }
-    return hits;
+    return [];
+  }
+
+  _reconstruct(cameFrom, current) {
+    const path = [current];
+    const key = (c) => `${c.x},${c.y}`;
+    while (cameFrom.has(key(current))) {
+      current = cameFrom.get(key(current));
+      path.push(current);
+    }
+    return path.reverse();
+  }
+}
+
+class CaveEnvironment {
+  constructor(scene, ammoWorld) {
+    this.scene = scene;
+    this.world = ammoWorld;
+    this.obstacles = [];
+    this._buildCave();
+  }
+
+  _buildCave() {
+    // Main tunnel
+    const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9, metalness: 0.05 });
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -6),
+      new THREE.Vector3(4, 0, -12),
+      new THREE.Vector3(6, -0.5, -18),
+      new THREE.Vector3(0, 0, -24),
+    ]);
+    const geom = new THREE.TubeGeometry(curve, 60, 2.2, 12, false);
+    const mesh = new THREE.Mesh(geom, tunnelMat);
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.caveMesh = mesh;
+
+    if (this.world) {
+      // approximate tunnel as series of boxes for collisions
+      for (let i = 0; i < 20; i++) {
+        const t = i / 20;
+        const center = curve.getPoint(t);
+        this._addStaticBox(center, new THREE.Vector3(4, 4, 2));
+      }
+    }
+
+    // Artefacts
+    this.artefacts = [];
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xf97316, emissive: 0xff6b00 }),
+      );
+      m.position.copy(new THREE.Vector3(Math.sin(i) * 3, 0.2, -8 - i * 4));
+      this.scene.add(m);
+      this.artefacts.push(m);
+    }
+
+    // Debris obstacles
+    for (let i = 0; i < 5; i++) {
+      this.spawnObstacle(new THREE.Vector3((Math.random() - 0.5) * 4, -0.2, -4 - Math.random() * 10));
+    }
+  }
+
+  _addStaticBox(center, halfExtents) {
+    if (!this.world) return;
+    const shape = new Ammo.btBoxShape(ammoVec3(halfExtents));
+    const transform = new Ammo.btTransform();
+    transform.setIdentity();
+    transform.setOrigin(ammoVec3(center));
+    const motionState = new Ammo.btDefaultMotionState(transform);
+    const bodyInfo = new Ammo.btRigidBodyConstructionInfo(0, motionState, shape, new Ammo.btVector3(0, 0, 0));
+    const body = new Ammo.btRigidBody(bodyInfo);
+    this.world.addRigidBody(body);
+  }
+
+  spawnObstacle(position) {
+    const geom = new THREE.DodecahedronGeometry(0.35 + Math.random() * 0.2);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.2, roughness: 0.8 });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.copy(position);
+    this.scene.add(mesh);
+
+    let body = null;
+    if (this.world) {
+      const shape = new Ammo.btBoxShape(new Ammo.btVector3(0.35, 0.35, 0.35));
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(ammoVec3(position));
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const localInertia = new Ammo.btVector3(0, 0, 0);
+      shape.calculateLocalInertia(1.5, localInertia);
+      const info = new Ammo.btRigidBodyConstructionInfo(1.5, motionState, shape, localInertia);
+      body = new Ammo.btRigidBody(info);
+      this.world.addRigidBody(body);
+    }
+
+    this.obstacles.push({ mesh, body });
+    return { mesh, body };
+  }
+
+  updateObstaclePose(obstacle, newPos) {
+    obstacle.mesh.position.copy(newPos);
+    if (obstacle.body) {
+      const transform = obstacle.body.getWorldTransform();
+      transform.setOrigin(ammoVec3(newPos));
+      obstacle.body.setWorldTransform(transform);
+      obstacle.body.activate();
+    }
   }
 }
 
@@ -145,8 +348,9 @@ class DroneCaveDemo {
 
     this._initScene();
     this._initHUD();
+    this._initWorld();
     this._initDrone();
-    this._initCave();
+    this._initControls();
     this._initMapping();
     this.restart();
   }
@@ -157,21 +361,28 @@ class DroneCaveDemo {
     this.camera = new THREE.PerspectiveCamera(65, this.options.width / this.options.height, 0.1, 200);
     this.camera.position.set(0, 2, 6);
 
+    this.fpvCamera = new THREE.PerspectiveCamera(75, this.options.width / this.options.height, 0.05, 50);
     this.renderer = new THREE.WebGLRenderer({ antialias: !!this.options.highQuality });
     this.renderer.setSize(this.options.width, this.options.height);
     this.renderer.setPixelRatio(this.options.highQuality ? window.devicePixelRatio : 1);
     this.container.innerHTML = '';
     this.container.appendChild(this.renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0x8899aa, 0.2);
+    const ambient = new THREE.AmbientLight(0x8899aa, 0.18);
     const fog = new THREE.FogExp2(0x06080f, 0.05);
     this.scene.add(ambient);
     this.scene.fog = fog;
+
+    const spot = new THREE.SpotLight(0x8bf3ff, 0.8, 25, Math.PI / 7, 0.3, 1.5);
+    spot.position.set(0, 1, 0);
+    this.scene.add(spot);
+    this.headLight = spot;
   }
 
   _initHUD() {
     this.overlay = document.createElement('div');
-    this.overlay.style.cssText = 'position:absolute; top:8px; right:8px; background:rgba(5,6,12,0.8); color:#e2e8f0; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(34,197,94,0.5); border-radius:8px; backdrop-filter: blur(8px); z-index:5; text-align:right;';
+    this.overlay.style.cssText =
+      'position:absolute; top:8px; right:8px; background:rgba(5,6,12,0.82); color:#e2e8f0; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(34,197,94,0.5); border-radius:8px; backdrop-filter: blur(8px); z-index:5; text-align:right;';
     this.overlay.innerHTML = `
       <div style="font-size:12px; color:#34d399; margin-bottom:4px;">Cave Exploration</div>
       <div id="caveState" style="font-size:12px;">State: INIT</div>
@@ -189,8 +400,13 @@ class DroneCaveDemo {
     this.container.appendChild(this.minimap);
   }
 
+  _initWorld() {
+    this.ammoWorld = createAmmoWorld();
+    this.env = new CaveEnvironment(this.scene, this.ammoWorld);
+  }
+
   _initDrone() {
-    this.drone = new Quadrotor();
+    this.drone = new Quadrotor({ ammoWorld: this.ammoWorld });
     this.controller = new GeometricController({ mass: this.drone.params.mass });
 
     const body = new THREE.Mesh(
@@ -198,299 +414,281 @@ class DroneCaveDemo {
       new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, roughness: 0.3, metalness: 0.25 }),
     );
     body.rotation.x = Math.PI / 2;
-    const light = new THREE.SpotLight(0x7dd3fc, 3, 12, Math.PI / 4, 0.3, 1);
-    light.position.set(0, 0, 0);
-    light.target.position.set(0, 0, -1);
-    const rig = new THREE.Group();
-    rig.add(body, light, light.target);
-    this.droneMesh = rig;
-    this.scene.add(this.droneMesh);
+
+    const arms = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 0.24, 8),
+      new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0284c7, metalness: 0.3 }),
+    );
+    arms.rotation.z = Math.PI / 4;
+
+    this.droneGroup = new THREE.Group();
+    this.droneGroup.add(body);
+    this.droneGroup.add(arms);
+    this.scene.add(this.droneGroup);
   }
 
-  _initCave() {
-    // Generate cave spline path
-    const knots = [];
-    for (let i = 0; i < 12; i++) {
-      knots.push(new THREE.Vector3((Math.random() - 0.5) * 6, 1.5 + Math.sin(i * 0.5) * 0.4, -i * 4));
-    }
-    const curve = new THREE.CatmullRomCurve3(knots);
-    const geometry = new THREE.TubeGeometry(curve, 200, 2.2, 12, false);
-    geometry.verticesNeedUpdate = true;
-    geometry.attributes.position.needsUpdate = true;
-    // Add roughness with deterministic noise
-    const posAttr = geometry.attributes.position;
-    for (let i = 0; i < posAttr.count; i++) {
-      const v = new THREE.Vector3().fromBufferAttribute(posAttr, i);
-      const n = Math.sin(v.x * 0.7) * Math.sin(v.z * 0.5) * 0.15;
-      v.addScaledVector(v.clone().normalize(), n);
-      posAttr.setXYZ(i, v.x, v.y, v.z);
-    }
-    posAttr.needsUpdate = true;
-
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      emissive: 0x0b1f30,
-      roughness: 0.9,
-      metalness: 0.05,
-      side: THREE.BackSide,
+  _initControls() {
+    const panel = document.createElement('div');
+    panel.style.cssText = 'position:absolute; top:8px; left:8px; display:flex; gap:6px; z-index:6;';
+    panel.innerHTML = `
+      <button data-action="start" style="padding:6px 10px;">Start</button>
+      <button data-action="pause" style="padding:6px 10px;">Pause</button>
+      <button data-action="reset" style="padding:6px 10px;">Reset</button>
+      <button data-action="fpv" style="padding:6px 10px;">Toggle FPV</button>
+      <button data-action="lidar" style="padding:6px 10px;">Toggle LiDAR</button>
+      <button data-action="spawn" style="padding:6px 10px;">Spawn obstacle</button>
+    `;
+    this.container.appendChild(panel);
+    panel.addEventListener('click', (e) => {
+      const action = e.target.dataset?.action;
+      if (!action) return;
+      if (action === 'start') this.resume(true);
+      if (action === 'pause') this.pause(true);
+      if (action === 'reset') this.restart();
+      if (action === 'fpv') this.useFPV = !this.useFPV;
+      if (action === 'lidar') this.showLidar = !this.showLidar;
+      if (action === 'spawn') this.env.spawnObstacle(new THREE.Vector3((Math.random() - 0.5) * 3, 0, -6 - Math.random() * 8));
     });
-    this.caveMesh = new THREE.Mesh(geometry, material);
-    this.scene.add(this.caveMesh);
 
-    this.artifacts = [];
-    for (let i = 0; i < 4; i++) {
-      const t = Math.random();
-      const p = curve.getPoint(t);
-      const color = new THREE.Color().setHSL(Math.random(), 0.8, 0.6);
-      const obj = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 12), new THREE.MeshStandardMaterial({ color, emissive: color }));
-      obj.position.copy(p).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.8));
-      this.artifacts.push(obj);
-      this.scene.add(obj);
-    }
+    this.dragged = null;
+    const raycaster = new THREE.Raycaster();
+    const onPointerMove = (ev) => {
+      if (!this.dragged) return;
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(ndc, this.camera);
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const hit = new THREE.Vector3();
+      raycaster.ray.intersectPlane(plane, hit);
+      this.env.updateObstaclePose(this.dragged, hit);
+    };
 
-    this.lidar = new LidarSimulator(this.scene, this.caveMesh);
+    this.renderer.domElement.addEventListener('pointerdown', (ev) => {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(ndc, this.camera);
+      const intersects = raycaster.intersectObjects(this.env.obstacles.map((o) => o.mesh));
+      if (intersects.length) {
+        this.dragged = this.env.obstacles.find((o) => o.mesh === intersects[0].object);
+        this.renderer.domElement.addEventListener('pointermove', onPointerMove);
+      }
+    });
+    this.renderer.domElement.addEventListener('pointerup', () => {
+      this.dragged = null;
+      this.renderer.domElement.removeEventListener('pointermove', onPointerMove);
+    });
   }
 
   _initMapping() {
-    this.grid = new OccupancyGrid(0.5, 120);
-    this.pathWorld = [];
-    this.currentPlan = null;
-    this.lastLidar = 0;
-    this.lastPlan = 0;
+    this.grid = new OccupancyGrid(0.3, 90);
+    this.lidar = new LidarSimulator(this.ammoWorld);
+    this.localizer = new VIOLocalizer();
+    this.planner = new FrontierPlanner(this.grid);
+    this.showLidar = true;
+    this.useFPV = false;
   }
 
   restart() {
-    this.state = 'MAPPING';
+    this.mode = 'HOVER';
     this.time = 0;
-    this.lastFrame = null;
-    this.accumulator = 0;
-    this.drone.reset({
-      position: new THREE.Vector3(0, 1.5, 2),
-      velocity: new THREE.Vector3(),
-      quaternion: new THREE.Quaternion(),
-      omega: new THREE.Vector3(),
-    });
-    this.droneMesh.position.copy(this.drone.state.position);
-    this.droneMesh.quaternion.copy(this.drone.state.quaternion);
-    this.grid = new OccupancyGrid(0.5, 120);
-    this.currentPlan = null;
-    this.pathWorld = [];
+    this.drone.reset({ position: new THREE.Vector3(0, 0.4, 2) });
+    this.localizer.reset({ position: new THREE.Vector3(0, 0.4, 2), quaternion: new THREE.Quaternion() });
+    this.grid = new OccupancyGrid(0.3, 90);
+    this.traj = null;
+    this.trajTime = 0;
   }
 
   pause(user = false) {
-    this.userPaused = user ? true : this.userPaused;
-    this._paused = true;
+    this.userPaused = user || this.userPaused;
+    this.running = false;
   }
 
   resume(user = false) {
     this.userPaused = user ? false : this.userPaused;
-    if (!this.visibilityPaused) this._paused = false;
-    this.lastFrame = null;
-    this._raf();
+    if (this.visibilityPaused) return;
+    this.running = true;
+    this.lastFrame = performance.now();
+    requestAnimationFrame((t) => this._loop(t));
   }
 
   setPausedFromVisibility(visible) {
     this.visibilityPaused = !visible;
-    if (visible && !this.userPaused) this.resume();
-    else this.pause();
+    if (!visible) this.pause(false);
+    else if (!this.userPaused) this.resume(false);
   }
 
   start() {
-    this._raf();
+    this.running = true;
+    this.lastFrame = performance.now();
+    requestAnimationFrame((t) => this._loop(t));
   }
 
-  _raf(timestamp) {
-    if (this._paused) return;
-    requestAnimationFrame((t) => this._raf(t));
-    if (!this.lastFrame) {
-      this.lastFrame = timestamp;
-      return;
-    }
-    const dt = ((timestamp - this.lastFrame) / 1000) * this.timeScale;
+  _loop(timestamp) {
+    if (!this.running) return;
+    const dt = Math.min(0.05, (timestamp - this.lastFrame) / 1000);
     this.lastFrame = timestamp;
-    this.accumulator += dt;
-    const h = 1 / this.physicsRate;
-    while (this.accumulator >= h) {
-      this._stepPhysics(h);
-      this.accumulator -= h;
+    this.accumulator += dt * this.timeScale;
+    const fixedDt = 1 / this.physicsRate;
+    while (this.accumulator >= fixedDt) {
+      this._stepPhysics(fixedDt);
+      this.accumulator -= fixedDt;
+      this.time += fixedDt;
     }
     this._render();
-  }
-
-  _updateLidar(dt) {
-    this.lastLidar += dt;
-    if (this.lastLidar < 0.15) return;
-    this.lastLidar = 0;
-
-    const state = this.drone.getState();
-    const hits = this.lidar.scan(state);
-    hits.forEach((hit) => {
-      const noisyPoint = hit.point.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.05, 0, (Math.random() - 0.5) * 0.05));
-      const idx = this.grid.indexFromWorld(noisyPoint);
-      const originIdx = this.grid.indexFromWorld(state.position);
-      // Simple Bresenham-like carve free space
-      const steps = 12;
-      for (let i = 0; i <= steps; i++) {
-        const ix = Math.floor(originIdx.x + (idx.x - originIdx.x) * (i / steps));
-        const iy = Math.floor(originIdx.y + (idx.y - originIdx.y) * (i / steps));
-        if (!this.grid.isInside(ix, iy)) break;
-        if (i < steps) this.grid.updateCell(ix, iy, -0.35);
-        else this.grid.updateCell(ix, iy, 0.8);
-      }
-    });
-  }
-
-  _planIfNeeded(dt) {
-    this.lastPlan += dt;
-    if (this.lastPlan < 1.0) return;
-    this.lastPlan = 0;
-
-    const frontiers = this.grid.frontierCells();
-    if (frontiers.length === 0) return;
-
-    const state = this.drone.getState();
-    const current = this.grid.indexFromWorld(state.position);
-    let best = null;
-    let bestDist = Infinity;
-    frontiers.forEach((f) => {
-      const d = Math.hypot(f.x - current.x, f.y - current.y);
-      if (d < bestDist) {
-        best = f;
-        bestDist = d;
-      }
-    });
-
-    const path = this._astar(current, best);
-    if (path.length > 0) {
-      const pts = path.map((c) => new THREE.Vector3(
-        this.grid.origin.x + c.x * this.grid.resolution,
-        1.5,
-        this.grid.origin.y + c.y * this.grid.resolution,
-      ));
-      this.currentPlan = {
-        target: best,
-        traj: new ReferenceTrajectory([state.position.clone(), ...pts], Math.max(3, pts.length * 0.4)),
-        startTime: this.time,
-      };
-    }
-  }
-
-  _astar(start, goal) {
-    const key = (c) => `${c.x},${c.y}`;
-    const open = new Map();
-    const closed = new Set();
-    open.set(key(start), { c: start, g: 0, f: Math.hypot(goal.x - start.x, goal.y - start.y), parent: null });
-    const dirs = [
-      { x: 1, y: 0 },
-      { x: -1, y: 0 },
-      { x: 0, y: 1 },
-      { x: 0, y: -1 },
-    ];
-
-    while (open.size > 0) {
-      let bestKey = null;
-      let bestNode = null;
-      for (const [k, n] of open) {
-        if (!bestNode || n.f < bestNode.f) {
-          bestNode = n;
-          bestKey = k;
-        }
-      }
-      open.delete(bestKey);
-      const nodeKey = key(bestNode.c);
-      if (nodeKey === key(goal)) {
-        const path = [];
-        let n = bestNode;
-        while (n) {
-          path.unshift(n.c);
-          n = n.parent;
-        }
-        return path;
-      }
-      closed.add(nodeKey);
-      dirs.forEach((d) => {
-        const nx = bestNode.c.x + d.x;
-        const ny = bestNode.c.y + d.y;
-        const nk = key({ x: nx, y: ny });
-        if (closed.has(nk) || !this.grid.isInside(nx, ny) || this.grid.value(nx, ny) > 0.4) return;
-        const g = bestNode.g + 1;
-        const h = Math.hypot(goal.x - nx, goal.y - ny);
-        const existing = open.get(nk);
-        if (!existing || g + h < existing.f) {
-          open.set(nk, { c: { x: nx, y: ny }, g, f: g + h, parent: bestNode });
-        }
-      });
-    }
-    return [];
+    requestAnimationFrame((t) => this._loop(t));
   }
 
   _stepPhysics(dt) {
-    this.time += dt;
-    this._updateLidar(dt);
-    this._planIfNeeded(dt);
+    const state = this.drone.getState();
+    this.localizer.update(state, dt);
 
-    let desired;
-    if (this.currentPlan) {
-      const localT = (this.time - this.currentPlan.startTime);
-      desired = this.currentPlan.traj.sample(localT);
-      if (localT > this.currentPlan.traj.totalTime) this.currentPlan = null;
-    } else {
-      desired = { position: this.drone.getState().position.clone(), velocity: new THREE.Vector3(), acceleration: new THREE.Vector3(0, 0, 0), yaw: 0 };
+    const hits = this.lidar.scan(this.localizer.estimatedPose);
+    this._updateGridFromScan(hits, this.localizer.estimatedPose);
+
+    const { coverage } = this.grid.occupancy();
+    if (coverage > 0.6 && this.mode !== 'RETURN') {
+      this.mode = 'RETURN';
+      this.traj = new ReferenceTrajectory(
+        [state.position.clone(), new THREE.Vector3(0, 0.5, 2)],
+        8,
+      );
+      this.trajTime = 0;
     }
 
-    const control = this.controller.computeControl(this.drone.getState(), desired);
-    this.drone.step(control, dt);
+    if (!this.traj || this.trajTime > this.traj.totalTime) {
+      const frontier = this._pickFrontier(state.position);
+      if (frontier) {
+        const targetWorld = new THREE.Vector3(
+          frontier.x * this.grid.resolution + this.grid.origin.x,
+          0.5,
+          frontier.y * this.grid.resolution + this.grid.origin.y,
+        );
+        this.traj = new ReferenceTrajectory([state.position.clone(), targetWorld], 5);
+        this.trajTime = 0;
+        this.mode = 'EXPLORE';
+      } else {
+        this.mode = 'HOVER';
+      }
+    }
 
-    const state = this.drone.getState();
-    this.droneMesh.position.copy(state.position);
-    this.droneMesh.quaternion.copy(state.quaternion);
+    if (this.traj) {
+      const desired = this.traj.sample(this.trajTime);
+      const control = this.controller.computeControl(state, desired);
+      this.drone.step(control, dt);
+      this.trajTime += dt;
+    } else {
+      this.drone.step({ thrust: this.drone.params.mass * 9.81, torque: new THREE.Vector3() }, dt);
+    }
+  }
+
+  _pickFrontier(position) {
+    const frontiers = this.grid.frontierCells();
+    if (!frontiers.length) return null;
+    frontiers.sort((a, b) => {
+      const aw = new THREE.Vector2(a.x * this.grid.resolution + this.grid.origin.x, a.y * this.grid.resolution + this.grid.origin.y);
+      const bw = new THREE.Vector2(b.x * this.grid.resolution + this.grid.origin.x, b.y * this.grid.resolution + this.grid.origin.y);
+      const da = aw.distanceTo(new THREE.Vector2(position.x, position.z));
+      const db = bw.distanceTo(new THREE.Vector2(position.x, position.z));
+      return da - db;
+    });
+    return frontiers[0];
+  }
+
+  _updateGridFromScan(hits, pose) {
+    for (const h of hits) {
+      const hitPoint = h.point;
+      const cell = this.grid.indexFromWorld(hitPoint);
+      if (this.grid.isInside(cell.x, cell.y)) this.grid.updateCell(cell.x, cell.y, 1.2);
+
+      // Carve free space along ray
+      const steps = Math.ceil(h.distance / this.grid.resolution);
+      const dir2d = new THREE.Vector2(h.direction.x, h.direction.z).normalize();
+      for (let i = 1; i < steps; i++) {
+        const pt = new THREE.Vector2(pose.position.x, pose.position.z).add(dir2d.clone().multiplyScalar(i * this.grid.resolution));
+        const idx = this.grid.indexFromWorld(new THREE.Vector3(pt.x, 0, pt.y));
+        this.grid.updateCell(idx.x, idx.y, -0.6);
+      }
+    }
   }
 
   _render() {
-    // Camera follows from behind
-    const target = this.droneMesh.position;
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.droneMesh.quaternion);
-    const desiredCam = target.clone().add(forward.clone().multiplyScalar(-3)).add(new THREE.Vector3(0, 1.0, 0));
-    this.camera.position.lerp(desiredCam, 0.1);
-    this.camera.lookAt(target);
-    this.renderer.render(this.scene, this.camera);
+    const state = this.drone.getState();
+    this.droneGroup.position.copy(state.position);
+    this.droneGroup.quaternion.copy(state.quaternion);
+    this.headLight.position.copy(state.position.clone().add(new THREE.Vector3(0, 0.4, 0)));
+    this.headLight.target.position.copy(state.position.clone().add(new THREE.Vector3(0, 0, -1).applyQuaternion(state.quaternion)));
+    this.headLight.target.updateMatrixWorld();
 
-    const occ = this.grid.occupancy();
-    const frontiers = this.grid.frontierCells();
-    this.overlay.querySelector('#caveState').textContent = `State: ${this.state}`;
-    this.overlay.querySelector('#caveTime').textContent = `t = ${this.time.toFixed(2)} s`;
-    this.overlay.querySelector('#caveCoverage').textContent = `Coverage: ${(occ.coverage * 100).toFixed(1)}%`;
-    this.overlay.querySelector('#caveFrontiers').textContent = `Frontiers: ${frontiers.length}`;
+    if (this.showLidar) this._renderLidar(state);
 
-    this._drawMinimap(frontiers);
+    if (this.useFPV) {
+      this.fpvCamera.position.copy(state.position.clone().add(new THREE.Vector3(0, 0.05, 0)));
+      this.fpvCamera.quaternion.copy(state.quaternion);
+      this.renderer.render(this.scene, this.fpvCamera);
+    } else {
+      this.camera.position.lerp(state.position.clone().add(new THREE.Vector3(4, 2, 6)), 0.05);
+      this.camera.lookAt(state.position);
+      this.renderer.render(this.scene, this.camera);
+    }
+
+    this._drawMinimap(state);
+    this._updateHUD(state);
   }
 
-  _drawMinimap(frontiers) {
+  _renderLidar(state) {
+    if (this.lidarLines) {
+      this.scene.remove(this.lidarLines);
+    }
+    const hits = this.lidar.scan(this.localizer.estimatedPose);
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(hits.length * 6);
+    hits.forEach((h, i) => {
+      positions[i * 6 + 0] = state.position.x;
+      positions[i * 6 + 1] = state.position.y;
+      positions[i * 6 + 2] = state.position.z;
+      positions[i * 6 + 3] = h.point.x;
+      positions[i * 6 + 4] = h.point.y;
+      positions[i * 6 + 5] = h.point.z;
+    });
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.lidarLines = new THREE.LineSegments(
+      geo,
+      new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.35 }),
+    );
+    this.scene.add(this.lidarLines);
+  }
+
+  _drawMinimap(state) {
     const ctx = this.minimap.getContext('2d');
-    ctx.fillStyle = '#02040a';
+    ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, this.minimap.width, this.minimap.height);
 
-    const scaleX = this.minimap.width / this.grid.size;
-    const scaleY = this.minimap.height / this.grid.size;
+    const cellSize = this.minimap.width / this.grid.size;
     for (let y = 0; y < this.grid.size; y++) {
       for (let x = 0; x < this.grid.size; x++) {
         const v = this.grid.value(x, y);
         if (Math.abs(v) < 0.01) continue;
-        ctx.fillStyle = v > 0 ? 'rgba(239,68,68,0.8)' : 'rgba(34,197,94,0.8)';
-        ctx.fillRect(x * scaleX, y * scaleY, scaleX, scaleY);
+        ctx.fillStyle = v > 0 ? '#ef4444' : '#0ea5e9';
+        ctx.globalAlpha = Math.min(Math.abs(v) / 4, 0.8);
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
       }
     }
+    ctx.globalAlpha = 1;
 
-    ctx.fillStyle = 'rgba(94,234,212,0.8)';
-    frontiers.forEach((f) => {
-      ctx.fillRect(f.x * scaleX, f.y * scaleY, scaleX, scaleY);
-    });
-
-    const state = this.drone.getState();
+    // Drone
     const idx = this.grid.indexFromWorld(state.position);
-    ctx.fillStyle = '#38bdf8';
+    ctx.fillStyle = '#22c55e';
     ctx.beginPath();
-    ctx.arc(idx.x * scaleX, idx.y * scaleY, 3, 0, Math.PI * 2);
+    ctx.arc(idx.x * cellSize, idx.y * cellSize, 4, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  _updateHUD(state) {
+    const coverage = this.grid.occupancy().coverage;
+    const frontiers = this.grid.frontierCells().length;
+    this.overlay.querySelector('#caveState').textContent = `State: ${this.mode}`;
+    this.overlay.querySelector('#caveTime').textContent = `t = ${this.time.toFixed(2)} s`;
+    this.overlay.querySelector('#caveCoverage').textContent = `Coverage: ${(coverage * 100).toFixed(1)}%`;
+    this.overlay.querySelector('#caveFrontiers').textContent = `Frontiers: ${frontiers}`;
   }
 }
