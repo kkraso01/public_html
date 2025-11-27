@@ -30,6 +30,7 @@ class DroneCaveDemo {
       { width: container.clientWidth || 900, height: container.clientHeight || 520, shadows: true },
       options,
     );
+    this.floorHeight = options.floorHeight ?? 0.05;
     this.physicsRate = 200;
     this.timeScale = 1;
     this.userPaused = false;
@@ -78,7 +79,7 @@ class DroneCaveDemo {
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
+    floor.position.y = this.floorHeight;
     floor.receiveShadow = true;
     this.scene.add(floor);
   }
@@ -90,7 +91,7 @@ class DroneCaveDemo {
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine();
+    this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
     this.drone.reset({ position: new THREE.Vector3(0, 1.2, 4) });
 
     const body = new THREE.Mesh(
