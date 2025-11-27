@@ -64,12 +64,45 @@ class DroneRaceDemo {
     this.damping = 0.98;
     this.timeScale = 1.0;
 
+    // Difficulty presets
+    this.difficultyPresets = {
+      EASY: { maxSpeed: 7, maxAccel: 10, vioDrift: 0.5, gateRadius: 3.0, latency: 0.02 },
+      MEDIUM: { maxSpeed: 10, maxAccel: 15, vioDrift: 1.0, gateRadius: 2.5, latency: 0.035 },
+      HARD: { maxSpeed: 18, maxAccel: 25, vioDrift: 1.8, gateRadius: 1.8, latency: 0.05 },
+    };
+    this.difficulty = 'MEDIUM';
+    this.vioLatency = 0.0;
+
     // Race state
     this.state = 'idle';
     this.gateIndex = 0;
     this.gatesPassed = 0;
     this.raceTime = 0;
     this.countdown = 1.5;
+    this.crashTimer = 0;
+    this.replayMode = false;
+    this.replayBuffer = [];
+    this.replayDuration = 10;
+    this.replayCursor = 0;
+    this.replayPlaying = false;
+
+    // Visual effects
+    this.trailPoints = [];
+    this.trailGeometry = null;
+    this.trailLine = null;
+    this.trailMaxTime = 1.8;
+    this.trailSegments = 120;
+    this.gateAnimations = [];
+    this.crashLabel = null;
+    this.shakeSeed = Math.random() * 1000;
+    this.shakeTime = 0;
+
+    // FPV
+    this.fpvEnabled = true;
+    this.fpvCamera = null;
+    this.fpvRenderer = null;
+    this.fpvCanvas = null;
+    this.fpvFrameTimer = 0;
 
     // Drone physical state (true)
     this.trueState = {
@@ -103,7 +136,10 @@ class DroneRaceDemo {
     this._initThree();
     this._initWorld();
     this._initUI();
+    this._initTrail();
+    this._initFPV();
     this._resetDrone();
+    this._applyDifficulty(this.difficulty);
   }
 
   _initStyles() {
@@ -172,6 +208,7 @@ class DroneRaceDemo {
     // Sparse columns/walls for indoor vibe
     const columnGeo = new THREE.CylinderGeometry(0.3, 0.4, 6, 16);
     const columnMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
+    this.columns = [];
     const columnPositions = [
       [6, 3, 6],
       [-6, 3, -4],
@@ -183,6 +220,7 @@ class DroneRaceDemo {
       col.position.set(x, y, z);
       col.castShadow = col.receiveShadow = true;
       this.scene.add(col);
+      this.columns.push(col);
     });
 
     // Track & gates
@@ -224,22 +262,97 @@ class DroneRaceDemo {
 
   _planTrajectory(points) {
     const samples = [];
-    const catmull = new THREE.CatmullRomCurve3(points, true, 'catmullrom', 0.25);
-    const totalLength = catmull.getLength();
-    const desiredSpeed = this.options.highQuality ? 7.5 : 6.0;
-    const totalTime = totalLength / desiredSpeed;
-    const segments = 400;
-    for (let i = 0; i <= segments; i++) {
-      const u = i / segments;
-      const pos = catmull.getPointAt(u);
-      const tangent = catmull.getTangentAt(u).normalize();
-      samples.push({
-        t: u * totalTime,
-        position: pos,
-        direction: tangent,
-      });
+    const desiredSpeed = this.options.highQuality ? 8.0 : 6.5;
+    const velocities = points.map((_, i) => {
+      const prev = points[(i - 1 + points.length) % points.length];
+      const next = points[(i + 1) % points.length];
+      return new THREE.Vector3().subVectors(next, prev).multiplyScalar(0.5);
+    });
+    const zero = new THREE.Vector3();
+    let totalTime = 0;
+
+    for (let i = 0; i < points.length; i++) {
+      const p0 = points[i];
+      const p1 = points[(i + 1) % points.length];
+      const v0 = velocities[i];
+      const v1 = velocities[(i + 1) % velocities.length];
+      const a0 = zero.clone();
+      const a1 = zero.clone();
+      const j0 = zero.clone();
+      const j1 = zero.clone();
+      const length = new THREE.Vector3().subVectors(p1, p0).length();
+      const duration = Math.max(0.6, length / desiredSpeed);
+      totalTime += duration;
+      const coeffs = this._computeMinSnapCoeffs(p0, p1, v0, v1, a0, a1, j0, j1, duration);
+      const steps = 40;
+      for (let s = 0; s < steps; s++) {
+        const t = (s / steps) * duration;
+        const pos = this._evalPoly(coeffs, t);
+        const vel = this._evalPolyDerivative(coeffs, t, 1);
+        const dir = vel.lengthSq() > 1e-6 ? vel.clone().normalize() : new THREE.Vector3(1, 0, 0);
+        samples.push({ t: totalTime - duration + t, position: pos, direction: dir });
+      }
     }
+
+    // Close loop
+    const first = samples[0];
+    samples.push({ t: totalTime, position: first.position.clone(), direction: first.direction.clone() });
     return { samples, totalTime };
+  }
+
+  _computeMinSnapCoeffs(p0, p1, v0, v1, a0, a1, j0, j1, T) {
+    const A = [
+      [1, 0, 0, 0, 0, 0, 0, 0],
+      [0, 1, 0, 0, 0, 0, 0, 0],
+      [0, 0, 2, 0, 0, 0, 0, 0],
+      [0, 0, 0, 6, 0, 0, 0, 0],
+      [1, T, Math.pow(T, 2), Math.pow(T, 3), Math.pow(T, 4), Math.pow(T, 5), Math.pow(T, 6), Math.pow(T, 7)],
+      [0, 1, 2 * T, 3 * Math.pow(T, 2), 4 * Math.pow(T, 3), 5 * Math.pow(T, 4), 6 * Math.pow(T, 5), 7 * Math.pow(T, 6)],
+      [0, 0, 2, 6 * T, 12 * Math.pow(T, 2), 20 * Math.pow(T, 3), 30 * Math.pow(T, 4), 42 * Math.pow(T, 5)],
+      [0, 0, 0, 6, 24 * T, 60 * Math.pow(T, 2), 120 * Math.pow(T, 3), 210 * Math.pow(T, 4)],
+    ];
+
+    const solveAxis = (start, end, vs, ve, as, ae, js, je) => {
+      const b = [start, vs, as, js, end, ve, ae, je];
+      const m = A.map((row, r) => row.map((c) => c));
+      const x = b.slice();
+      for (let i = 0; i < 8; i++) {
+        // pivot
+        let pivot = m[i][i];
+        if (Math.abs(pivot) < 1e-8) pivot = 1e-8;
+        for (let j = i; j < 8; j++) m[i][j] /= pivot;
+        x[i] /= pivot;
+        for (let r = 0; r < 8; r++) {
+          if (r === i) continue;
+          const factor = m[r][i];
+          for (let c = i; c < 8; c++) m[r][c] -= factor * m[i][c];
+          x[r] -= factor * x[i];
+        }
+      }
+      return x;
+    };
+
+    const cx = solveAxis(p0.x, p1.x, v0.x, v1.x, a0.x, a1.x, j0.x, j1.x);
+    const cy = solveAxis(p0.y, p1.y, v0.y, v1.y, a0.y, a1.y, j0.y, j1.y);
+    const cz = solveAxis(p0.z, p1.z, v0.z, v1.z, a0.z, a1.z, j0.z, j1.z);
+    return { x: cx, y: cy, z: cz, T };
+  }
+
+  _evalPoly(coeffs, t) {
+    const evalAxis = (c) =>
+      c[0] + c[1] * t + c[2] * t ** 2 + c[3] * t ** 3 + c[4] * t ** 4 + c[5] * t ** 5 + c[6] * t ** 6 + c[7] * t ** 7;
+    return new THREE.Vector3(evalAxis(coeffs.x), evalAxis(coeffs.y), evalAxis(coeffs.z));
+  }
+
+  _evalPolyDerivative(coeffs, t, order) {
+    const evalAxis = (c) => {
+      if (order === 1)
+        return c[1] + 2 * c[2] * t + 3 * c[3] * t ** 2 + 4 * c[4] * t ** 3 + 5 * c[5] * t ** 4 + 6 * c[6] * t ** 5 + 7 * c[7] * t ** 6;
+      if (order === 2)
+        return 2 * c[2] + 6 * c[3] * t + 12 * c[4] * t ** 2 + 20 * c[5] * t ** 3 + 30 * c[6] * t ** 4 + 42 * c[7] * t ** 5;
+      return 0;
+    };
+    return new THREE.Vector3(evalAxis(coeffs.x), evalAxis(coeffs.y), evalAxis(coeffs.z));
   }
 
   _createGates() {
@@ -272,6 +385,7 @@ class DroneRaceDemo {
       this.scene.add(frame);
       this.scene.add(label);
       this.gateMeshes.push({ frame, label });
+      this.gateAnimations.push({ intensity: 0, scale: 1, burstTime: 0 });
     });
   }
 
@@ -365,6 +479,27 @@ class DroneRaceDemo {
     this.speedLabel = overlay.querySelector('#drone-race-speed');
     this.errorLabel = overlay.querySelector('#drone-race-error');
 
+    const crash = document.createElement('div');
+    crash.style.cssText = 'margin-top:6px;font-size:13px;font-weight:700;color:#f87171;display:none;';
+    crash.textContent = 'CRASH';
+    overlay.appendChild(crash);
+    this.crashLabel = crash;
+
+    const difficultyRow = document.createElement('div');
+    difficultyRow.className = 'stat';
+    difficultyRow.innerHTML = 'Difficulty: <select id="drone-difficulty"><option>EASY</option><option selected>MEDIUM</option><option>HARD</option></select>';
+    overlay.appendChild(difficultyRow);
+
+    const replayRow = document.createElement('div');
+    replayRow.className = 'stat';
+    replayRow.innerHTML = 'Replay: <button id="drone-replay-play">Play</button> <input id="drone-replay-slider" type="range" min="0" max="1" step="0.001" value="1" style="width:100px">';
+    overlay.appendChild(replayRow);
+
+    const fpvRow = document.createElement('div');
+    fpvRow.className = 'stat';
+    fpvRow.innerHTML = '<label><input type="checkbox" id="drone-fpv-toggle" checked> FPV Cam</label>';
+    overlay.appendChild(fpvRow);
+
     // Attach to external control elements (will be in the HTML panel)
     this._attachExternalControls();
   }
@@ -381,6 +516,10 @@ class DroneRaceDemo {
     const maxspeedSlider = document.querySelector('#drone-maxspeed');
     const dampingSlider = document.querySelector('#drone-damping');
     const resetBtn = document.querySelector('#drone-pid-reset');
+    const difficultySelect = document.querySelector('#drone-difficulty');
+    const replayPlay = document.querySelector('#drone-replay-play');
+    const replaySlider = document.querySelector('#drone-replay-slider');
+    const fpvToggle = document.querySelector('#drone-fpv-toggle');
 
     if (toggleBtn) {
       toggleBtn.addEventListener('click', () => {
@@ -502,6 +641,49 @@ class DroneRaceDemo {
         document.querySelector('#drone-damping-val').textContent = '0.98';
       });
     }
+
+    if (difficultySelect) {
+      difficultySelect.addEventListener('change', (e) => {
+        this._applyDifficulty(e.target.value);
+        this.restart();
+      });
+    }
+
+    if (replayPlay && replaySlider) {
+      replayPlay.addEventListener('click', () => {
+        this.replayPlaying = !this.replayPlaying;
+        replayPlay.textContent = this.replayPlaying ? 'Pause' : 'Play';
+      });
+      replaySlider.addEventListener('input', (e) => {
+        this.replayCursor = parseFloat(e.target.value) * this.replayDuration;
+        this.replayPlaying = false;
+        replayPlay.textContent = 'Play';
+        this._applyReplayState();
+      });
+    }
+
+    if (fpvToggle) {
+      fpvToggle.addEventListener('change', (e) => {
+        this.fpvEnabled = e.target.checked;
+        if (this.fpvCanvas) this.fpvCanvas.style.display = this.fpvEnabled ? 'block' : 'none';
+      });
+    }
+  }
+
+  _applyDifficulty(level) {
+    this.difficulty = level;
+    const preset = this.difficultyPresets[level] || this.difficultyPresets.MEDIUM;
+    this.maxSpeed = preset.maxSpeed;
+    this.maxAccel = preset.maxAccel;
+    this.vioDrift = preset.vioDrift;
+    this.vioLatency = preset.latency;
+    this.track.forEach((gate, i) => {
+      gate.radius = preset.gateRadius;
+      if (this.gateMeshes[i]) {
+        const scale = (gate.radius / 2.5) * 1.0;
+        this.gateMeshes[i].frame.scale.set(scale, scale, scale);
+      }
+    });
   }
 
   _resetDrone() {
@@ -519,6 +701,13 @@ class DroneRaceDemo {
     this.raceTime = 0;
     this.countdown = 1.5;
     this.state = 'countdown';
+    this.crashTimer = 0;
+    this.replayMode = false;
+    this.replayCursor = 0;
+    this.replayPlaying = false;
+    this.crashLabel.style.display = 'none';
+    this._resetTrail();
+    this._lastGateSign = null;
   }
 
   start() {
@@ -576,8 +765,37 @@ class DroneRaceDemo {
 
   update(dt) {
     this._updateRaceState(dt);
+    this._updateTrail(dt);
     if (this.state === 'racing') {
       this.raceTime += dt;
+    }
+
+    if (this.state === 'crashed') {
+      this.crashTimer += dt;
+      this._applyCrashPhysics(dt);
+      if (this.crashTimer > 0.4 && !this.replayMode) this._enterReplay(true);
+      if (this.replayMode) this._applyReplayState();
+      if (this.crashTimer > 2) {
+        this.restart();
+      }
+      this._updateCamera(dt, this._getReferenceAtTime(this.raceTime));
+      this._updateHUD(this._getReferenceAtTime(this.raceTime));
+      return;
+    }
+
+    if (this.replayMode) {
+      if (this.replayPlaying) {
+        this.replayCursor += dt;
+        if (this.replayCursor > this.replayDuration) this.replayCursor = this.replayDuration;
+        const slider = document.querySelector('#drone-replay-slider');
+        if (slider) slider.value = this.replayCursor / this.replayDuration;
+        if (this.replayCursor >= this.replayDuration) this.replayPlaying = false;
+      }
+      this._applyReplayState();
+      const reference = this._getReferenceAtTime(this.raceTime);
+      this._updateCamera(dt, reference);
+      this._updateHUD(reference);
+      return;
     }
 
     const reference = this._getReferenceAtTime(this.raceTime);
@@ -585,8 +803,14 @@ class DroneRaceDemo {
     this._updatePhysics(controlOutput, dt);
     this._updateVIO(dt);
     this._updateGateCrossing();
+    if (this._checkCrashConditions(reference)) {
+      this._handleCrash('deviation');
+    }
     this._updateCamera(dt, reference);
     this._updateHUD(reference);
+    this._updateGateAnimations(dt);
+    this._updateReplayBuffer(dt);
+    this._renderFPV(dt);
   }
 
   _updateRaceState(dt) {
@@ -597,7 +821,7 @@ class DroneRaceDemo {
         this.raceTime = 0;
       }
     } else if (this.state === 'finished') {
-      // remain finished
+      this._enterReplay();
     }
   }
 
@@ -643,6 +867,7 @@ class DroneRaceDemo {
   }
 
   _updatePhysics(control, dt) {
+    if (this.state === 'crashed' || this.replayMode) return;
     // Apply acceleration in world frame (simplified point-mass model)
     const acc = control.desiredAcc.clone();
     acc.add(this.gravity);
@@ -664,6 +889,8 @@ class DroneRaceDemo {
     this.droneMesh.position.copy(this.trueState.position);
     this.droneMesh.rotation.copy(this.trueState.orientation);
 
+    this._updateCameraShake(dt);
+
     // Spin rotors visually with correct opposing directions
     this.rotors.forEach((rotor) => {
       const spinDir = rotor.userData.spinDir || 1;
@@ -676,14 +903,15 @@ class DroneRaceDemo {
   _updateVIO(dt) {
     // Random walk bias to emulate VIO drift
     const biasStep = new THREE.Vector3(
-      (Math.random() - 0.5) * 0.01,
-      (Math.random() - 0.5) * 0.01,
-      (Math.random() - 0.5) * 0.01,
+      (Math.random() - 0.5) * 0.01 * (this.vioDrift || 1),
+      (Math.random() - 0.5) * 0.01 * (this.vioDrift || 1),
+      (Math.random() - 0.5) * 0.01 * (this.vioDrift || 1),
     );
     this.vioBias.add(biasStep.multiplyScalar(dt * 4));
 
     const noise = () => (Math.random() - 0.5) * 0.03;
-    this.estimatedState.position.copy(this.trueState.position).add(this.vioBias).add(new THREE.Vector3(noise(), noise(), noise()));
+    const latencyOffset = this.trueState.velocity.clone().multiplyScalar(-(this.vioLatency || 0));
+    this.estimatedState.position.copy(this.trueState.position).add(latencyOffset).add(this.vioBias).add(new THREE.Vector3(noise(), noise(), noise()));
     this.estimatedState.velocity.copy(this.trueState.velocity);
     this.estimatedState.orientation.copy(this.trueState.orientation);
     this.estimatedState.orientation.y += noise() * 0.5;
@@ -709,11 +937,14 @@ class DroneRaceDemo {
       if (signNow !== this._lastGateSign) {
         this.gateIndex = (this.gateIndex + 1) % this.track.length;
         this.gatesPassed += 1;
+        this._triggerGateAnimation((this.gateIndex + this.track.length - 1) % this.track.length);
         if (this.gateIndex === 0) {
           this.state = 'finished';
         }
       }
       this._lastGateSign = signNow;
+    } else if (Math.abs(distToPlane) < 0.2 && !withinRadius) {
+      this._handleCrash('missed gate');
     }
   }
 
@@ -722,6 +953,8 @@ class DroneRaceDemo {
     const lookAhead = reference.direction.clone().multiplyScalar(4);
     const desiredPos = this.trueState.position.clone().add(new THREE.Vector3(0, 2, 0)).sub(reference.direction.clone().multiplyScalar(6));
     this.camera.position.lerp(desiredPos, 0.08);
+    const shake = this._getCameraShake();
+    this.camera.position.add(shake);
     const target = this.trueState.position.clone().add(lookAhead);
     this.camera.lookAt(target);
   }
@@ -735,11 +968,225 @@ class DroneRaceDemo {
     const vioError = new THREE.Vector3().subVectors(this.trueState.position, this.estimatedState.position).length();
     const vioText = `VIO Pos Err: ${vioError.toFixed(2)} m`;
 
-    this.stateLabel.textContent = `State: ${stateLabel}`;
+    this.stateLabel.textContent = `State: ${this.replayMode ? 'REPLAY MODE' : stateLabel}`;
     this.gateLabel.textContent = gateText;
     this.lapLabel.textContent = lapText;
     this.speedLabel.textContent = speedText;
     this.errorLabel.textContent = vioText;
+    this.crashLabel.style.display = this.state === 'crashed' ? 'block' : 'none';
+  }
+
+  _initTrail() {
+    this.trailGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(this.trailSegments * 3);
+    this.trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.5, linewidth: 3 });
+    this.trailLine = new THREE.Line(this.trailGeometry, material);
+    this.trailLine.frustumCulled = false;
+    this.scene.add(this.trailLine);
+  }
+
+  _resetTrail() {
+    this.trailPoints.length = 0;
+    if (this.trailGeometry) {
+      const pos = this.trailGeometry.attributes.position.array;
+      pos.fill(0);
+      this.trailGeometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  _updateTrail(dt) {
+    if (!this.trailGeometry) return;
+    const now = performance.now() / 1000;
+    this.trailPoints.push({ time: now, position: this.trueState.position.clone() });
+    while (this.trailPoints.length > 1 && now - this.trailPoints[0].time > this.trailMaxTime) {
+      this.trailPoints.shift();
+    }
+
+    const positions = this.trailGeometry.attributes.position.array;
+    const count = Math.min(this.trailPoints.length, this.trailSegments);
+    for (let i = 0; i < count; i++) {
+      const p = this.trailPoints[this.trailPoints.length - count + i];
+      positions[i * 3] = p.position.x;
+      positions[i * 3 + 1] = p.position.y;
+      positions[i * 3 + 2] = p.position.z;
+    }
+    this.trailGeometry.setDrawRange(0, count);
+    this.trailGeometry.attributes.position.needsUpdate = true;
+    if (this.trailLine && this.trailPoints.length > 1) {
+      const speed = this.trueState.velocity.length();
+      this.trailLine.material.opacity = THREE.MathUtils.clamp(0.25 + speed * 0.03, 0.25, 0.85);
+      this.trailLine.material.color.setHSL(0.6, 0.7, 0.6 + Math.min(speed * 0.01, 0.2));
+    }
+  }
+
+  _triggerGateAnimation(index) {
+    if (!this.gateAnimations[index]) return;
+    const anim = this.gateAnimations[index];
+    anim.intensity = 1.5;
+    anim.scale = 1.2;
+    anim.burstTime = 0.35;
+  }
+
+  _updateGateAnimations(dt) {
+    this.gateAnimations.forEach((anim, i) => {
+      if (!anim) return;
+      anim.intensity = Math.max(0, anim.intensity - dt * 2.5);
+      anim.scale += (1 - anim.scale) * dt * 5;
+      const frame = this.gateMeshes[i].frame;
+      frame.material.emissiveIntensity = 0.25 + anim.intensity;
+      frame.scale.setScalar(anim.scale * ((this.track[i].radius / 2.5) * 1.0));
+      if (anim.burstTime > 0) {
+        this._emitGateBurst(i);
+        anim.burstTime -= dt;
+      }
+    });
+  }
+
+  _emitGateBurst(i) {
+    const frame = this.gateMeshes[i].frame;
+    if (!frame.userData.burstMesh) {
+      const geo = new THREE.RingGeometry(1.2, 1.35, 32);
+      const mat = new THREE.MeshBasicMaterial({ color: frame.material.color, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(geo, mat);
+      frame.add(mesh);
+      frame.userData.burstMesh = mesh;
+    }
+    const mesh = frame.userData.burstMesh;
+    mesh.visible = true;
+    mesh.scale.setScalar(mesh.scale.x * 1.05 + 0.02);
+    mesh.material.opacity = Math.max(0, mesh.material.opacity - 0.04);
+    if (mesh.material.opacity <= 0.01) {
+      mesh.material.opacity = 0.7;
+      mesh.scale.setScalar(1);
+      mesh.visible = false;
+    }
+  }
+
+  _handleCrash() {
+    if (this.state === 'crashed') return;
+    this.state = 'crashed';
+    this.crashTimer = 0;
+    this.replayMode = false;
+    this.droneMesh.userData.spin = new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+    this.trueState.angularVelocity.copy(this.droneMesh.userData.spin);
+    this._enterReplay(true);
+  }
+
+  _applyCrashPhysics(dt) {
+    this.trueState.velocity.add(this.gravity.clone().multiplyScalar(dt));
+    this.trueState.position.add(this.trueState.velocity.clone().multiplyScalar(dt));
+    this.trueState.orientation.x += this.trueState.angularVelocity.x * dt;
+    this.trueState.orientation.y += this.trueState.angularVelocity.y * dt;
+    this.trueState.orientation.z += this.trueState.angularVelocity.z * dt;
+    if (this.trueState.position.y < 0.1) {
+      this.trueState.position.y = 0.1;
+      this.trueState.velocity.multiplyScalar(0.7);
+    }
+    this.droneMesh.position.copy(this.trueState.position);
+    this.droneMesh.rotation.copy(this.trueState.orientation);
+  }
+
+  _updateCameraShake(dt) {
+    const speed = this.trueState.velocity.length();
+    const accel = this.trueState.velocity.clone().sub(this._prevVel || new THREE.Vector3()).length() / Math.max(dt, 1e-3);
+    this._prevVel = this.trueState.velocity.clone();
+    let gateBoost = 0;
+    if (this.track && this.track.length) {
+      const gate = this.track[this.gateIndex % this.track.length];
+      const toGate = new THREE.Vector3().subVectors(this.trueState.position, gate.position);
+      gateBoost = THREE.MathUtils.clamp(1 - toGate.length() / 6, 0, 1) * 0.08;
+    }
+    this.shakeTime += dt;
+    this.shakeIntensity = THREE.MathUtils.clamp(speed * 0.005 + accel * 0.001 + gateBoost, 0, this.state === 'crashed' ? 0.35 : 0.18);
+  }
+
+  _getCameraShake() {
+    const n = (t) => {
+      const x = Math.sin((t + this.shakeSeed) * 12.9898) * 43758.5453;
+      return (x - Math.floor(x)) * 2 - 1;
+    };
+    const s = this.shakeIntensity || 0;
+    return new THREE.Vector3(n(this.shakeTime * 0.9) * s, n(this.shakeTime * 1.1) * s * 0.6, n(this.shakeTime * 1.3) * s);
+  }
+
+  _checkCrashConditions(reference) {
+    if (this.trueState.position.y < 0.1) return true;
+    if (Math.abs(this.trueState.position.x) > 40 || Math.abs(this.trueState.position.z) > 40) return true;
+    const deviation = new THREE.Vector3().subVectors(this.trueState.position, reference.position).length();
+    if (deviation > 2) return true;
+    for (let i = 0; i < (this.columns || []).length; i++) {
+      const col = this.columns[i];
+      const horizontal = new THREE.Vector3(this.trueState.position.x - col.position.x, 0, this.trueState.position.z - col.position.z).length();
+      if (horizontal < 0.6 && this.trueState.position.y < col.position.y + 3) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  _enterReplay(force) {
+    if (!force && this.state !== 'finished' && this.state !== 'crashed') return;
+    this.replayMode = true;
+    this.replayCursor = this.replayDuration;
+    this.replayPlaying = false;
+    const slider = document.querySelector('#drone-replay-slider');
+    if (slider) slider.value = 1;
+  }
+
+  _updateReplayBuffer(dt) {
+    const snapshot = {
+      time: this.raceTime,
+      position: this.trueState.position.clone(),
+      velocity: this.trueState.velocity.clone(),
+      orientation: this.trueState.orientation.clone(),
+    };
+    this.replayBuffer.push(snapshot);
+    const cutoff = this.raceTime - this.replayDuration;
+    while (this.replayBuffer.length && this.replayBuffer[0].time < cutoff) this.replayBuffer.shift();
+  }
+
+  _applyReplayState() {
+    if (!this.replayBuffer.length) return;
+    const startTime = this.replayBuffer[0].time;
+    const targetTime = startTime + this.replayCursor;
+    let i = 0;
+    while (i < this.replayBuffer.length - 1 && this.replayBuffer[i + 1].time < targetTime) i++;
+    const a = this.replayBuffer[i];
+    const b = this.replayBuffer[Math.min(i + 1, this.replayBuffer.length - 1)];
+    const span = b.time - a.time || 1;
+    const alpha = THREE.MathUtils.clamp((targetTime - a.time) / span, 0, 1);
+    this.trueState.position.lerpVectors(a.position, b.position, alpha);
+    this.trueState.velocity.lerpVectors(a.velocity, b.velocity, alpha);
+    this.trueState.orientation.x = THREE.MathUtils.lerp(a.orientation.x, b.orientation.x, alpha);
+    this.trueState.orientation.y = THREE.MathUtils.lerp(a.orientation.y, b.orientation.y, alpha);
+    this.trueState.orientation.z = THREE.MathUtils.lerp(a.orientation.z, b.orientation.z, alpha);
+    this.droneMesh.position.copy(this.trueState.position);
+    this.droneMesh.rotation.copy(this.trueState.orientation);
+  }
+
+  _initFPV() {
+    this.fpvCamera = new THREE.PerspectiveCamera(75, 4 / 3, 0.05, 200);
+    this.fpvCanvas = document.createElement('canvas');
+    this.fpvCanvas.width = 200;
+    this.fpvCanvas.height = 150;
+    this.fpvCanvas.style.cssText = 'position:absolute; bottom:10px; right:10px; border:1px solid rgba(255,255,255,0.2); opacity:0.9;';
+    this.container.appendChild(this.fpvCanvas);
+    this.fpvRenderer = new THREE.WebGLRenderer({ canvas: this.fpvCanvas, antialias: false, alpha: true });
+    this.fpvRenderer.setSize(200, 150);
+    this.fpvRenderer.setPixelRatio(1);
+  }
+
+  _renderFPV(dt) {
+    if (!this.fpvEnabled || !this.fpvRenderer) return;
+    this.fpvFrameTimer += dt;
+    if (this.fpvFrameTimer < 1 / 30) return;
+    this.fpvFrameTimer = 0;
+    this.fpvCamera.position.copy(this.trueState.position);
+    const forward = new THREE.Vector3(0, 0, 1).applyEuler(this.trueState.orientation);
+    this.fpvCamera.position.add(forward.clone().multiplyScalar(0.4));
+    this.fpvCamera.setRotationFromEuler(this.trueState.orientation);
+    this.fpvRenderer.render(this.scene, this.fpvCamera);
   }
 
   _formatTime(t) {
