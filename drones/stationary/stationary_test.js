@@ -35,13 +35,15 @@ class StationaryHoverDemo {
     this._frameReq = null;
 
     this.target = {
-      position: new THREE.Vector3(0, 0.3, 0),
-      velocity: new THREE.Vector3(),
+      position: new THREE.Vector3(0, 0.6, 0),
+      velocity: new THREE.Vector3(0, 0, 0),
       yaw: 0,
       mass: 1.05,
     };
 
     this.controller = new StationaryController({ dt: 1 / this.physicsRate });
+    this.controller.targetAltitude = 0.6;
+    this.controller.targetPosition = this.target.position.clone();
 
     this._initScene();
     this._initDrone();
@@ -55,8 +57,8 @@ class StationaryHoverDemo {
 
     const aspect = this.options.width / this.options.height;
     this.camera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
-    this.camera.position.set(4, 3, 4);
-    this.camera.lookAt(0, 0.2, 0);
+    this.camera.position.set(2, 2, 2);
+    this.camera.lookAt(0, 0.6, 0);
     this.camera.up.set(0, 1, 0);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -73,11 +75,8 @@ class StationaryHoverDemo {
     this.scene.add(key);
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(10, 10),
-      new THREE.MeshStandardMaterial({
-        color: 0x222831,
-        roughness: 0.8,
-      }),
+      new THREE.PlaneGeometry(50, 50),
+      new THREE.MeshStandardMaterial({ color: 0x20252b }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
@@ -88,8 +87,19 @@ class StationaryHoverDemo {
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine({ floorHeight: 0.05 });
-    this.drone.reset({ position: new THREE.Vector3(0, 0.3, 0) });
+    this.drone = new DronePhysicsEngine({ floorHeight: 0.0, ceilingHeight: 5.0, minRPM: 3000, maxRPM: 25000 });
+    this.drone.reset({
+      position: new THREE.Vector3(0, 0.6, 0),
+      velocity: new THREE.Vector3(0, 0, 0),
+      orientation: new THREE.Quaternion().set(0, 0, 0, 1),
+      angularVelocity: new THREE.Vector3(0, 0, 0),
+    });
+    this.drone.state.position.set(0, 0.6, 0);
+    this.drone.state.velocity.set(0, 0, 0);
+    this.drone.state.orientation.set(0, 0, 0, 1);
+    this.drone.state.quaternion.set(0, 0, 0, 1);
+    this.drone.state.angularVelocity.set(0, 0, 0);
+    this.controller.targetPosition = this.target.position.clone();
 
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(0.28, 0.08, 0.28),
@@ -197,7 +207,21 @@ class StationaryHoverDemo {
   }
 
   restart() {
-    this.drone.reset({ position: new THREE.Vector3(0, 0.3, 0), velocity: new THREE.Vector3() });
+    this.drone.reset({
+      position: new THREE.Vector3(0, 0.6, 0),
+      velocity: new THREE.Vector3(0, 0, 0),
+      orientation: new THREE.Quaternion().set(0, 0, 0, 1),
+      angularVelocity: new THREE.Vector3(0, 0, 0),
+    });
+    this.drone.state.position.set(0, 0.6, 0);
+    this.drone.state.velocity.set(0, 0, 0);
+    this.drone.state.orientation.set(0, 0, 0, 1);
+    this.drone.state.quaternion.set(0, 0, 0, 1);
+    this.drone.state.angularVelocity.set(0, 0, 0);
+    this.controller.targetAltitude = 0.6;
+    this.target.position.set(0, 0.6, 0);
+    this.target.velocity.set(0, 0, 0);
+    this.controller.targetPosition = this.target.position.clone();
     this.simTime = 0;
   }
 
@@ -268,10 +292,7 @@ class StationaryHoverDemo {
 
   _render() {
     this.droneMesh.position.copy(this.drone.state.position);
-    this.droneMesh.quaternion.copy(this.drone.state.orientation);
-
-    this.camera.position.set(4, 3, 4);
-    this.camera.lookAt(new THREE.Vector3(0, 0.2, 0));
+    this.droneMesh.quaternion.copy(this.drone.state.quaternion);
 
     this._updateHUD();
     this.renderer.render(this.scene, this.camera);
