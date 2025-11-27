@@ -1,18 +1,17 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
-import { CaveSim } from './cave_sim.js';
-import { Lidar } from './lidar.js';
-import { OccupancyGrid, updateGridFromLidar, chooseFrontierTarget } from './mapping.js';
+import { ObstacleManager } from './obstacle_manager.js';
+import { DraggableControls } from './draggable_controls.js';
 
 function clamp(x, min, max) {
   return Math.min(Math.max(x, min), max);
 }
 
-export function initDroneCaveDemo(container, options = {}) {
+export function initObstacleDropDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
-    console.warn('Drone cave demo requires a valid container and Three.js');
+    console.warn('Obstacle demo requires a valid container and Three.js');
     return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {}, destroy() {} };
   }
-  const demo = new DroneCaveDemo(container, options);
+  const demo = new ObstacleDropDemo(container, options);
   demo.start();
   return {
     pause: () => demo.pause(true),
@@ -23,15 +22,11 @@ export function initDroneCaveDemo(container, options = {}) {
   };
 }
 
-class DroneCaveDemo {
+class ObstacleDropDemo {
   constructor(container, options) {
     this.container = container;
-    this.options = Object.assign(
-      { width: container.clientWidth || 900, height: container.clientHeight || 520, shadows: true },
-      options,
-    );
+    this.options = Object.assign({ width: container.clientWidth || 640, height: container.clientHeight || 360 }, options);
     this.physicsRate = 200;
-    this.timeScale = 1;
     this.userPaused = false;
     this.visibilityPaused = false;
     this.lastFrame = null;
@@ -41,8 +36,8 @@ class DroneCaveDemo {
     this.cameraMode = 'overhead';
 
     this._initScene();
-    this._initSim();
     this._initDrone();
+    this._initObstacles();
     this._initHUD();
     this._bindInputs();
     this.restart();
@@ -50,11 +45,11 @@ class DroneCaveDemo {
 
   _initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x04070e);
+    this.scene.background = new THREE.Color(0x0b1220);
     const aspect = this.options.width / this.options.height;
-    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 120);
-    this.chaseCamera.position.set(4, 3, 8);
-    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 200);
+    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 80);
+    this.chaseCamera.position.set(4, 3, 6);
+    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 150);
     this.overheadCamera.position.set(0, 25, 0);
     this.overheadCamera.up.set(0, 0, -1);
     this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
@@ -62,17 +57,16 @@ class DroneCaveDemo {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.options.width, this.options.height);
-    this.renderer.setPixelRatio(devicePixelRatio || 1);
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
     this.renderer.shadowMap.enabled = true;
     this.container.innerHTML = '';
     this.container.appendChild(this.renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0x64748b, 0.25);
-    this.scene.add(ambient);
-    const dir = new THREE.DirectionalLight(0xbcd7ff, 1.4);
-    dir.position.set(6, 10, 6);
+    const ambient = new THREE.AmbientLight(0x475569, 0.4);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    dir.position.set(5, 8, 5);
     dir.castShadow = true;
-    this.scene.add(dir);
+    this.scene.add(ambient, dir);
 
     const floorGeo = new THREE.PlaneGeometry(200, 200);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
@@ -83,42 +77,53 @@ class DroneCaveDemo {
     this.scene.add(floor);
   }
 
-  _initSim() {
-    this.cave = new CaveSim(this.scene);
-    this.grid = new OccupancyGrid();
-    this.lidar = new Lidar();
-  }
-
   _initDrone() {
     this.drone = new DronePhysicsEngine();
-    this.drone.reset({ position: new THREE.Vector3(0, 1.2, 4) });
+    this.drone.reset({ position: new THREE.Vector3(0, 1.2, 0) });
 
     const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.18, 0.3, 6, 12),
-      new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.3, roughness: 0.4 }),
+      new THREE.BoxGeometry(0.25, 0.07, 0.25),
+      new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.2, roughness: 0.5 }),
     );
-    body.castShadow = true;
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.28, 0.04, 6, 20),
-      new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0284c7, roughness: 0.35 }),
+    const rings = new THREE.Mesh(
+      new THREE.RingGeometry(0.08, 0.12, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }),
     );
-    ring.rotation.x = Math.PI / 2;
+    rings.rotation.x = Math.PI / 2;
     this.droneMesh = new THREE.Group();
     this.droneMesh.add(body);
-    this.droneMesh.add(ring);
+    [-0.18, 0.18].forEach((x) => {
+      [-0.18, 0.18].forEach((z) => {
+        const r = rings.clone();
+        r.position.set(x, 0.05, z);
+        this.droneMesh.add(r);
+      });
+    });
     this.scene.add(this.droneMesh);
   }
 
+  _initObstacles() {
+    this.manager = new ObstacleManager(this.scene);
+    this.manager.addObstacle(new THREE.Vector3(1.5, 0.4, 0), 0.5, 0xf97316);
+    this.manager.addObstacle(new THREE.Vector3(-1.2, 0.4, -1.5), 0.45, 0x22c55e);
+    this.manager.addObstacle(new THREE.Vector3(0, 0.4, 1.8), 0.55, 0x10b981);
+    this.controls = new DraggableControls(this.cameraMode === 'overhead' ? this.overheadCamera : this.chaseCamera, this.renderer.domElement, this.manager, {
+      onDragEnd: () => {
+        this._avoidanceVector = new THREE.Vector3();
+      },
+    });
+  }
+
   _initHUD() {
+    this.container.style.position = 'relative';
     this.overlay = document.createElement('div');
     this.overlay.style.cssText =
-      'position:absolute; top:8px; left:8px; background:rgba(6,9,18,0.85); color:#d6e3ff; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(59,130,246,0.5); border-radius:8px; z-index:5;';
+      'position:absolute; top:8px; left:8px; background:rgba(6,9,18,0.85); color:#e2e8f0; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(125,211,252,0.4); border-radius:8px; z-index:5;';
     this.overlay.innerHTML = `
-      <div style="font-size:12px; color:#7dd3fc;">Cave Explorer</div>
-      <div id="caveState" style="font-size:12px; margin-top:6px;">Exploring</div>
-      <div id="caveCoverage" style="font-size:12px;">Coverage: 0%</div>
+      <div style="font-size:12px; color:#7dd3fc;">Obstacle Arena</div>
+      <div id="obsState" style="font-size:12px; margin-top:6px;">Hovering</div>
+      <div id="obsInfo" style="font-size:12px;">C: Camera, D: Debug</div>
     `;
-    this.container.style.position = 'relative';
     this.container.appendChild(this.overlay);
 
     this.cameraLabel = document.createElement('div');
@@ -128,9 +133,9 @@ class DroneCaveDemo {
 
     this.debugPanel = document.createElement('div');
     this.debugPanel.style.cssText =
-      'position:absolute; top:8px; right:8px; background:rgba(6,8,18,0.85); color:#e0f2fe; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(34,211,238,0.35); border-radius:8px; z-index:6; display:none; min-width:220px;';
+      'position:absolute; top:8px; right:8px; background:rgba(6,8,18,0.85); color:#cbd5f5; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(14,165,233,0.45); border-radius:8px; z-index:6; display:none; min-width:220px;';
     this.debugPanel.innerHTML = `
-      <div style="font-size:12px; color:#67e8f9; margin-bottom:4px;">Debug</div>
+      <div style="font-size:12px; color:#7dd3fc; margin-bottom:4px;">Debug</div>
       <div id="dbgAlt" style="font-size:12px;">Alt: 0.00 m</div>
       <div id="dbgVel" style="font-size:12px;">Vel: 0.00 m/s (0,0,0)</div>
       <div id="dbgRPM" style="font-size:12px;">RPM: 0 | 0 | 0 | 0</div>
@@ -156,16 +161,15 @@ class DroneCaveDemo {
           this.activeCamera = this.chaseCamera;
         }
         if (this.cameraLabel) this.cameraLabel.textContent = `Camera: ${this.cameraMode.toUpperCase()}`;
+        this.controls.camera = this.activeCamera;
       }
     });
   }
 
   restart() {
-    this.drone.reset({ position: new THREE.Vector3(0, 1.2, 4), orientation: new THREE.Quaternion() });
-    this.grid = new OccupancyGrid();
-    this.target = new THREE.Vector3(0, 1.2, 0);
+    this.drone.reset({ position: new THREE.Vector3(0, 1.2, 0), velocity: new THREE.Vector3() });
+    this._avoidanceVector = new THREE.Vector3();
     this.simTime = 0;
-    this.state = 'EXPLORING';
   }
 
   pause(user = false) {
@@ -197,13 +201,14 @@ class DroneCaveDemo {
 
   destroy() {
     this.pause(false);
+    this.controls?.dispose();
     this.container.innerHTML = '';
   }
 
   _loop(timestamp) {
     if (this.userPaused || this.visibilityPaused) return;
     if (this.lastFrame === null) this.lastFrame = timestamp;
-    const dt = ((timestamp - this.lastFrame) / 1000) * this.timeScale;
+    const dt = (timestamp - this.lastFrame) / 1000;
     this.lastFrame = timestamp;
 
     const fixedDt = 1 / this.physicsRate;
@@ -219,63 +224,46 @@ class DroneCaveDemo {
 
   _stepPhysics(dt) {
     this.simTime += dt;
-
-    if (this.simTime % 0.2 < dt) {
-      const hits = this.lidar.scan(this.cave, this.drone.state);
-      updateGridFromLidar(this.grid, this.drone.state, hits);
-      const coverage = this._coverage();
-      this.overlay.querySelector('#caveCoverage').textContent = `Coverage: ${(coverage * 100).toFixed(1)}%`;
-      const frontier = chooseFrontierTarget(this.grid, this.drone.state.position);
-      if (frontier) this.target = frontier;
-    }
-
     const commands = this._computeMotorCommands();
     this.drone.applyMotorCommands(commands[0], commands[1], commands[2], commands[3]);
     this.drone.step(dt);
 
-    if (this.cave.collide(this.drone.state.position)) {
-      this.drone.state.velocity.multiplyScalar(-0.2);
-      this.drone.state.position.add(new THREE.Vector3(0, 0.05, 0));
+    if (this.manager.collide(this.drone.state.position)) {
+      this.drone.state.velocity.multiplyScalar(-0.3);
     }
-
-    this.overlay.querySelector('#caveState').textContent = `Exploring → (${this.target.x.toFixed(1)}, ${this.target.z.toFixed(1)})`;
-  }
-
-  _coverage() {
-    let known = 0;
-    for (let i = 0; i < this.grid.grid.length; i++) {
-      if (Math.abs(this.grid.grid[i]) > 0.01) known++;
-    }
-    return known / this.grid.grid.length;
   }
 
   _computeMotorCommands() {
     const params = this.drone.params;
-    const kp = 2.8;
-    const kd = 2.2;
-    const kR = 3.0;
-    const kOmega = 0.25;
-    const targetPos = this.target.clone();
-    targetPos.y = 1.4;
+    const target = new THREE.Vector3(0, 1.2, 0);
 
-    const posErr = targetPos.clone().sub(this.drone.state.position);
+    const nearest = this._nearestObstacle();
+    let avoidance = new THREE.Vector3();
+    if (nearest) {
+      const diff = this.drone.state.position.clone().sub(nearest.mesh.position);
+      const dist = Math.max(diff.length(), 0.01);
+      const push = Math.max(0, 1.2 - dist);
+      avoidance = diff.normalize().multiplyScalar(push * 2.0);
+    }
+
+    const posErr = target.clone().sub(this.drone.state.position).add(avoidance);
     const velErr = new THREE.Vector3().sub(this.drone.state.velocity);
-    const desiredAcc = posErr.multiplyScalar(kp).add(velErr.multiplyScalar(kd));
-    desiredAcc.clampLength(0, 2.5);
+    const desiredAcc = posErr.multiplyScalar(3.2).add(velErr.multiplyScalar(2.0));
+    desiredAcc.clampLength(0, 4.5);
 
-    const desiredYaw = Math.atan2(posErr.x, posErr.z);
+    const desiredYaw = 0;
     const thrustVector = desiredAcc.clone().add(new THREE.Vector3(0, 9.81, 0)).multiplyScalar(params.mass);
 
     const desiredOrientation = this._desiredOrientationFromThrust(thrustVector, desiredYaw);
     this.drone.desiredOrientationQuat.copy(desiredOrientation);
-    const kp_att = this.drone.params.kp_att;
-    const kd_att = this.drone.params.kd_att;
+    const kp_att = params.kp_att;
+    const kd_att = params.kd_att;
     const currentQuat = this.drone.state.orientationQuat || this.drone.state.orientation;
     const qError = desiredOrientation.clone().multiply(currentQuat.clone().invert());
     const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
     const torque = errorAxis.multiplyScalar(kp_att).add(this.drone.state.angularVelocity.clone().multiplyScalar(-kd_att));
 
-    const thrustMag = clamp(thrustVector.length(), 0, params.mass * 20);
+    const thrustMag = clamp(thrustVector.length(), 0, params.mass * 25);
     const kYaw = params.kM / Math.max(params.kF, 1e-9);
     const L = params.armLength;
     const m0 = 0.25 * thrustMag - torque.y / (2 * L) + torque.z / (4 * kYaw);
@@ -288,6 +276,19 @@ class DroneCaveDemo {
       const clamped = clamp(r, params.minRPM, params.maxRPM);
       return THREE.MathUtils.clamp((clamped - params.minRPM) / (params.maxRPM - params.minRPM), 0, 1);
     });
+  }
+
+  _nearestObstacle() {
+    let best = null;
+    let bestDist = Infinity;
+    this.manager.obstacles.forEach((o) => {
+      const d = this.drone.state.position.distanceTo(o.mesh.position) - o.radius;
+      if (d < bestDist) {
+        bestDist = d;
+        best = o;
+      }
+    });
+    return best;
   }
 
   _desiredOrientationFromThrust(thrustVec, yaw) {
@@ -315,6 +316,7 @@ class DroneCaveDemo {
     }
     this.droneMesh.position.copy(this.drone.state.position);
     this.droneMesh.quaternion.copy(this.drone.state.orientation);
+
     this._updateDebugPanel();
     this.renderer.render(this.scene, this.activeCamera || this.overheadCamera);
   }
