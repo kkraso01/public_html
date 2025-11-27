@@ -712,24 +712,25 @@
     </div>
   </section>
 
-  <!-- Drone Race Section -->
+  <!-- Drone Demos Section -->
   <section id="drone-race" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+    <!-- Drone Race Demo -->
     <div class="flex flex-col gap-3 mb-10">
       <p class="mission-brief text-indigo-300/80">Mission: Autonomous racing intelligence and flight control.</p>
-      <h2 class="text-3xl font-bold">AlphaPilot-Style Drone Race Demo</h2>
+      <h2 class="text-3xl font-bold">Autonomous Drone Demos</h2>
       <p class="text-gray-400 max-w-3xl">
-        Visualizes a single autonomous racing drone flying a spline-planned indoor track with a chase camera, gate timing, VIO noise, and PID control. Built for portfolio embedding with pause/resume hooks that play nicely with IntersectionObserver.
+        A suite of autonomous flight demonstrations featuring racing intelligence, LiDAR-based cave exploration, and obstacle avoidance. Each demo showcases different aspects of drone control, perception, and autonomous decision-making.
       </p>
-      <div class="flex flex-wrap items-center gap-3 text-sm text-gray-200">
-        <label for="drone-demo-selector" class="text-xs uppercase tracking-wide text-indigo-300 font-semibold">Select Demo</label>
-        <select id="drone-demo-selector" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
-          <option value="race">Drone Race Demo</option>
-          <option value="cave">Cave Explorer Demo</option>
-          <option value="obstacle">Obstacle Drop Demo</option>
-        </select>
-        <span id="drone-demo-status" class="text-xs px-2 py-1 rounded-md border border-indigo-600/60 bg-indigo-900/40 text-indigo-200 tracking-wide">Autonomous Drone Race</span>
-      </div>
     </div>
+
+    <!-- Drone Race Demo -->
+    <div class="mb-12">
+      <div class="flex flex-col gap-3 mb-6">
+        <h3 class="text-2xl font-semibold">AlphaPilot-Style Drone Race</h3>
+        <p class="text-gray-400 max-w-3xl">
+          Autonomous racing drone flying a spline-planned indoor track with chase camera, gate timing, VIO noise, and PID control. Visualizes real-time trajectory tracking with live metrics and controller tuning.
+        </p>
+      </div>
 
     <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
       <div id="drone-race-controls" class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
@@ -815,6 +816,139 @@
           <div id="drone-race-demo" class="w-full h-[520px]"></div>
           <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
             Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cave Explorer Demo -->
+    <div class="mt-16 pt-12 border-t border-gray-700">
+      <div class="flex flex-col gap-3 mb-6">
+        <h3 class="text-2xl font-semibold">LiDAR Cave Exploration & Mapping</h3>
+        <p class="text-gray-400 max-w-3xl">
+          Autonomous cave exploration using LiDAR-based SLAM and frontier-based exploration planning. The drone autonomously maps unknown cave environments, builds occupancy grids, and plans collision-free paths using Ammo.js physics simulation.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
+        <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+          <div class="flex items-center gap-3">
+            <span class="hud-chip">SLAM & Exploration</span>
+            <span class="cue-badge opacity-60">LiDAR mapping · Frontier planning · Physics</span>
+          </div>
+          <div class="space-y-3">
+            <h4 class="text-lg font-semibold">Autonomous Mapping</h4>
+            <p class="text-gray-400 text-sm">
+              Real-time LiDAR point cloud processing, occupancy grid updates, and frontier-based exploration for autonomous cave discovery.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-3 pt-4 border-t border-gray-700">
+            <button id="drone-cave-toggle" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors">
+              Start Exploration
+            </button>
+            <button id="drone-cave-restart" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-semibold text-sm transition-colors border border-gray-700">
+              Reset Map
+            </button>
+          </div>
+
+          <div class="pt-4 border-t border-gray-700">
+            <h4 class="text-xs font-semibold text-emerald-300 uppercase tracking-wide mb-3">📊 Exploration Stats</h4>
+            <div class="space-y-2 text-xs text-gray-300 font-mono">
+              <div class="flex justify-between">
+                <span>Grid Explored:</span>
+                <span id="cave-grid-explored" class="text-emerald-300 font-semibold">0%</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Cells Visited:</span>
+                <span id="cave-cells-visited" class="text-emerald-300 font-semibold">0</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Obstacles Detected:</span>
+                <span id="cave-obstacles" class="text-amber-300 font-semibold">0</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Frontier Nodes:</span>
+                <span id="cave-frontiers" class="text-indigo-300 font-semibold">0</span>
+              </div>
+            </div>
+          </div>
+
+          <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside pt-4 border-t border-gray-700">
+            <li>LiDAR-based SLAM mapping</li>
+            <li>Frontier-based exploration strategy</li>
+            <li>Real-time occupancy grid updates</li>
+            <li>Physics-based collision detection</li>
+          </ul>
+        </div>
+
+        <div class="lg:col-span-3">
+          <div class="bg-gradient-to-br from-gray-900/80 via-slate-900/80 to-gray-950/90 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
+            <div id="drone-cave-demo" class="w-full h-[520px]"></div>
+            <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
+              Real-time LiDAR point cloud and occupancy grid visualization with frontier exploration overlay.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Obstacle Drop Demo -->
+    <div class="mt-16 pt-12 border-t border-gray-700">
+      <div class="flex flex-col gap-3 mb-6">
+        <h3 class="text-2xl font-semibold">Dynamic Obstacle Avoidance</h3>
+        <p class="text-gray-400 max-w-3xl">
+          Interactive obstacle placement and avoidance demonstration. Spawn various obstacle types, watch the drone dynamically recalculate paths, and observe collision avoidance in real-time with physics-based simulation.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
+        <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+          <div class="flex items-center gap-3">
+            <span class="hud-chip">Dynamic Avoidance</span>
+            <span class="cue-badge opacity-60">Interactive obstacles · Real-time replanning</span>
+          </div>
+          <div class="space-y-3">
+            <h4 class="text-lg font-semibold">Spawn & Observe</h4>
+            <p class="text-gray-400 text-sm">
+              Interactively add obstacles to the environment and watch the drone intelligently avoid them using trajectory replanning.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-3 pt-4 border-t border-gray-700">
+            <button id="drone-obstacle-spawn-boulder" class="px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">
+              Add Boulder
+            </button>
+            <button id="drone-obstacle-spawn-wall" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors">
+              Add Wall
+            </button>
+            <button id="drone-obstacle-spawn-sphere" class="px-3 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white font-semibold text-sm transition-colors">
+              Add Sphere
+            </button>
+            <button id="drone-obstacle-reset" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-semibold text-sm transition-colors border border-gray-700">
+              Clear All Obstacles
+            </button>
+          </div>
+
+          <div class="pt-4 border-t border-gray-700">
+            <h4 class="text-xs font-semibold text-amber-300 uppercase tracking-wide mb-3">📍 Obstacle Count</h4>
+            <div class="text-2xl font-mono text-amber-300 font-bold" id="obstacle-count">0</div>
+          </div>
+
+          <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside pt-4 border-t border-gray-700">
+            <li>Real-time obstacle spawning</li>
+            <li>Dynamic trajectory replanning</li>
+            <li>Physics-based collision response</li>
+            <li>Smooth avoidance maneuvers</li>
+          </ul>
+        </div>
+
+        <div class="lg:col-span-3">
+          <div class="bg-gradient-to-br from-gray-900/80 via-slate-900/80 to-gray-950/90 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
+            <div id="drone-obstacle-demo" class="w-full h-[520px]"></div>
+            <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
+              Interactive 3D environment with real-time obstacle physics and drone avoidance visualization.
+            </div>
           </div>
         </div>
       </div>
