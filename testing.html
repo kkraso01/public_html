@@ -296,36 +296,22 @@
         return;
       }
 
-      import('./drones/stability/drone_stability_demo.js').then(module => {
-        const { initDroneStabilityDemo } = module;
+      import('./drones/stationary/stationary_test.js').then(module => {
+        const { initStationaryHoverDemo } = module;
         const container = document.getElementById('drone-container');
         const controlPanel = document.getElementById('control-panel-container');
-        
+
         if (!container) {
           console.error('Drone container not found!');
           return;
         }
 
-        console.log('Container found:', container);
-        console.log('Container size:', container.clientWidth, 'x', container.clientHeight);
-
         try {
-          const demoInstance = initDroneStabilityDemo(container, {
+          const demoInstance = initStationaryHoverDemo(container, {
             width: container.clientWidth,
             height: container.clientHeight,
+            controlContainer: controlPanel,
           });
-
-          console.log('Drone demo initialized successfully');
-
-          // Move the overlay controls to the control panel container
-          setTimeout(() => {
-            const overlay = container.querySelector('[style*="position:absolute"]');
-            if (overlay && controlPanel) {
-              console.log('Moving overlay to control panel');
-              overlay.style.cssText = 'position: static; background: transparent; border: none; padding: 0; max-width: 100%;';
-              controlPanel.appendChild(overlay);
-            }
-          }, 100);
 
           // Handle visibility changes
           document.addEventListener('visibilitychange', () => {
@@ -334,7 +320,7 @@
 
           // Handle window resize
           window.addEventListener('resize', () => {
-            demoInstance.restart();
+            demoInstance.handleResize();
           });
         } catch (error) {
           console.error('Error initializing drone demo:', error);
