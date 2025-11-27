@@ -1,7 +1,7 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CaveSim } from './cave_sim.js';
 import { Lidar } from './lidar.js';
-import { OccupancyGrid, updateGridFromLidar, chooseFrontierTarget } from './mapping.js';
+import { OccupancyGrid, updateGridFromLidar, chooseFrontierTarget, planPath } from './mapping.js';
 
 function clamp(x, min, max) {
   return Math.min(Math.max(x, min), max);
@@ -53,10 +53,10 @@ class DroneCaveDemo {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x04070e);
     const aspect = this.options.width / this.options.height;
-    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 120);
-    this.chaseCamera.position.set(4, 3, 8);
-    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 200);
-    this.overheadCamera.position.set(0, 25, 0);
+    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
+    this.chaseCamera.position.set(4, 4, 10);
+    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
+    this.overheadCamera.position.set(0, 26, 0);
     this.overheadCamera.up.set(0, 0, -1);
     this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
     this.activeCamera = this.cameraMode === 'overhead' ? this.overheadCamera : this.chaseCamera;
@@ -82,6 +82,21 @@ class DroneCaveDemo {
     floor.position.y = this.floorHeight;
     floor.receiveShadow = true;
     this.scene.add(floor);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x0b1220, roughness: 0.85, metalness: 0.05 });
+    const wallBox = new THREE.BoxGeometry(60, 8, 0.6);
+    const wallNorth = new THREE.Mesh(wallBox, wallMat);
+    wallNorth.position.set(0, 4, -30);
+    const wallSouth = wallNorth.clone();
+    wallSouth.position.set(0, 4, 30);
+    const wallEast = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 60), wallMat);
+    wallEast.position.set(30, 4, 0);
+    const wallWest = wallEast.clone();
+    wallWest.position.set(-30, 4, 0);
+    [wallNorth, wallSouth, wallEast, wallWest].forEach((w) => {
+      w.receiveShadow = true;
+      w.castShadow = true;
+      this.scene.add(w);
+    });
   }
 
   _initSim() {
@@ -92,21 +107,38 @@ class DroneCaveDemo {
 
   _initDrone() {
     this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
-    this.drone.reset({ position: new THREE.Vector3(0, 1.2, 4) });
+    this.drone.reset({ position: new THREE.Vector3(0, 1.4, 4) });
 
     const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.18, 0.3, 6, 12),
+      new THREE.CapsuleGeometry(0.32, 1.05, 12, 18),
       new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.3, roughness: 0.4 }),
     );
     body.castShadow = true;
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.28, 0.04, 6, 20),
+      new THREE.TorusGeometry(0.45, 0.06, 10, 32),
       new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0284c7, roughness: 0.35 }),
     );
     ring.rotation.x = Math.PI / 2;
+    const arms = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 0.12, 0.14),
+      new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9 }),
+    );
+    arms.castShadow = true;
+    const props = new THREE.Mesh(
+      new THREE.RingGeometry(0.18, 0.28, 18),
+      new THREE.MeshBasicMaterial({ color: 0xe0f2fe }),
+    );
+    props.rotation.x = Math.PI / 2;
     this.droneMesh = new THREE.Group();
-    this.droneMesh.add(body);
-    this.droneMesh.add(ring);
+    this.droneMesh.add(body, ring, arms);
+    [-1, 1].forEach((x) => {
+      [-1, 1].forEach((z) => {
+        const p = props.clone();
+        p.position.set(x * 1.0, 0.6, z * 1.0);
+        this.droneMesh.add(p);
+      });
+    });
+    this.droneMesh.position.y = 0.8;
     this.scene.add(this.droneMesh);
   }
 
@@ -118,6 +150,8 @@ class DroneCaveDemo {
       <div style="font-size:12px; color:#7dd3fc;">Cave Explorer</div>
       <div id="caveState" style="font-size:12px; margin-top:6px;">Exploring</div>
       <div id="caveCoverage" style="font-size:12px;">Coverage: 0%</div>
+      <div id="caveFrontiers" style="font-size:12px;">Frontiers: 0</div>
+      <div id="caveTarget" style="font-size:12px;">Target: none</div>
     `;
     this.container.style.position = 'relative';
     this.container.appendChild(this.overlay);
@@ -132,12 +166,14 @@ class DroneCaveDemo {
       'position:absolute; top:8px; right:8px; background:rgba(6,8,18,0.85); color:#e0f2fe; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(34,211,238,0.35); border-radius:8px; z-index:6; display:none; min-width:220px;';
     this.debugPanel.innerHTML = `
       <div style="font-size:12px; color:#67e8f9; margin-bottom:4px;">Debug</div>
+      <div id="dbgPos" style="font-size:12px;">Pos: 0, 0, 0</div>
       <div id="dbgAlt" style="font-size:12px;">Alt: 0.00 m</div>
       <div id="dbgVel" style="font-size:12px;">Vel: 0.00 m/s (0,0,0)</div>
       <div id="dbgRPM" style="font-size:12px;">RPM: 0 | 0 | 0 | 0</div>
       <div id="dbgThrust" style="font-size:12px;">Thrust: 0.0 N</div>
       <div id="dbgAtt" style="font-size:12px;">R/P/Y: 0 / 0 / 0</div>
       <div id="dbgAttErr" style="font-size:12px;">Att Err: 0.00</div>
+      <div id="dbgFrontier" style="font-size:12px;">Frontiers: 0</div>
     `;
     this.container.appendChild(this.debugPanel);
   }
@@ -162,9 +198,13 @@ class DroneCaveDemo {
   }
 
   restart() {
-    this.drone.reset({ position: new THREE.Vector3(0, 1.2, 4), orientation: new THREE.Quaternion() });
+    this.drone.reset({ position: new THREE.Vector3(0, 1.4, 4), orientation: new THREE.Quaternion() });
     this.grid = new OccupancyGrid();
-    this.target = new THREE.Vector3(0, 1.2, 0);
+    this.target = new THREE.Vector3(0, 1.4, 0);
+    this.path = [];
+    this.pathIndex = 0;
+    this.lastHits = [];
+    this.frontierInfo = null;
     this.simTime = 0;
     this.state = 'EXPLORING';
   }
@@ -222,12 +262,31 @@ class DroneCaveDemo {
     this.simTime += dt;
 
     if (this.simTime % 0.2 < dt) {
-      const hits = this.lidar.scan(this.cave, this.drone.state);
-      updateGridFromLidar(this.grid, this.drone.state, hits);
+      this.lastHits = this.lidar.scan(this.cave, this.drone.state);
+      updateGridFromLidar(this.grid, this.drone.state, this.lastHits);
       const coverage = this._coverage();
       this.overlay.querySelector('#caveCoverage').textContent = `Coverage: ${(coverage * 100).toFixed(1)}%`;
-      const frontier = chooseFrontierTarget(this.grid, this.drone.state.position);
-      if (frontier) this.target = frontier;
+      this.frontierInfo = chooseFrontierTarget(this.grid, this.drone.state.position);
+      if (this.frontierInfo?.point) {
+        const newPath = planPath(this.grid, this.drone.state.position, this.frontierInfo.point);
+        if (newPath.length) {
+          this.path = newPath;
+          this.pathIndex = 0;
+        }
+      }
+      if (this.frontierInfo) {
+        this.overlay.querySelector('#caveFrontiers').textContent = `Frontiers: ${this.frontierInfo.clusterCount}`;
+        this.overlay.querySelector('#caveTarget').textContent =
+          `Target: (${this.frontierInfo.point.x.toFixed(1)}, ${this.frontierInfo.point.z.toFixed(1)})`;
+      }
+    }
+
+    const waypoint = this.path[this.pathIndex] || this.frontierInfo?.point || this.target;
+    if (waypoint) {
+      this.target.copy(waypoint);
+      if (this.drone.state.position.distanceTo(waypoint) < 0.7 && this.pathIndex < this.path.length - 1) {
+        this.pathIndex += 1;
+      }
     }
 
     const commands = this._computeMotorCommands();
@@ -257,12 +316,13 @@ class DroneCaveDemo {
     const kR = 3.0;
     const kOmega = 0.25;
     const targetPos = this.target.clone();
-    targetPos.y = 1.4;
+    targetPos.y = Math.max(1.4, this.target.y || 1.4);
 
     const posErr = targetPos.clone().sub(this.drone.state.position);
     const velErr = new THREE.Vector3().sub(this.drone.state.velocity);
-    const desiredAcc = posErr.multiplyScalar(kp).add(velErr.multiplyScalar(kd));
-    desiredAcc.clampLength(0, 2.5);
+    const avoidance = this._avoidanceFromHits();
+    const desiredAcc = posErr.multiplyScalar(kp).add(velErr.multiplyScalar(kd)).add(avoidance);
+    desiredAcc.clampLength(0, 3.2);
 
     const desiredYaw = Math.atan2(posErr.x, posErr.z);
     const thrustVector = desiredAcc.clone().add(new THREE.Vector3(0, 9.81, 0)).multiplyScalar(params.mass);
@@ -306,11 +366,17 @@ class DroneCaveDemo {
 
   _render() {
     if (this.cameraMode === 'chase') {
-      const desiredPos = this.drone.state.position.clone().add(new THREE.Vector3(0, 1.5, 4));
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.drone.state.orientation);
+      const desiredPos = this.drone.state.position
+        .clone()
+        .add(forward.clone().multiplyScalar(-6.5))
+        .add(new THREE.Vector3(0, 3.0, 0));
+      desiredPos.y = Math.max(desiredPos.y, this.floorHeight + 0.8);
       this.chaseCamera.position.lerp(desiredPos, 0.08);
-      this.chaseCamera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.2, 0)));
+      this.chaseCamera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.8, 0)));
       this.activeCamera = this.chaseCamera;
     } else {
+      this.overheadCamera.position.y = 26;
       this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
       this.activeCamera = this.overheadCamera;
     }
@@ -330,6 +396,8 @@ class DroneCaveDemo {
     const qErr = desired.clone().multiply((st.orientationQuat || st.orientation).clone().invert());
     const attErrMag = 2 * new THREE.Vector3(qErr.x, qErr.y, qErr.z).length();
 
+    this.debugPanel.querySelector('#dbgPos').textContent =
+      `Pos: ${st.position.x.toFixed(2)}, ${st.position.y.toFixed(2)}, ${st.position.z.toFixed(2)}`;
     this.debugPanel.querySelector('#dbgAlt').textContent = `Alt: ${st.position.y.toFixed(2)} m`;
     this.debugPanel.querySelector('#dbgVel').textContent =
       `Vel: ${velMag.toFixed(2)} m/s (${st.velocity.x.toFixed(2)}, ${st.velocity.y.toFixed(2)}, ${st.velocity.z.toFixed(2)})`;
@@ -338,5 +406,17 @@ class DroneCaveDemo {
     this.debugPanel.querySelector('#dbgAtt').textContent =
       `R/P/Y: ${(THREE.MathUtils.radToDeg(euler.x)).toFixed(1)} / ${(THREE.MathUtils.radToDeg(euler.y)).toFixed(1)} / ${(THREE.MathUtils.radToDeg(euler.z)).toFixed(1)}`;
     this.debugPanel.querySelector('#dbgAttErr').textContent = `Att Err: ${attErrMag.toFixed(3)}`;
+    if (this.frontierInfo) {
+      this.debugPanel.querySelector('#dbgFrontier').textContent =
+        `Frontiers: ${this.frontierInfo.clusterCount} | Cluster size ${this.frontierInfo.targetSize}`;
+    }
+  }
+
+  _avoidanceFromHits() {
+    if (!this.lastHits || !this.lastHits.length) return new THREE.Vector3();
+    return this.lastHits.reduce((acc, h) => {
+      const strength = Math.max(0, 1 - h.distance / this.lidar.maxRange);
+      return acc.add(h.direction.clone().multiplyScalar(-strength * 3.5));
+    }, new THREE.Vector3()).clampLength(0, 2.5);
   }
 }

@@ -1,10 +1,12 @@
 export const CRAZYFLIE_PARAMS = {
-  mass: 0.027,
-  inertia: new THREE.Vector3(1.4e-5, 1.4e-5, 2.17e-5),
-  armLength: 0.046,
-  rpmMax: 25000,
+  // Retuned to represent a visibly larger (~1.7m tall) quad while keeping the
+  // control loop numerically stable.
+  mass: 1.25,
+  inertia: new THREE.Vector3(0.035, 0.035, 0.055),
+  armLength: 0.55,
+  rpmMax: 22000,
   kF: 1.5e-8,
   kM: 2.0e-10,
-  motorTimeConstant: 0.015,
-  dragLinear: 0.1,
+  motorTimeConstant: 0.02,
+  dragLinear: 0.18,
 };

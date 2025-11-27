@@ -60,10 +60,10 @@ class DroneRaceDemo {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a1020);
     const aspect = this.options.width / this.options.height;
-    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
-    this.chaseCamera.position.set(0, 2.5, 8);
-    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
-    this.overheadCamera.position.set(0, 25, 0);
+    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
+    this.chaseCamera.position.set(0, 3.5, 10);
+    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
+    this.overheadCamera.position.set(0, 26, 0);
     this.overheadCamera.up.set(0, 0, -1);
     this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
     this.activeCamera = this.cameraMode === 'overhead' ? this.overheadCamera : this.chaseCamera;
@@ -101,15 +101,14 @@ class DroneRaceDemo {
   _initDrone() {
     this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
     const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.12, 0.04, 12),
-      new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x1f2937, metalness: 0.4, roughness: 0.3 }),
+      new THREE.CapsuleGeometry(0.32, 1.05, 12, 18),
+      new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x1f2937, metalness: 0.35, roughness: 0.35 }),
     );
-    body.rotation.z = Math.PI / 2;
     body.castShadow = true;
     body.receiveShadow = true;
 
     const arms = new THREE.Mesh(
-      new THREE.BoxGeometry(0.35, 0.02, 0.02),
+      new THREE.BoxGeometry(2.2, 0.12, 0.14),
       new THREE.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x0ea5e9 }),
     );
     arms.castShadow = true;
@@ -118,18 +117,19 @@ class DroneRaceDemo {
     this.droneMesh.add(body, arms);
 
     const prop = new THREE.Mesh(
-      new THREE.RingGeometry(0.06, 0.08, 16),
+      new THREE.RingGeometry(0.18, 0.28, 18),
       new THREE.MeshBasicMaterial({ color: 0xf8fafc }),
     );
     prop.rotation.x = Math.PI / 2;
-    [-0.17, 0.17].forEach((x) => {
-      [-0.17, 0.17].forEach((y) => {
+    [-1.05, 1.05].forEach((x) => {
+      [-1.05, 1.05].forEach((y) => {
         const p = prop.clone();
-        p.position.set(x, 0.01, y);
+        p.position.set(x, 0.6, y);
         this.droneMesh.add(p);
       });
     });
 
+    this.droneMesh.position.y = 0.8;
     this.scene.add(this.droneMesh);
   }
 
@@ -152,6 +152,7 @@ class DroneRaceDemo {
       'position:absolute; top:8px; right:8px; background:rgba(6,8,18,0.85); color:#cbd5f5; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(14,165,233,0.45); border-radius:8px; z-index:6; display:none; min-width:220px;';
     this.debugPanel.innerHTML = `
       <div style="font-size:12px; color:#7dd3fc; margin-bottom:4px;">Debug</div>
+      <div id="dbgPos" style="font-size:12px;">Pos: 0, 0, 0</div>
       <div id="dbgAlt" style="font-size:12px;">Alt: 0.00 m</div>
       <div id="dbgVel" style="font-size:12px;">Vel: 0.00 m/s (0,0,0)</div>
       <div id="dbgRPM" style="font-size:12px;">RPM: 0 | 0 | 0 | 0</div>
@@ -322,11 +323,17 @@ class DroneRaceDemo {
 
   _render() {
     if (this.cameraMode === 'chase') {
-      const desiredPos = this.drone.state.position.clone().add(new THREE.Vector3(0, 1.5, 4));
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.drone.state.orientation);
+      const desiredPos = this.drone.state.position
+        .clone()
+        .add(forward.clone().multiplyScalar(-7))
+        .add(new THREE.Vector3(0, 2.6, 0));
+      desiredPos.y = Math.max(desiredPos.y, this.floorHeight + 0.6);
       this.chaseCamera.position.lerp(desiredPos, 0.08);
-      this.chaseCamera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.2, 0)));
+      this.chaseCamera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.8, 0)));
       this.activeCamera = this.chaseCamera;
     } else {
+      this.overheadCamera.position.y = 26;
       this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
       this.activeCamera = this.overheadCamera;
     }
@@ -352,6 +359,8 @@ class DroneRaceDemo {
     const qErr = desired.clone().multiply((st.orientationQuat || st.orientation).clone().invert());
     const attErrMag = 2 * new THREE.Vector3(qErr.x, qErr.y, qErr.z).length();
 
+    this.debugPanel.querySelector('#dbgPos').textContent =
+      `Pos: ${st.position.x.toFixed(2)}, ${st.position.y.toFixed(2)}, ${st.position.z.toFixed(2)}`;
     this.debugPanel.querySelector('#dbgAlt').textContent = `Alt: ${st.position.y.toFixed(2)} m`;
     this.debugPanel.querySelector('#dbgVel').textContent =
       `Vel: ${velMag.toFixed(2)} m/s (${st.velocity.x.toFixed(2)}, ${st.velocity.y.toFixed(2)}, ${st.velocity.z.toFixed(2)})`;

@@ -18,10 +18,12 @@ export class DronePhysicsEngine {
       {
         floorHeight: 0.05,
         ceilingHeight: 5.0,
-        minRPM: 3000,
+        minRPM: 0,
+        idleRPM: 1800,
         maxRPM: 25000,
         kp_att: 8.0,
         kd_att: 2.5,
+        motorForceScale: 1.1,
       },
       CRAZYFLIE_PARAMS,
       params,
@@ -31,11 +33,13 @@ export class DronePhysicsEngine {
 
     // retune kF so that a 0.5 command (hover) produces approximately mass * g thrust
     const yawRatio = this.params.kM / Math.max(this.params.kF, 1e-9);
-    const hoverRPM = this.params.minRPM + 0.5 * (this.params.maxRPM - this.params.minRPM);
+    const hoverRPM = (this.params.minRPM || 0) + 0.5 * (this.params.maxRPM - (this.params.minRPM || 0));
     const perMotorHover = (this.params.mass * 9.81) / 4;
     const tunedKF = perMotorHover / (hoverRPM * hoverRPM);
     this.params.kF = tunedKF;
     this.params.kM = tunedKF * yawRatio;
+    this.params.hoverRPM = hoverRPM;
+    this.params.hoverCommand = (hoverRPM - (this.params.idleRPM || 0)) / (this.params.maxRPM - (this.params.idleRPM || 0));
 
     this.motor = new MotorModel({ rpmMax: this.params.maxRPM, timeConstant: this.params.motorTimeConstant });
     this.state = {
@@ -52,7 +56,9 @@ export class DronePhysicsEngine {
   }
 
   reset(state = {}) {
-    this.state.position.copy(state.position || new THREE.Vector3());
+    const startPos = state.position || new THREE.Vector3();
+    startPos.y = Math.max(startPos.y, (this.params.floorHeight || 0) + 0.2);
+    this.state.position.copy(startPos);
     this.state.velocity.copy(state.velocity || new THREE.Vector3());
     const q = state.orientation || state.orientationQuat || new THREE.Quaternion();
     this.state.orientation.copy(q);
@@ -68,7 +74,8 @@ export class DronePhysicsEngine {
   applyMotorCommands(u1, u2, u3, u4) {
     const commands = [u1, u2, u3, u4].map((command) => {
       const rpmCommand = THREE.MathUtils.clamp(command, 0, 1);
-      let rpm = this.params.minRPM + rpmCommand * (this.params.maxRPM - this.params.minRPM);
+      const idle = this.params.idleRPM || 0;
+      let rpm = idle + rpmCommand * (this.params.maxRPM - idle);
       rpm = Math.max(this.params.minRPM, Math.min(rpm, this.params.maxRPM));
       return rpm;
     });
@@ -91,7 +98,7 @@ export class DronePhysicsEngine {
     if (dt <= 0) return;
     const omegas = this.motor.step(dt); // rpm
     this.state.motorRPM = omegas.slice();
-    const thrusts = omegas.map((w) => this.params.kF * w * w);
+    const thrusts = omegas.map((w) => this.params.kF * w * w * (this.params.motorForceScale || 1));
     const totalThrust = thrusts.reduce((a, b) => a + b, 0);
     
     const rotationMatrix = new THREE.Matrix3().setFromMatrix4(
