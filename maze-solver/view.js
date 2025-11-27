@@ -178,6 +178,12 @@
         ? new global.TrajectoryOptimizer(this.motionProfile) : null;
       this.pathPlanner = typeof global.PathPlanner !== 'undefined' && this.motionProfile 
         ? new global.PathPlanner(this.maze, this.motionProfile, { allowOblique: this.allowObliqueSprint }) : null;
+      this.obliqueOptimizer = typeof global.ObliquePathOptimizer !== 'undefined' 
+        ? new global.ObliquePathOptimizer(this.maze, { allowOblique: this.allowObliqueSprint, vMax: 1.0, aMax: 0.5, dMax: 0.5 })
+        : null;
+      
+      // Production race planner (new, time-optimal)
+      this.racePlanner = typeof global.RacePlanner !== 'undefined' ? null : null;  // will init on first use
       
       // Use advanced renderer
       this.renderer = typeof global.AdvancedMazeRenderer !== 'undefined' 
@@ -196,6 +202,8 @@
         wallDiscoveries: 0,
         timeSaved: 0
       };
+      this.cachedRacePlan = null; // Cache race plan to avoid recomputation
+      this.wallMapInitialized = false; // Track if wall map was already set
       
       // Initialize explorer with BFS by default
       this._initializeExplorer();
@@ -226,19 +234,28 @@
         this.renderer = typeof global.AdvancedMazeRenderer !== 'undefined' 
           ? new global.AdvancedMazeRenderer(this.canvas, this.maze, this.solver)
           : new MazeRenderer(this.canvas, this.maze, this.solver);
+        
+        // Initialize renderer for new maze
+        if (this.renderer.initializeForMaze) {
+          this.renderer.initializeForMaze();
+        } else if (this.renderer.clearPath) {
+          this.renderer.clearPath();
+        }
+        
         // Set the current solver in renderer
         if (this.renderer.setCurrentSolver) {
           this.renderer.setCurrentSolver(this.useLPA && this.lpaSolver ? this.lpaSolver : this.solver);
         }
-        if (this.renderer.clearPath) {
-          this.renderer.clearPath();
-        }
+        
         // Set initial visualization mode based on current algorithm
         if (this.renderer.setVisualizationMode) {
           const mode = this.useLPA ? "walls" : "heatmap";
           this.renderer.setVisualizationMode(mode);
         }
+        
         this.solver.computeDistances();
+        this.cachedRacePlan = null;           // Clear cached race plan
+        this.wallMapInitialized = false;      // Reset wall map tracking
         this._resetStats();
         this.renderer.draw();
       });
@@ -255,15 +272,27 @@
         if (this.explorer) {
           this.explorer.reset();
         }
+        
+        // Clear renderer paths and state
+        if (this.renderer.clearPath) {
+          this.renderer.clearPath();
+        }
+        
         // Set the current solver in renderer
         if (this.renderer.setCurrentSolver) {
           this.renderer.setCurrentSolver(this.useLPA && this.lpaSolver ? this.lpaSolver : this.solver);
         }
-        // Ensure correct visualization mode is set
+        
+        // Reset visualization mode
         if (this.renderer.setVisualizationMode) {
           const mode = this.useLPA ? "walls" : "heatmap";
           this.renderer.setVisualizationMode(mode);
         }
+        
+        // Clear cached race plan on reset
+        this.cachedRacePlan = null;
+        this.wallMapInitialized = false;
+        
         this._resetStats();
         this.renderer.draw();
       });
@@ -347,8 +376,140 @@
         }
 
         // Update racing path visualization during race phase
-        if (this.explorer.phase === "race" && this.renderer.setRacingPathInfo) {
-          this.renderer.setRacingPathInfo(this.explorer.discreteOptimalPath, this.explorer.racingPathIndex, this.explorer.phase);
+        if (this.explorer.phase === "race") {
+          // Clear planned path when entering race phase
+          if (this.renderer.clearPlannedPath) {
+            this.renderer.clearPlannedPath();
+          }
+          
+          // Compute race plan ONCE and cache it (no fallbacks - use selected planner only)
+          if (!this.cachedRacePlan && this.explorer.knownWalls) {
+            console.log(`[View] Computing race plan (${this.allowObliqueSprint ? '8D oblique' : '4D cardinal'})...`);
+            const startTime = Date.now();
+            
+            try {
+              // Prefer RacePlanner (production-ready, time-optimal) if available
+              if (this.allowObliqueSprint && typeof global.RacePlanner !== 'undefined') {
+                console.log("[View] Using production RacePlanner (8D, time-optimal)...");
+                if (!this.racePlanner) {
+                  // CRITICAL FIX: Pass maze structure (size, goalCells) but use ONLY discovered walls
+                  // First param: maze object for size/goalCells structure
+                  // Second param: knownWalls (discovered walls, NOT the perfect maze.cells)
+                  this.racePlanner = new global.RacePlanner(this.maze, this.explorer.knownWalls, {
+                    cellSize: 0.018,      // 18mm cells (Japan spec)
+                    vMax: 3.0,            // 3 m/s
+                    aMax: 5.0,
+                    dMax: 6.0,
+                    aLatMax: 7.0,
+                    cornerRadius: 0.025   // 25mm arc radius
+                  });
+                  console.log("[View] RacePlanner initialized with maze structure but ONLY explored walls (no god vision)");
+                }
+                this.cachedRacePlan = this.racePlanner.computeRacePlan(0, 0);
+                const elapsed = Date.now() - startTime;
+                if (this.cachedRacePlan) {
+                  console.log(
+                    `[View] RacePlanner computed in ${elapsed}ms: ` +
+                    `${this.cachedRacePlan.gridPath.length} cells, ` +
+                    `${this.cachedRacePlan.segments.length} segments, ` +
+                    `${this.cachedRacePlan.totalTime.toFixed(3)}s`
+                  );
+                } else {
+                  console.warn("[View] RacePlanner returned null (no path found)");
+                }
+              } else if (this.allowObliqueSprint) {
+                // Fallback: Use legacy ObliquePathOptimizer
+                console.log("[View] Falling back to ObliquePathOptimizer (legacy 8D)...");
+                if (!this.obliqueOptimizer) {
+                  console.error("[View] ObliquePathOptimizer not available");
+                  return result;
+                }
+                
+                if (!this.wallMapInitialized) {
+                  this.obliqueOptimizer.setWallMap(this.explorer.knownWalls);
+                  this.wallMapInitialized = true;
+                }
+                
+                this.cachedRacePlan = this.obliqueOptimizer.computeRacePlan(0, 0, "east");
+                const elapsed = Date.now() - startTime;
+                console.log(
+                  `[View] ObliquePathOptimizer computed in ${elapsed}ms: ` +
+                  (this.cachedRacePlan 
+                    ? `${this.cachedRacePlan.gridPath.length} cells, ${this.cachedRacePlan.segments.length} segments, ${this.cachedRacePlan.totalTime.toFixed(2)}s`
+                    : "null")
+                );
+              } else {
+                // Use 4D Path Planner (cardinal only)
+                if (!this.pathPlanner) {
+                  console.error("[View] PathPlanner not available for 4D mode");
+                  return result;
+                }
+                
+                if (!this.wallMapInitialized) {
+                  this.pathPlanner.setWallMap(this.explorer.knownWalls);
+                  this.wallMapInitialized = true;
+                }
+                
+                const optimalPath = this.pathPlanner.computeOptimalPath(0, 0, "east");
+                if (optimalPath) {
+                  const gridPath = this.pathPlanner.statePathToGridPath(optimalPath);
+                  const segments = this.pathPlanner.compressPath(optimalPath);
+                  this.cachedRacePlan = {
+                    gridPath: gridPath,
+                    segments: segments,
+                    totalTime: gridPath.length * 0.1 // Placeholder time estimate
+                  };
+                  const elapsed = Date.now() - startTime;
+                  console.log(`[View] 4D Cardinal race plan computed in ${elapsed}ms: ${gridPath.length} cells, ${segments.length} segments`);
+                } else {
+                  console.error("[View] No path found by PathPlanner");
+                }
+              }
+              
+              if (this.cachedRacePlan) {
+                this.stats.racingSegments = this.cachedRacePlan.segments ? this.cachedRacePlan.segments.length : 0;
+                this.stats.totalRaceTime = (typeof this.cachedRacePlan.totalTime === 'number') ? this.cachedRacePlan.totalTime.toFixed(2) : "N/A";
+                
+                // CRITICAL FIX: Ensure renderer uses the same explored walls as the race planner
+                // This prevents the renderer from drawing walls that the planner ignored
+                if (this.renderer.setRaceWalls) {
+                  this.renderer.setRaceWalls(this.explorer.knownWalls);
+                  console.log("[View] Renderer walls synchronized with explorer's discovered map");
+                }
+              }
+            } catch (err) {
+              console.error(`[View] Race plan error (${this.allowObliqueSprint ? '8D' : '4D'}):`, err);
+              this.cachedRacePlan = null;
+            }
+          }
+          
+          // Use cached race plan ONLY (no fallbacks)
+          if (this.cachedRacePlan && this.renderer.setRacingPathInfo) {
+            const plannerMode = this.allowObliqueSprint ? '8D' : '4D';
+            
+            // CRITICAL: Sync explorer's discreteOptimalPath with the visualized race plan
+            // This ensures the robot follows the highlighted path
+            if (this.explorer.discreteOptimalPath !== this.cachedRacePlan.gridPath) {
+              this.explorer.discreteOptimalPath = this.cachedRacePlan.gridPath;
+              this.explorer.racingPathIndex = 0;  // Reset racing progress
+              console.log(`[View] Synced explorer path with ${plannerMode} race plan (${this.cachedRacePlan.gridPath.length} cells)`);
+            }
+            
+            this.renderer.setRacingPathInfo(
+              this.cachedRacePlan.gridPath, 
+              this.explorer.racingPathIndex, 
+              this.explorer.phase,
+              plannerMode  // Pass planner mode to renderer
+            );
+            // Also update renderer with segment and time data
+            if (this.renderer.racingSegments !== undefined) {
+              this.renderer.racingSegments = this.cachedRacePlan.segments;
+              this.renderer.totalRaceTime = this.cachedRacePlan.totalTime || 0;
+            }
+          } else if (this.renderer.setRacingPathInfo) {
+            console.warn("[View] No race plan available - visualization will be empty");
+            this.renderer.setRacingPathInfo([], 0, this.explorer.phase, this.allowObliqueSprint ? '8D' : '4D');
+          }
         }
 
         this.stats.nodesExplored = this.explorer.traversalHistory?.length || this.stats.nodesExplored;
@@ -523,6 +684,9 @@
           this.pathPlanner.allowOblique = this.allowObliqueSprint;
           if (this.pathPlanner.knownWalls) this.pathPlanner._buildGraph();
         }
+        if (this.obliqueOptimizer) {
+          this.obliqueOptimizer.allowOblique = this.allowObliqueSprint;
+        }
       });
       obliqueToggle.appendChild(obliqueCheckbox);
       obliqueToggle.appendChild(document.createTextNode("Enable Oblique Sprint (8-dir)"));
@@ -552,6 +716,8 @@
         startTime: Date.now(),
         currentPhase: "TO-GOAL"
       };
+      this.cachedRacePlan = null;
+      this.wallMapInitialized = false;
     }
 
     _createSpeedControls() {
@@ -662,6 +828,12 @@
     }
 
     _stepOnce() {
+      // Don't step if already done
+      if (this.explorer && this.explorer.phase === "done") {
+        console.log("Exploration already complete - cannot step further.");
+        return { done: true };
+      }
+      
       const now = Date.now();
       this.stats.startTime = now - this.stats.timeSeconds * 1000;
       this.stop();
@@ -697,6 +869,14 @@
           <p>Optimal Path Steps: ${optimStats.optimalSteps}</p>
           <p>Improvement: ${optimStats.improvementFactor}x faster</p>
           <p>Time Saved: <span style="color: #10b981; font-weight: bold;">${optimStats.timeSavedPercent}%</span></p>`;
+      }
+
+      if (this.stats.racingSegments) {
+        html += `
+          <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
+          <p><strong>⚡ Racing Phase:</strong></p>
+          <p>Race Segments: ${this.stats.racingSegments}</p>
+          <p>Est. Race Time: ${this.stats.totalRaceTime}s</p>`;
       }
 
       html += `

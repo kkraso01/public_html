@@ -31,7 +31,7 @@
   
   // Default PID gains and speed
   const DEFAULT_GAINS = { kp: 2, ki: 0.42, kd: 0.32 };
-  const DEFAULT_SPEED = 90;
+  const DEFAULT_SPEED = 120;
   
   // Animation control
   let isRunning = false;
@@ -76,13 +76,13 @@
     x: 0,
     y: 0,
     angle: -Math.PI / 2,
-    speed: 90,
+    speed: DEFAULT_SPEED,
     integral: 0,
     prevError: 0,
     prevDeriv: null,
     // --- simulation state ---
-    vL: 90,   // left wheel speed (px/s)
-    vR: 90,   // right wheel speed (px/s)
+    vL: DEFAULT_SPEED,   // left wheel speed (px/s)
+    vR: DEFAULT_SPEED,   // right wheel speed (px/s)
     omega: 0  // angular velocity (rad/s)
   };
   
@@ -97,29 +97,82 @@
   let dragging = false;
   let lastTime = performance.now();
 
-  function buildTrackPath() {
-    track.path = [];
-    const cx = track.center.x;
-    const cy = track.center.y;
+  // function buildTrackPath() {
+  //   track.path = [];
+  //   const cx = track.center.x;
+  //   const cy = track.center.y;
     
-    // Get canvas dimensions
-    const w = canvas.width / dpr;
-    const h = canvas.height / dpr;
-    const margin = 50;
+  //   // Get canvas dimensions
+  //   const w = canvas.width / dpr;
+  //   const h = canvas.height / dpr;
+  //   const margin = 50;
     
-    // Oval track with different radii for width and height
-    const radiusX = w / 2 - margin;
-    const radiusY = h / 2 - margin;
+  //   // Oval track with different radii for width and height
+  //   const radiusX = w / 2 - margin;
+  //   const radiusY = h / 2 - margin;
     
-    // Draw an ellipse
-    const steps = 360;
-    for (let i = 0; i <= steps; i++) {
-      const angle = (Math.PI * 2) * (i / steps);
-      const x = cx + radiusX * Math.cos(angle);
-      const y = cy + radiusY * Math.sin(angle);
+  //   // Draw an ellipse
+  //   const steps = 360;
+  //   for (let i = 0; i <= steps; i++) {
+  //     const angle = (Math.PI * 2) * (i / steps);
+  //     const x = cx + radiusX * Math.cos(angle);
+  //     const y = cy + radiusY * Math.sin(angle);
+  //     track.path.push({ x, y });
+  //   }
+  // }
+function buildTrackPath() {
+  track.path = [];
+  const cx = track.center.x;
+  const cy = track.center.y;
+
+  // Get canvas dimensions
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+  const margin = 50;
+
+  const radiusX = w / 2 - margin;
+  const radiusY = h / 2 - margin;
+
+  // Generate random control points around a circle
+  const pointsCount = 5;
+  const pts = [];
+
+  for (let i = 0; i < pointsCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+
+    const rx = radiusX * (0.65 + Math.random() * 0.35);
+    const ry = radiusY * (0.65 + Math.random() * 0.35);
+
+    pts.push({
+      angle,
+      x: cx + rx * Math.cos(angle),
+      y: cy + ry * Math.sin(angle)
+    });
+  }
+
+  // Sort by angle to avoid crossings
+  pts.sort((a, b) => a.angle - b.angle);
+
+  // Loop back to start
+  pts.push(pts[0]);
+
+  // Smooth curve using cosine interpolation
+  const smoothSteps = 20; // more = smoother
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
+
+    for (let t = 0; t <= 1; t += 1 / smoothSteps) {
+      // cosine interpolation factor
+      const ft = (1 - Math.cos(t * Math.PI)) / 2;
+
+      const x = p0.x * (1 - ft) + p1.x * ft;
+      const y = p0.y * (1 - ft) + p1.y * ft;
+
       track.path.push({ x, y });
     }
   }
+}
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
@@ -275,7 +328,7 @@
     if (features.enableAdaptiveSpeed) {
       const errorMagnitude = Math.abs(state.prevError);
       const k = 0.7;
-      speed = state.speed * (0.2 + 0.8 * Math.exp(-k * Math.pow(errorMagnitude, 3)));
+      speed = state.speed * (0.2 + 0.8 * Math.exp(-k * Math.pow(errorMagnitude, 0.9)));
     }
 
     // --- line lost / recovery mode logic preserved ---
@@ -294,9 +347,9 @@
     const wheelBase     = 80;     // distance between wheels (pixels, just a scale factor)
     const motorAccel    = 10;     // how fast wheels can change speed (1/s)
     const rotResponse   = 18;     // how fast robot follows commanded turn (1/s)
-    const slipFactor    = 0.0009; // how strongly high speed + high turn cause slip
-    const maxSlip       = 0.7;    // cap slip to avoid crazy behaviour
-    const steeringGain  = 20;     // how strongly PID control affects wheel speed difference
+    const slipFactor    = 0.0006; // how strongly high speed + high turn cause slip
+    const maxSlip       = 0.4;    // cap slip to avoid crazy behaviour
+    const steeringGain  = 100;     // how strongly PID control affects wheel speed difference
 
     // --- steering command from PID ---
     let steering = control; // PID output is roughly in [-3.2, 3.2]

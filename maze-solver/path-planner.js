@@ -1,17 +1,6 @@
 (function (global) {
-  const DIRS = global.MAZE_DIRS;
+  const DIRS = global.MAZE_DIRS;  // ["north", "east", "south", "west"]
   const DELTAS = global.MAZE_DELTAS;
-
-  const DIAGONAL_DIRS = [
-    { name: "north", dx: 0, dy: -1, diagonal: false, components: ["north"] },
-    { name: "east", dx: 1, dy: 0, diagonal: false, components: ["east"] },
-    { name: "south", dx: 0, dy: 1, diagonal: false, components: ["south"] },
-    { name: "west", dx: -1, dy: 0, diagonal: false, components: ["west"] },
-    { name: "northEast", dx: 1, dy: -1, diagonal: true, components: ["north", "east"] },
-    { name: "southEast", dx: 1, dy: 1, diagonal: true, components: ["south", "east"] },
-    { name: "southWest", dx: -1, dy: 1, diagonal: true, components: ["south", "west"] },
-    { name: "northWest", dx: -1, dy: -1, diagonal: true, components: ["north", "west"] }
-  ];
 
   /**
    * PathPlanner: Computes time-optimal paths using full maze knowledge
@@ -32,90 +21,108 @@
      */
     setWallMap(wallMap) {
       this.knownWalls = wallMap;
+      // Validate opposite walls: wall[x][y].east === wall[x+1][y].west
+      this._enforceWallSymmetry();
       this._buildGraph();
     }
 
-    _diagonalMoveAllowed(x, y, dir) {
-      const primary = dir.components;
-      const nx = x + dir.dx;
-      const ny = y + dir.dy;
-      if (nx < 0 || ny < 0 || nx >= this.size || ny >= this.size) return false;
-
-      if (primary.some(d => this.knownWalls[y][x][d])) return false;
-
-      const checks = [];
-      if (dir.name === "northEast") {
-        checks.push([x + 1, y, "north"], [x, y - 1, "east"]);
-      } else if (dir.name === "southEast") {
-        checks.push([x + 1, y, "south"], [x, y + 1, "east"]);
-      } else if (dir.name === "southWest") {
-        checks.push([x - 1, y, "south"], [x, y + 1, "west"]);
-      } else if (dir.name === "northWest") {
-        checks.push([x - 1, y, "north"], [x, y - 1, "west"]);
+    /**
+     * Enforce wall symmetry: if (x,y) has east wall, then (x+1,y) must have west wall
+     * This prevents disconnected graph caused by wall inconsistencies
+     */
+    _enforceWallSymmetry() {
+      for (let y = 0; y < this.size; y++) {
+        for (let x = 0; x < this.size; x++) {
+          // Check east wall
+          if (x + 1 < this.size && this.knownWalls[y][x].east === true) {
+            this.knownWalls[y][x + 1].west = true;
+          }
+          // Check west wall
+          if (x - 1 >= 0 && this.knownWalls[y][x].west === true) {
+            this.knownWalls[y][x - 1].east = true;
+          }
+          // Check south wall
+          if (y + 1 < this.size && this.knownWalls[y][x].south === true) {
+            this.knownWalls[y + 1][x].north = true;
+          }
+          // Check north wall
+          if (y - 1 >= 0 && this.knownWalls[y][x].north === true) {
+            this.knownWalls[y - 1][x].south = true;
+          }
+        }
       }
-
-      return checks.every(([cx, cy, facing]) => cx >= 0 && cy >= 0 && cx < this.size && cy < this.size && !this.knownWalls[cy][cx][facing]);
     }
 
     /**
-     * Build graph: nodes are {x, y, heading}, edges are moves with time costs
+     * Build 4D graph: nodes are (x, y, heading), edges are straights and turns with time costs
+     * CARDINAL ONLY: no diagonals allowed
      */
     _buildGraph() {
-      this.graph = new Map(); // key: "x,y,heading", value: {neighbors: [{to: "x,y,h", cost: time, action: desc}]}
-
-      const allDirs = this.allowOblique ? DIAGONAL_DIRS : DIRS.map(name => ({ name, dx: DELTAS[name].x, dy: DELTAS[name].y, diagonal: false, components: [name] }));
+      this.graph = new Map(); // key: "x,y,heading", value: [neighbors]
 
       for (let y = 0; y < this.size; y++) {
         for (let x = 0; x < this.size; x++) {
-          for (const heading of allDirs) {
-            const nodeKey = `${x},${y},${heading.name}`;
+          for (const heading of DIRS) {
+            const nodeKey = `${x},${y},${heading}`;
             const neighbors = [];
 
-            // Straight moves: 1 to 3 cells ahead
+            // Forward straights: 1 to 3 cells in current heading
+            const dir = DELTAS[heading];
             for (let len = 1; len <= 3; len++) {
-              const nx = x + heading.dx * len;
-              const ny = y + heading.dy * len;
-              if (nx < 0 || ny < 0 || nx >= this.size || ny >= this.size) break;
+              const targetX = x + dir.x * len;
+              const targetY = y + dir.y * len;
+              
+              // Bounds check
+              if (targetX < 0 || targetY < 0 || targetX >= this.size || targetY >= this.size) break;
 
-              // Check if path is clear
-              let blocked = false;
-              for (let i = 0; i < len; i++) {
-                const cx = x + heading.dx * i;
-                const cy = y + heading.dy * i;
-                const cellWalls = this.knownWalls?.[cy]?.[cx];
-                if (heading.diagonal) {
-                  if (len > 1) {
-                    blocked = true;
-                    break;
-                  }
-                  if (!this._diagonalMoveAllowed(cx, cy, heading)) {
-                    blocked = true;
-                    break;
-                  }
-                } else {
-                  const hasWall = cellWalls ? cellWalls[heading.name] : undefined;
-                  if (hasWall !== false) {
-                    blocked = true;
-                    break;
-                  }
+              // Check if this straight is legal: validate walls for each step
+              let canMove = true;
+              
+              for (let step = 0; step < len; step++) {
+                const currentX = x + dir.x * step;
+                const currentY = y + dir.y * step;
+                const nextX = currentX + dir.x;
+                const nextY = currentY + dir.y;
+
+                // Wall check: can we exit currentCell in this heading?
+                if (this._isBlocked(currentY, currentX, heading)) {
+                  canMove = false;
+                  break;
+                }
+
+                // Wall check: can we enter nextCell from opposite direction?
+                const oppositeHeading = this._getOppositeHeading(heading);
+                if (this._isBlocked(nextY, nextX, oppositeHeading)) {
+                  canMove = false;
+                  break;
                 }
               }
-              if (blocked) break;
 
-              // Time cost for straight segment
+              if (!canMove) break; // This length blocked, and longer lengths will also be blocked
+
+              // Valid straight move
               const profile = this.motionProfile.profileSegment(len, false);
               const cost = profile.totalTime;
-              const toKey = `${nx},${ny},${heading.name}`;
-              neighbors.push({ to: toKey, cost, action: `straight ${len} ${heading.name}` });
+              const toKey = `${targetX},${targetY},${heading}`;
+              neighbors.push({ to: toKey, cost, action: `straight ${len} ${heading}` });
             }
 
-            // Turns: 90 degrees left/right (only for cardinal headings)
-            if (!heading.diagonal) {
-              const turnCost = this.motionProfile.getTurnTime(90);
-              const leftHeading = DIRS[(DIRS.indexOf(heading.name) + 3) % 4];
-              const rightHeading = DIRS[(DIRS.indexOf(heading.name) + 1) % 4];
-
+            // Turns: left 90° and right 90° (only cardinal, never diagonal)
+            // CRITICAL: Only allow turns into positions that don't have a wall directly ahead
+            const turnCost = this.motionProfile.getTurnTime(90);
+            const headingIdx = DIRS.indexOf(heading);
+            
+            // Left turn: counter-clockwise
+            const leftHeading = DIRS[(headingIdx + 3) % 4];
+            // CRITICAL FIX: Unknown walls must be treated as walls
+            if (!this._isBlocked(y, x, leftHeading)) {
               neighbors.push({ to: `${x},${y},${leftHeading}`, cost: turnCost, action: `turn left to ${leftHeading}` });
+            }
+
+            // Right turn: clockwise
+            const rightHeading = DIRS[(headingIdx + 1) % 4];
+            // CRITICAL FIX: Unknown walls must be treated as walls
+            if (!this._isBlocked(y, x, rightHeading)) {
               neighbors.push({ to: `${x},${y},${rightHeading}`, cost: turnCost, action: `turn right to ${rightHeading}` });
             }
 
@@ -123,6 +130,26 @@
           }
         }
       }
+    }
+
+    _getOppositeHeading(heading) {
+      const opposites = { north: "south", south: "north", east: "west", west: "east" };
+      return opposites[heading];
+    }
+
+    /**
+     * Check if a wall is blocked in a given direction
+     * CRITICAL: unknown walls (undefined) are treated as walls (default safe behavior)
+     * @param {number} y - cell y coordinate
+     * @param {number} x - cell x coordinate
+     * @param {string} dir - direction (north, south, east, west)
+     * @returns {boolean} true if blocked/wall, false if open
+     */
+    _isBlocked(y, x, dir) {
+      const cell = this.knownWalls[y][x];
+      if (!cell) return true;              // unknown cell = wall
+      const w = cell[dir];
+      return w === true || w === undefined; // unknown wall = wall
     }
 
     /**
@@ -176,6 +203,53 @@
         current = entry.from;
       }
       return path;
+    }
+
+    /**
+     * Convert state path into discrete grid cells (one per step)
+     * CRITICAL FIX for BUG 3: Handle segment expansion correctly
+     * The Dijkstra path records states at ENDPOINTS of moves, not at starts
+     * We must reconstruct the full cell sequence by advancing from current position
+     */
+    statePathToGridPath(statePath) {
+      const gridPath = [];
+      if (!statePath || statePath.length === 0) return gridPath;
+
+      // Start at origin
+      gridPath.push({ x: 0, y: 0 });
+
+      // Expand each move into individual cells
+      for (let i = 0; i < statePath.length; i++) {
+        const step = statePath[i];
+        if (step.action && step.action.startsWith('straight')) {
+          // Parse action: "straight N heading"
+          const parts = step.action.split(' ');
+          const len = parseInt(parts[1]);
+          const moveHeading = parts[2];
+          
+          const dir = DELTAS[moveHeading];
+          if (!dir) continue;
+
+          // Get current position from gridPath (the last added cell)
+          const lastCell = gridPath[gridPath.length - 1];
+          
+          // Add each cell in this straight run
+          for (let j = 1; j <= len; j++) {
+            const cellX = lastCell.x + dir.x * j;
+            const cellY = lastCell.y + dir.y * j;
+            
+            // Avoid duplicates
+            if (gridPath.length === 0 || 
+                gridPath[gridPath.length - 1].x !== cellX || 
+                gridPath[gridPath.length - 1].y !== cellY) {
+              gridPath.push({ x: cellX, y: cellY });
+            }
+          }
+        }
+        // Turns don't add new cells, just change heading
+      }
+
+      return gridPath;
     }
 
     /**

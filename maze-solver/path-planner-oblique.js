@@ -1,256 +1,988 @@
 (function (global) {
-  const DIRS = global.MAZE_DIRS;
-  const DELTAS = global.MAZE_DELTAS;
-
-  const DIAGONAL_DIRS = [
-    { name: "north", dx: 0, dy: -1, diagonal: false, components: ["north"] },
-    { name: "east", dx: 1, dy: 0, diagonal: false, components: ["east"] },
-    { name: "south", dx: 0, dy: 1, diagonal: false, components: ["south"] },
-    { name: "west", dx: -1, dy: 0, diagonal: false, components: ["west"] },
-    { name: "northEast", dx: 1, dy: -1, diagonal: true, components: ["north", "east"] },
-    { name: "southEast", dx: 1, dy: 1, diagonal: true, components: ["south", "east"] },
-    { name: "southWest", dx: -1, dy: 1, diagonal: true, components: ["south", "west"] },
-    { name: "northWest", dx: -1, dy: -1, diagonal: true, components: ["north", "west"] }
+  /**
+   * Eight grid directions for connectivity.
+   * dx, dy are in cell units. angle is in radians.
+   */
+  const DIR8 = [
+    { name: "N",  dx:  0, dy: -1, diagonal: false, angle: -Math.PI / 2 },
+    { name: "NE", dx:  1, dy: -1, diagonal: true,  angle: -Math.PI / 4 },
+    { name: "E",  dx:  1, dy:  0, diagonal: false, angle: 0 },
+    { name: "SE", dx:  1, dy:  1, diagonal: true,  angle:  Math.PI / 4 },
+    { name: "S",  dx:  0, dy:  1, diagonal: false, angle:  Math.PI / 2 },
+    { name: "SW", dx: -1, dy:  1, diagonal: true,  angle:  3 * Math.PI / 4 },
+    { name: "W",  dx: -1, dy:  0, diagonal: false, angle:  Math.PI },
+    { name: "NW", dx: -1, dy: -1, diagonal: true,  angle: -3 * Math.PI / 4 }
   ];
 
+  const EPS = 1e-6;
+
   /**
-   * ObliquePathOptimizer: 8-direction path optimization for post-exploration racing
-   * Used ONLY after maze is fully mapped (exploration complete)
+   * RacePlanner
+   * -----------
+   * Full race plan computation for post-exploration sprint phase.
    * 
-   * This is the "second file" for oblique motion:
-   * - Dijkstra with 8-direction support
-   * - Diagonal lane validation
-   * - Racing line compression with diagonal segments
-   * - Time-optimal trajectory calculation
+   * Pipeline:
+   *  1. 8D shortest grid path (Dijkstra with Asian diagonal legality)
+   *  2. Compress to line segments (straight runs)
+   *  3. Insert smooth circular arcs at corners
+   *  4. Time-optimal velocity planning (forward-backward pass)
+   *
+   * Output: discrete path + geometry + per-segment velocity profiles
    */
-  class ObliquePathOptimizer {
-    constructor(maze, allowOblique = true) {
+  class RacePlanner {
+    /**
+     * @param {Object} maze - { size, goalCells: Set("x,y") }
+     * @param {Array<Array<Object>>} knownWalls - [y][x] = {north,east,south,west}
+     * @param {Object} options
+     *   - cellSize       : meters per cell (e.g. 0.018)
+     *   - vMax           : max straight-line speed (m/s)
+     *   - aMax           : max linear acceleration (m/s^2)
+     *   - dMax           : max linear deceleration (m/s^2)
+     *   - aLatMax        : max lateral (centripetal) acceleration (m/s^2)
+     *   - cornerRadius   : default corner arc radius (meters)
+     */
+    constructor(maze, knownWalls, options = {}) {
       this.maze = maze;
       this.size = maze.size;
-      this.allowOblique = allowOblique;
-      this.knownWalls = null;
+      
+      // CRITICAL FIX: Sanitize knownWalls to make all undefined edges explicitly OPEN
+      // This allows diagonals to work correctly during race planning
+      this.knownWalls = this._sanitizeWallMap(knownWalls);
+
+      this.cellSize     = options.cellSize     || 0.018;
+      this.vMax         = options.vMax         || 3.0;   // 3 m/s typical sprint
+      this.aMax         = options.aMax         || 5.0;   // 5 m/s^2
+      this.dMax         = options.dMax         || 6.0;   // braking
+      this.aLatMax      = options.aLatMax      || 7.0;   // lateral accel
+      this.cornerRadius = options.cornerRadius || 0.025; // 25mm arc
+
+      this._enforceCardinalSymmetry();
     }
 
+    // ---------- wall sanitization ----------
+
     /**
-     * Set the wall map from exploration
+     * Create a safe copy of wall map where undefined edges = WALLS (unknown = closed).
+     * Micromouse rule: Unknown edges must be assumed to be walls until confirmed open.
+     * This prevents the planner from cutting through unexplored areas.
      */
-    setWallMap(wallMap) {
-      this.knownWalls = wallMap;
+    _sanitizeWallMap(knownWalls) {
+      const n = this.size;
+      const sanitized = [];
+      
+      for (let y = 0; y < n; y++) {
+        sanitized[y] = [];
+        for (let x = 0; x < n; x++) {
+          const cell = knownWalls[y]?.[x] || {};
+          
+          // Explicitly set all walls: undefined/missing = true (WALL/UNKNOWN)
+          // Only explicitly false (discovered open) = false
+          sanitized[y][x] = {
+            north: cell.north !== false,    // Default to wall unless confirmed open
+            south: cell.south !== false,
+            east:  cell.east !== false,
+            west:  cell.west !== false
+          };
+        }
+      }
+      
+      console.log("[RacePlanner] Wall map sanitized: undefined edges now treated as WALLS (unknown=closed)");
+      return sanitized;
     }
+
+    // ---------- wall helpers ----------
 
     _inBounds(x, y) {
       return x >= 0 && y >= 0 && x < this.size && y < this.size;
     }
 
-    _diagonalMoveAllowed(x, y, dir) {
-      const primary = dir.components;
+    // Treat only explicit true as wall (undefined is now false after sanitization)
+    _isWall(walls, dir) {
+      if (!walls) return false; // Safety: if cell doesn't exist, treat as open (not wall)
+      return walls[dir] === true;
+    }
+
+    _enforceCardinalSymmetry() {
+      const n = this.size;
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          const cell = this.knownWalls[y][x] || (this.knownWalls[y][x] = {});
+          
+          // east/west symmetry
+          if (cell.east === true && x + 1 < n) {
+            this.knownWalls[y][x + 1] ||= {};
+            this.knownWalls[y][x + 1].west = true;
+          }
+          if (cell.west === true && x - 1 >= 0) {
+            this.knownWalls[y][x - 1] ||= {};
+            this.knownWalls[y][x - 1].east = true;
+          }
+          
+          // north/south symmetry
+          if (cell.south === true && y + 1 < n) {
+            this.knownWalls[y + 1][x] ||= {};
+            this.knownWalls[y + 1][x].north = true;
+          }
+          if (cell.north === true && y - 1 >= 0) {
+            this.knownWalls[y - 1][x] ||= {};
+            this.knownWalls[y - 1][x].south = true;
+          }
+        }
+      }
+    }
+
+    /**
+     * Log the complete maze structure with walls to console
+     * Uses ASCII art to visualize walls and open passages
+     */
+    logMazeStructure() {
+      const n = this.size;
+      const walls = this.knownWalls;
+      
+      // Build ASCII maze
+      let mazeStr = "\n[RacePlanner] MAZE STRUCTURE:\n\n";
+      
+      for (let y = 0; y < n; y++) {
+        // Top wall line
+        let topLine = "  ";
+        for (let x = 0; x < n; x++) {
+          topLine += walls[y][x].north ? "┌─" : "┌ ";
+        }
+        topLine += "┐";
+        mazeStr += topLine + "\n";
+        
+        // Cell line with side walls
+        let cellLine = "  ";
+        for (let x = 0; x < n; x++) {
+          cellLine += walls[y][x].west ? "│" : " ";
+          cellLine += " ";
+        }
+        cellLine += walls[y][n-1].east ? "│" : " ";
+        mazeStr += cellLine + "\n";
+      }
+      
+      // Bottom wall line
+      let bottomLine = "  ";
+      for (let x = 0; x < n; x++) {
+        bottomLine += walls[n-1][x].south ? "└─" : "└ ";
+      }
+      bottomLine += "┘";
+      mazeStr += bottomLine + "\n";
+      
+      // Build detailed wall map
+      const wallDetails = {};
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          const key = `(${x},${y})`;
+          const cell = walls[y][x];
+          const wallList = [];
+          if (cell.north) wallList.push("N");
+          if (cell.east) wallList.push("E");
+          if (cell.south) wallList.push("S");
+          if (cell.west) wallList.push("W");
+          
+          if (wallList.length > 0) {
+            wallDetails[key] = wallList.join(" ");
+          }
+        }
+      }
+      
+      mazeStr += "\nCell Walls (N/E/S/W):\n";
+      Object.entries(wallDetails).forEach(([cell, walls]) => {
+        mazeStr += `  ${cell}: ${walls}\n`;
+      });
+      
+      console.log(mazeStr);
+      console.log("[RacePlanner] Maze size:", n, "×", n);
+      console.log("[RacePlanner] Goal cells:", Array.from(this.maze.goalCells));
+    }
+
+    /**
+     * FULL Japanese diagonal legality with multi-cell extension
+     * Uses grid ray stepping to check diagonal corridors of any length.
+     * Supports arbitrarily long diagonals (5, 10, 20+ cells).
+     */
+    _canMoveDiagonalLong(x0, y0, dx, dy) {
+      // dx, dy ∈ { -1, +1 }
+      const x1 = x0 + dx;
+      const y1 = y0 + dy;
+
+      // 1-step must be legal for multi-step to start
+      if (!this._canMoveDiagonalOne(x0, y0, dx, dy)) {
+        return false;
+      }
+
+      let x = x1;
+      let y = y1;
+
+      // Walk the diagonal ray until blocked
+      while (true) {
+        const nx = x + dx;
+        const ny = y + dy;
+
+        if (!this._inBounds(nx, ny)) break;
+
+        if (!this._canMoveDiagonalOne(x, y, dx, dy)) {
+          break;
+        }
+
+        x = nx;
+        y = ny;
+      }
+
+      return { endX: x, endY: y };
+    }
+
+    /**
+     * Japanese 1-step diagonal legality check
+     * Applies all micromouse competition rules:
+     *  - Primary cardinals open from source
+     *  - Opposite cardinals open into target
+     *  - L-block test (both corner walls block movement)
+     */
+    _canMoveDiagonalOne(x, y, dx, dy) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!this._inBounds(nx, ny)) return false;
+
+      const cell   = this.knownWalls[y][x];
+      const target = this.knownWalls[ny][nx];
+      if (!cell || !target) return false;
+
+      // Cardinal directions
+      const dirX = dx > 0 ? "east" : "west";
+      const dirY = dy > 0 ? "south" : "north";
+      const oppX = dx > 0 ? "west" : "east";
+      const oppY = dy > 0 ? "north" : "south";
+
+      // 1. Primary cardinals must be open
+      if (cell[dirX]) return false;
+      if (cell[dirY]) return false;
+
+      // 2. Opposite cardinals must be open into target
+      if (target[oppX]) return false;
+      if (target[oppY]) return false;
+
+      // 3. L-block test (both corner walls block movement)
+      const cx1 = x + dx;
+      const cy1 = y;
+      const cx2 = x;
+      const cy2 = y + dy;
+
+      if (!this._inBounds(cx1, cy1) || !this._inBounds(cx2, cy2)) {
+        return false;
+      }
+
+      const corner1 = this.knownWalls[cy1][cx1];
+      const corner2 = this.knownWalls[cy2][cx2];
+
+      const edge1 = dy > 0 ? "south" : "north";
+      const edge2 = dx > 0 ? "east"  : "west";
+
+      // Both corners must NOT block (true L-block blocks)
+      if (corner1[edge1] && corner2[edge2]) {
+        return false;
+      }
+
+      return true;
+    }
+
+    /**
+     * For Dijkstra: adapter to work with DIR8 format
+     * Single-step diagonal check for path finding
+     */
+    _canMoveDiagonal(x, y, dir) {
+      return this._canMoveDiagonalOne(x, y, dir.dx, dir.dy);
+    }
+
+    _canMoveCardinal(x, y, dir) {
       const nx = x + dir.dx;
       const ny = y + dir.dy;
       if (!this._inBounds(nx, ny)) return false;
 
-      // Check primary directions (cardinal components) - wall is === true when it exists
-      if (primary.some(d => this.knownWalls[y][x][d] === true)) return false;
+      const cell   = this.knownWalls[y][x];
+      const target = this.knownWalls[ny][nx];
+      if (!cell || !target) return false;
 
-      // Check corner cells for blocking walls
-      const checks = [];
-      if (dir.name === "northEast") {
-        checks.push([x + 1, y, "north"], [x, y - 1, "east"]);
-      } else if (dir.name === "southEast") {
-        checks.push([x + 1, y, "south"], [x, y + 1, "east"]);
-      } else if (dir.name === "southWest") {
-        checks.push([x - 1, y, "south"], [x, y + 1, "west"]);
-      } else if (dir.name === "northWest") {
-        checks.push([x - 1, y, "north"], [x, y - 1, "west"]);
-      }
+      const dirName =
+        dir.dx === 1 ? "east" :
+        dir.dx === -1 ? "west" :
+        dir.dy === 1 ? "south" : "north";
 
-      return checks.every(([cx, cy, facing]) => 
-        this._inBounds(cx, cy) && this.knownWalls[cy][cx][facing] !== true
-      );
+      const oppName =
+        dir.dx === 1 ? "west" :
+        dir.dx === -1 ? "east" :
+        dir.dy === 1 ? "north" : "south";
+
+      if (cell[dirName]) return false;
+      if (target[oppName]) return false;
+
+      return true;
     }
 
+    // ---------- Stage 1: 8D shortest path on grid ----------
+
     /**
-     * Compute shortest path using 8-direction Dijkstra
-     * Returns array of {x, y} cells
+     * Dijkstra on cells only (no heading), 8-connected with Asian diagonals.
+     * Returns array of {x,y} from start to some goal cell.
      */
-    computeOptimalPathOblique(startX = 0, startY = 0) {
-      if (!this.knownWalls) {
-        console.warn("Wall map not set");
-        return null;
-      }
+    computeGridPath(startX = 0, startY = 0) {
+      const key = (x, y) => `${x},${y}`;
+      const dist = new Map();
+      const prev = new Map();
+      const heap = new MinHeap();
 
-      const distMap = [];
-      const prev = [];
-      for (let y = 0; y < this.size; y++) {
-        distMap[y] = [];
-        prev[y] = [];
-        for (let x = 0; x < this.size; x++) {
-          distMap[y][x] = Infinity;
-          prev[y][x] = null;
-        }
-      }
-      distMap[startY][startX] = 0;
+      const startKey = key(startX, startY);
+      dist.set(startKey, 0);
+      heap.push([0, startX, startY]);
 
-      const pq = [];
-      pq.push({ cost: 0, x: startX, y: startY });
+      const goals = this.maze.goalCells;
 
-      while (pq.length) {
-        pq.sort((a, b) => a.cost - b.cost);
-        const { cost, x, y } = pq.shift();
+      while (!heap.isEmpty()) {
+        const [cost, x, y] = heap.pop();
+        const k = key(x, y);
+        const best = dist.get(k);
+        if (best === undefined || cost > best + EPS) continue;
 
-        if (cost > distMap[y][x]) continue;
-        
-        // Check if at goal
-        if (this.maze.goalCells.has(`${x},${y}`)) {
-          return this._reconstructPath(prev, x, y);
+        // Goal check
+        if (goals.has(k)) {
+          return this._reconstructCellPath(prev, x, y);
         }
 
-        // Explore all 8 directions
-        for (const dir of DIAGONAL_DIRS) {
-          if (dir.diagonal && !this._diagonalMoveAllowed(x, y, dir)) continue;
-          if (!dir.diagonal && this.knownWalls[y][x][dir.name] === true) continue;
-
+        // Explore neighbors
+        for (const dir of DIR8) {
           const nx = x + dir.dx;
           const ny = y + dir.dy;
           if (!this._inBounds(nx, ny)) continue;
 
-          const stepCost = dir.diagonal ? Math.SQRT2 : 1;
+          let ok = false;
+          if (dir.diagonal) ok = this._canMoveDiagonal(x, y, dir);
+          else              ok = this._canMoveCardinal(x, y, dir);
+          if (!ok) continue;
+
+          const stepLengthCells = dir.diagonal ? Math.SQRT2 : 1.0;
+          const stepCost = stepLengthCells;
+
+          const nk = key(nx, ny);
           const newCost = cost + stepCost;
-          
-          if (newCost < distMap[ny][nx]) {
-            distMap[ny][nx] = newCost;
-            prev[ny][nx] = { x, y };
-            pq.push({ cost: newCost, x: nx, y: ny });
+          const oldCost = dist.has(nk) ? dist.get(nk) : Infinity;
+
+          if (newCost + EPS < oldCost) {
+            dist.set(nk, newCost);
+            prev.set(nk, k);
+            heap.push([newCost, nx, ny]);
           }
         }
       }
+
+      // Log the distance matrix for debugging
+      console.log("[RacePlanner] Dijkstra distance matrix:", {
+        size: this.maze.size,
+        distMapSize: dist.size,
+        matrix: this._buildMatrixFromDist(dist)
+      });
+
       return null;
     }
 
-    _reconstructPath(prev, goalX, goalY) {
-      const path = [];
-      let x = goalX;
-      let y = goalY;
-      while (x !== null && y !== null) {
-        path.unshift({ x, y });
-        const p = prev[y][x];
-        if (!p) break;
-        x = p.x;
-        y = p.y;
+    _buildMatrixFromDist(dist) {
+      // Convert distance map to 2D matrix for visualization
+      const size = this.maze.size;
+      const matrix = Array(size).fill(null).map(() => Array(size).fill(Infinity));
+      
+      for (const [key, value] of dist.entries()) {
+        const [xStr, yStr] = key.split(",");
+        const x = Number(xStr);
+        const y = Number(yStr);
+        if (x >= 0 && x < size && y >= 0 && y < size) {
+          matrix[y][x] = Number(value.toFixed(3));
+        }
       }
+      
+      return matrix;
+    }
+
+    _reconstructCellPath(prev, gx, gy) {
+      const key = (x, y) => `${x},${y}`;
+      const path = [];
+      let k = key(gx, gy);
+
+      while (prev.has(k)) {
+        const [xStr, yStr] = k.split(",");
+        path.push({ x: Number(xStr), y: Number(yStr) });
+        k = prev.get(k);
+      }
+      const [sx, sy] = k.split(",");
+      path.push({ x: Number(sx), y: Number(sy) });
+      path.reverse();
       return path;
     }
 
+    // ---------- Stage 1b: path smoothing ----------
+
     /**
-     * Compress path into racing segments (straights + turns with diagonal support)
+     * Remove back-forward reversals (zigzags).
+     * Pattern: A -> B -> A is removed.
      */
-    compressToRacingLineOblique(gridPath) {
-      if (!gridPath || gridPath.length < 2) return [];
+    _removeUselessReversals(path) {
+      return path.filter((cell, i) => {
+        if (i === 0 || i === path.length - 1) return true;
+        const prev = path[i - 1];
+        const next = path[i + 1];
+        return !(prev.x === next.x && prev.y === next.y);
+      });
+    }
 
-      const segments = [];
+    /**
+     * Remove collinear middle points.
+     * If A -> B -> C are in a line, remove B.
+     */
+    _removeCollinear(path) {
+      if (path.length < 3) return path;
+      const result = [path[0]];
+
+      for (let i = 1; i < path.length - 1; i++) {
+        const a = path[i - 1];
+        const b = path[i];
+        const c = path[i + 1];
+
+        const dx1 = b.x - a.x;
+        const dy1 = b.y - a.y;
+        const dx2 = c.x - b.x;
+        const dy2 = c.y - b.y;
+
+        // Collinear if cross product is 0 and same direction
+        const collinear = (dx1 * dy2 === dy1 * dx2) &&
+                         (Math.sign(dx1) === Math.sign(dx2) || dx1 === 0 || dx2 === 0) &&
+                         (Math.sign(dy1) === Math.sign(dy2) || dy1 === 0 || dy2 === 0);
+
+        if (!collinear) {
+          result.push(b);
+        }
+      }
+
+      result.push(path[path.length - 1]);
+      return result;
+    }
+
+    /**
+     * Replace L-shaped corners with diagonal shortcuts.
+     * Pattern: A -> B (cardinal) -> C (perpendicular cardinal)
+     * Replace with A -> C if diagonal is legal.
+     */
+    _cornerShortcuts(path) {
+      if (path.length < 3) return path;
+      const result = [path[0]];
+
+      for (let i = 1; i < path.length - 1; i++) {
+        const a = path[i - 1];
+        const b = path[i];
+        const c = path[i + 1];
+
+        const dx1 = b.x - a.x;
+        const dy1 = b.y - a.y;
+        const dx2 = c.x - b.x;
+        const dy2 = c.y - b.y;
+
+        // Check if perpendicular cardinals forming L-shape
+        const isL = (Math.abs(dx1) === 1 && dy1 === 0) && (dx2 === 0 && Math.abs(dy2) === 1);
+        const isLrev = (dx1 === 0 && Math.abs(dy1) === 1) && (Math.abs(dx2) === 1 && dy2 === 0);
+
+        if (isL || isLrev) {
+          // Try diagonal shortcut from a to c
+          const ddx = c.x - a.x;
+          const ddy = c.y - a.y;
+
+          if (Math.abs(ddx) === 1 && Math.abs(ddy) === 1) {
+            // Check if diagonal is legal
+            if (this._canMoveDiagonalOne(a.x, a.y, ddx, ddy)) {
+              // Skip b, go direct a -> c
+              result.push(c);
+              i++; // Skip the intermediate cardinal step
+              continue;
+            }
+          }
+        }
+
+        result.push(b);
+      }
+
+      result.push(path[path.length - 1]);
+      return result;
+    }
+
+    /**
+     * Extend diagonals across entire corridor.
+     * CRITICAL FIX: Try ALL 4 diagonal directions at EVERY cell,
+     * even if the raw path is rectilinear. Detects diagonal corridors
+     * that aren't already diagonal in the input path.
+     */
+    _extendDiagonals(path) {
+      if (path.length < 2) return path;
+
+      const out = [path[0]];
+      let i = 1;
+
+      while (i < path.length) {
+        const prev = out[out.length - 1];
+        const curr = path[i];
+
+        // Try all 4 diagonal directions from prev
+        // This is the KEY FIX: check diagonals even if path isn't diagonal
+        const diagDirs = [
+          [1, 1],   // SE
+          [1, -1],  // NE
+          [-1, 1],  // SW
+          [-1, -1]  // NW
+        ];
+
+        let extended = false;
+
+        for (const [dx, dy] of diagDirs) {
+          // 1-step diagonal must be legal first
+          const oneStep = this._canMoveDiagonalOne(prev.x, prev.y, dx, dy);
+          if (!oneStep) continue;
+
+          // Full multi-cell diagonal legality check
+          const ext = this._canMoveDiagonalLong(prev.x, prev.y, dx, dy);
+          const end = { x: ext.endX, y: ext.endY };
+
+          // Check if curr lies ALONG that diagonal corridor region
+          const inCorridor =
+            Math.sign(curr.x - prev.x) === dx &&
+            Math.sign(curr.y - prev.y) === dy &&
+            Math.abs(curr.x - prev.x) <= Math.abs(end.x - prev.x) &&
+            Math.abs(curr.y - prev.y) <= Math.abs(end.y - prev.y);
+
+          if (!inCorridor) continue;
+
+          // Accept full diagonal extension across entire corridor
+          out.push(end);
+          extended = true;
+
+          // Skip all path[i] that lie inside the diagonal corridor region
+          while (i < path.length) {
+            const pt = path[i];
+            const ptInCorridor =
+              Math.sign(pt.x - prev.x) === dx &&
+              Math.sign(pt.y - prev.y) === dy &&
+              Math.abs(pt.x - prev.x) <= Math.abs(end.x - prev.x) &&
+              Math.abs(pt.y - prev.y) <= Math.abs(end.y - prev.y);
+
+            if (!ptInCorridor) break;
+            i++;
+          }
+
+          break; // Done trying diagonals at this node
+        }
+
+        if (!extended) {
+          // No diagonal corridor found → use original step
+          out.push(curr);
+          i++;
+        }
+      }
+
+      return out;
+    }
+
+    /**
+     * Master smoothing pipeline for optimal path compression.
+     * Produces Japanese-style mega-segments:
+     *  1. Remove zigzags
+     *  2. Remove collinear points
+     *  3. Replace corners with diagonals
+     *  4. Extend diagonals to full corridor length
+     */
+    _smoothGridPath(rawCells) {
+      if (!rawCells || rawCells.length < 3) return rawCells;
+
+      const smoothingLog = {
+        stage: "path-smoothing",
+        rawPath: {
+          length: rawCells.length,
+          cells: rawCells.map(c => `(${c.x},${c.y})`).join(' → ')
+        },
+        iterations: []
+      };
+
+      let path = [...rawCells];
+
+      // Iteration loop for convergence
+      let changed = true;
+      let iterations = 0;
+      const maxIterations = 10;
+
+      while (changed && iterations < maxIterations) {
+        iterations++;
+        const before = path.length;
+        const iterLog = { iteration: iterations, before };
+
+        // Apply smoothing pipeline
+        path = this._removeUselessReversals(path);
+        iterLog.afterRemoveReversals = path.length;
+
+        path = this._removeCollinear(path);
+        iterLog.afterRemoveCollinear = path.length;
+
+        path = this._cornerShortcuts(path);
+        iterLog.afterCornerShortcuts = path.length;
+
+        path = this._extendDiagonals(path);
+        iterLog.afterExtendDiagonals = path.length;
+
+        changed = path.length < before;
+        iterLog.changed = changed;
+        iterLog.cellsRemoved = before - path.length;
+
+        smoothingLog.iterations.push(iterLog);
+      }
+
+      smoothingLog.finalPath = {
+        length: path.length,
+        cells: path.map(c => `(${c.x},${c.y})`).join(' → '),
+        compressionRatio: ((1 - path.length / rawCells.length) * 100).toFixed(1) + '%',
+        cellsRemoved: rawCells.length - path.length,
+        totalIterations: iterations
+      };
+
+      console.log("[RacePlanner] Path Smoothing Result:", JSON.stringify(smoothingLog, null, 2));
+
+      return path;
+    }
+
+    // ---------- Stage 2: compress to line segments ----------
+
+    /**
+     * Convert cell path [{x,y},...] to straight line segments.
+     * Each segment: { type:"line", length (meters), angle (radians) }
+     */
+    _cellsToLineSegments(cells) {
+      if (!cells || cells.length < 2) return [];
+
+      const segs = [];
+      const toAngle = (dx, dy) => Math.atan2(dy, dx);
+
       let i = 0;
+      while (i < cells.length - 1) {
+        const p0 = cells[i];
+        const p1 = cells[i + 1];
+        const dx1 = p1.x - p0.x;
+        const dy1 = p1.y - p0.y;
+        const angle = toAngle(dx1, dy1);
+        const diagonal1 = Math.abs(dx1) === 1 && Math.abs(dy1) === 1;
 
-      while (i < gridPath.length - 1) {
-        const current = gridPath[i];
-        const next = gridPath[i + 1];
-        const dir = this._getDirection(current, next);
-
-        let length = 1;
+        let lengthCells = diagonal1 ? Math.SQRT2 : 1.0;
         let j = i + 1;
 
-        // Extend straight as far as possible
-        while (j < gridPath.length - 1) {
-          const p1 = gridPath[j];
-          const p2 = gridPath[j + 1];
-          const nextDir = this._getDirection(p1, p2);
-          if (nextDir && dir && nextDir.name === dir.name) {
-            length++;
-            j++;
-          } else {
-            break;
-          }
+        // Extend same direction
+        while (j < cells.length - 1) {
+          const a = cells[j];
+          const b = cells[j + 1];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const diag = Math.abs(dx) === 1 && Math.abs(dy) === 1;
+          const ang = toAngle(dx, dy);
+          if (Math.abs(ang - angle) > 1e-3) break;
+          lengthCells += diag ? Math.SQRT2 : 1.0;
+          j++;
         }
 
-        segments.push({
-          type: "straight",
-          direction: dir.name,
-          length: length,
-          distance: dir.diagonal ? length * Math.SQRT2 : length,
-          isDiagonal: dir.diagonal
+        const lengthMeters = lengthCells * this.cellSize;
+        segs.push({
+          type: "line",
+          length: lengthMeters,
+          angle: angle
         });
-
-        // If there's a turn coming, note it
-        if (j < gridPath.length - 1) {
-          const turnToDir = this._getDirection(gridPath[j], gridPath[j + 1]);
-          const turnType = this._getTurnType(dir, turnToDir);
-          if (turnType) {
-            segments.push({
-              type: "turn",
-              angle: turnType.angle,
-              direction: turnType.direction
-            });
-          }
-        }
 
         i = j;
       }
 
-      return segments;
-    }
-
-    _getDirection(p1, p2) {
-      const dx = Math.sign(p2.x - p1.x);
-      const dy = Math.sign(p2.y - p1.y);
-
-      if (dx === 0 && dy === -1) return { name: "north", dx: 0, dy: -1, angle: 0, diagonal: false };
-      if (dx === 1 && dy === 0) return { name: "east", dx: 1, dy: 0, angle: 90, diagonal: false };
-      if (dx === 0 && dy === 1) return { name: "south", dx: 0, dy: 1, angle: 180, diagonal: false };
-      if (dx === -1 && dy === 0) return { name: "west", dx: -1, dy: 0, angle: 270, diagonal: false };
-      if (dx === 1 && dy === -1) return { name: "northEast", dx: 1, dy: -1, angle: 45, diagonal: true };
-      if (dx === 1 && dy === 1) return { name: "southEast", dx: 1, dy: 1, angle: 135, diagonal: true };
-      if (dx === -1 && dy === 1) return { name: "southWest", dx: -1, dy: 1, angle: 225, diagonal: true };
-      if (dx === -1 && dy === -1) return { name: "northWest", dx: -1, dy: -1, angle: 315, diagonal: true };
-      return null;
-    }
-
-    _getTurnType(fromDir, toDir) {
-      if (!fromDir || !toDir) return null;
-      const fromAngle = fromDir.angle;
-      const toAngle = toDir.angle;
-      let diff = (toAngle - fromAngle + 360) % 360;
-      if (diff > 180) diff = diff - 360;
-
-      if (diff === 0) return null; // No turn
-      if (Math.abs(diff) === 90 || Math.abs(diff) === 45 || Math.abs(diff) === 135 || Math.abs(diff) === 180) {
-        return {
-          angle: Math.abs(diff),
-          direction: diff > 0 ? "left" : "right"
-        };
-      }
-      return null;
+      return segs;
     }
 
     /**
-     * Calculate time-optimal motion profile for oblique segments
+     * Insert circular arcs at corners between line segments.
+     * Trims each line by t = r * tan(theta/2).
+     * Returns array of { type:"line"|"arc", length, angle, radius?, ccw? }
      */
-    computeSegmentProfile(segment, vMax = 1.0, aMax = 0.5, dMax = 0.5) {
-      const distance = segment.distance;
-      
-      // Simple trapezoidal profile
-      const accelDist = Math.min(distance / 2, vMax * vMax / (2 * aMax));
-      const cruiseDist = Math.max(0, distance - 2 * accelDist);
-      const accelTime = vMax / aMax;
-      const cruiseTime = cruiseDist / vMax;
-      const decelTime = vMax / dMax;
-      
-      return {
-        totalTime: accelTime + cruiseTime + decelTime,
-        accelDist,
-        cruiseDist,
-        decelDist: accelDist,
-        peakVelocity: vMax
+    _insertCornerArcs(lineSegments) {
+      if (!lineSegments || lineSegments.length === 0) return [];
+
+      const result = [];
+      const r = this.cornerRadius;
+
+      const normAngle = (a) => {
+        while (a <= -Math.PI) a += 2 * Math.PI;
+        while (a >  Math.PI) a -= 2 * Math.PI;
+        return a;
       };
+
+      result.push({ ...lineSegments[0] });
+
+      for (let i = 1; i < lineSegments.length; i++) {
+        const prev = result[result.length - 1];
+        const next = lineSegments[i];
+
+        const a0 = prev.angle;
+        const a1 = next.angle;
+        let dTheta = normAngle(a1 - a0);
+
+        if (Math.abs(dTheta) < 1e-3) {
+          // Same direction; extend previous
+          prev.length += next.length;
+          continue;
+        }
+
+        // Corner detected
+        const absTheta = Math.abs(dTheta);
+        const t = r * Math.tan(absTheta / 2);
+
+        // If lines too short, skip arc
+        if (prev.length < 2 * t || next.length < 2 * t) {
+          result.push({ ...next });
+          continue;
+        }
+
+        // Trim previous, add arc, trim next
+        prev.length -= t;
+
+        const arc = {
+          type: "arc",
+          radius: r,
+          angle: dTheta,
+          length: Math.abs(dTheta) * r,
+          ccw: dTheta > 0
+        };
+        result.push(arc);
+
+        const trimmedNext = {
+          type: "line",
+          angle: next.angle,
+          length: next.length - t
+        };
+        result.push(trimmedNext);
+      }
+
+      return result;
+    }
+
+    // ---------- Stage 3: time-optimal velocity planning ----------
+
+    /**
+     * Forward-backward pass for time-optimal velocity profile.
+     * Returns { segmentProfiles: [...], vPoints: [...], totalTime }
+     */
+    _velocityPlan(segments) {
+      const n = segments.length;
+      if (!n) return { segmentProfiles: [], vPoints: [], totalTime: 0 };
+
+      const L = segments.map(s => s.length);
+
+      // Local velocity limits from curvature
+      const vLimit = segments.map(seg => {
+        if (seg.type === "line") return this.vMax;
+        // Arc: v <= sqrt(aLatMax * r)
+        const r = seg.radius;
+        const vLat = Math.sqrt(Math.max(this.aLatMax, EPS) * Math.max(r, EPS));
+        return Math.min(this.vMax, vLat);
+      });
+
+      const aMax = this.aMax;
+      const dMax = this.dMax;
+
+      const v = new Array(n + 1).fill(0);
+
+      // Forward pass (accel-limited)
+      v[0] = 0;
+      for (let i = 0; i < n; i++) {
+        const vIn = v[i];
+        const vAcc = Math.sqrt(vIn * vIn + 2 * aMax * L[i]);
+        v[i + 1] = Math.min(vAcc, vLimit[i]);
+      }
+
+      // Backward pass (decel-limited; end at 0)
+      v[n] = 0;
+      for (let i = n - 1; i >= 0; i--) {
+        const vOut = v[i + 1];
+        const vDec = Math.sqrt(vOut * vOut + 2 * dMax * L[i]);
+        v[i] = Math.min(v[i], vDec);
+      }
+
+      // Compute times
+      let totalTime = 0;
+      const segmentProfiles = [];
+
+      for (let i = 0; i < n; i++) {
+        const vIn = v[i];
+        const vOut = v[i + 1];
+        const length = L[i];
+
+        let dt;
+        if (length < EPS) {
+          dt = 0;
+        } else if (Math.abs(vIn - vOut) < 1e-6) {
+          // Approx constant speed
+          const vAvg = Math.max((vIn + vOut) * 0.5, EPS);
+          dt = length / vAvg;
+        } else {
+          // Constant accel: a = (vOut^2 - vIn^2) / (2 * L)
+          const a = (vOut * vOut - vIn * vIn) / (2 * length);
+          const aSafe = Math.sign(a) * Math.min(Math.abs(a), a > 0 ? aMax : dMax);
+          dt = Math.abs((vOut - vIn) / (aSafe || EPS));
+        }
+
+        totalTime += dt;
+        segmentProfiles.push({
+          segment: segments[i],
+          vIn,
+          vOut,
+          time: dt
+        });
+      }
+
+      return { segmentProfiles, vPoints: v, totalTime };
+    }
+
+    // ---------- Public API ----------
+
+    /**
+     * Full race plan computation.
+     * 
+     * Returns:
+     * {
+     *   gridPath: [{x,y}, ...],
+     *   segments: [{type:"line"/"arc", length, angle, radius?, ccw?}, ...],
+     *   profiles: [{segment, vIn, vOut, time}, ...],
+     *   totalTime: Number
+     * }
+     */
+    computeRacePlan(startX = 0, startY = 0) {
+      // Log maze structure at start of planning
+      this.logMazeStructure();
+      
+      const rawCells = this.computeGridPath(startX, startY);
+      if (!rawCells || rawCells.length < 2) {
+        console.warn("RacePlanner: no path found");
+        return null;
+      }
+
+      // Stage 1b: Smooth the path (remove zigzags, extend diagonals)
+      const cells = this._smoothGridPath(rawCells);
+
+      const lineSegments = this._cellsToLineSegments(cells);
+      const raceSegments = this._insertCornerArcs(lineSegments);
+      const { segmentProfiles, totalTime } = this._velocityPlan(raceSegments);
+
+      const result = {
+        gridPath: cells,
+        segments: raceSegments,
+        profiles: segmentProfiles,
+        totalTime
+      };
+
+      console.log("[RacePlanner] Race plan output:", {
+        gridPathLength: result.gridPath.length,
+        segmentsLength: result.segments.length,
+        profilesLength: result.profiles.length,
+        totalTime: result.totalTime.toFixed(3),
+        gridPath: result.gridPath,
+        segments: result.segments,
+        profiles: result.profiles
+      });
+
+      return result;
+    }
+
+    // ===== Backward compatibility adapters for maze-explorer.js =====
+
+    /**
+     * Set the wall map (maze configuration).
+     * Adapter for maze-explorer.js compatibility.
+     * Sanitizes the wall map to enable diagonal movement during race planning.
+     */
+    setWallMap(knownWalls) {
+      this.knownWalls = this._sanitizeWallMap(knownWalls);
+    }
+
+    /**
+     * Compute optimal path using oblique (8-direction) movement.
+     * Adapter for maze-explorer.js: returns grid cell path only.
+     */
+    computeOptimalPathOblique(startX = 0, startY = 0) {
+      return this.computeGridPath(startX, startY);
+    }
+
+    /**
+     * Compress grid path to racing line segments.
+     * Adapter for maze-explorer.js: takes cell array, returns segment array.
+     */
+    compressToRacingLine(gridPath) {
+      if (!gridPath || gridPath.length < 2) return [];
+      return this._cellsToLineSegments(gridPath);
+    }
+
+    /**
+     * Compute velocity profiles for segments.
+     * Adapter for maze-explorer.js: takes segments, returns profiles with timing.
+     */
+    computeProfilesForSegments(segments) {
+      if (!segments || segments.length === 0) {
+        return { segmentProfiles: [], totalTime: 0 };
+      }
+      return this._velocityPlan(segments);
     }
   }
 
-  global.ObliquePathOptimizer = ObliquePathOptimizer;
+  // --------- Minimal binary heap ---------
+
+  class MinHeap {
+    constructor() {
+      this.heap = [];
+    }
+
+    isEmpty() {
+      return this.heap.length === 0;
+    }
+
+    push(item) {
+      this.heap.push(item);
+      this._bubbleUp(this.heap.length - 1);
+    }
+
+    pop() {
+      if (this.heap.length === 0) return null;
+      if (this.heap.length === 1) return this.heap.pop();
+
+      const root = this.heap[0];
+      this.heap[0] = this.heap.pop();
+      this._sinkDown(0);
+      return root;
+    }
+
+    _bubbleUp(i) {
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (this.heap[i][0] >= this.heap[p][0]) break;
+        [this.heap[i], this.heap[p]] = [this.heap[p], this.heap[i]];
+        i = p;
+      }
+    }
+
+    _sinkDown(i) {
+      const n = this.heap.length;
+      while (true) {
+        const l = 2 * i + 1;
+        const r = 2 * i + 2;
+        let s = i;
+        if (l < n && this.heap[l][0] < this.heap[s][0]) s = l;
+        if (r < n && this.heap[r][0] < this.heap[s][0]) s = r;
+        if (s === i) break;
+        [this.heap[i], this.heap[s]] = [this.heap[s], this.heap[i]];
+        i = s;
+      }
+    }
+  }
+
+  global.RacePlanner = RacePlanner;
 })(window);

@@ -14,6 +14,59 @@
   ];
 
   /**
+   * MinHeap: O(log n) priority queue for Dijkstra
+   */
+  class MinHeap {
+    constructor() {
+      this.heap = [];
+    }
+
+    isEmpty() {
+      return this.heap.length === 0;
+    }
+
+    push(item) {
+      this.heap.push(item);
+      this._bubbleUp(this.heap.length - 1);
+    }
+
+    pop() {
+      if (this.heap.length === 0) return null;
+      if (this.heap.length === 1) return this.heap.pop();
+
+      const root = this.heap[0];
+      this.heap[0] = this.heap.pop();
+      this._sinkDown(0);
+      return root;
+    }
+
+    _bubbleUp(index) {
+      while (index > 0) {
+        const parent = Math.floor((index - 1) / 2);
+        if (this.heap[index][0] >= this.heap[parent][0]) break;
+        [this.heap[index], this.heap[parent]] = [this.heap[parent], this.heap[index]];
+        index = parent;
+      }
+    }
+
+    _sinkDown(index) {
+      const len = this.heap.length;
+      while (true) {
+        const left = 2 * index + 1;
+        const right = 2 * index + 2;
+        let smallest = index;
+
+        if (left < len && this.heap[left][0] < this.heap[smallest][0]) smallest = left;
+        if (right < len && this.heap[right][0] < this.heap[smallest][0]) smallest = right;
+        if (smallest === index) break;
+
+        [this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]];
+        index = smallest;
+      }
+    }
+  }
+
+  /**
    * MazeExplorer: Chinese-style exploration with dynamic flood fill,
    * dead-end & dead-zone pruning, and optional oblique sprinting.
    */
@@ -372,8 +425,8 @@
 
       if (this.phase === "return" && this.position.x === 0 && this.position.y === 0) {
         this.phase = "optimize";
-        // 🔥 STAGE 1 & 2: Compute optimal path using discovered walls
-        this._computeOptimalPath();
+        // 🔥 Race planning is now handled by view.js using PathPlanner/ObliquePathOptimizer
+        // discreteOptimalPath will be set by view.js during racing phase
         return { done: false, optimized: true };
       }
 
@@ -408,11 +461,20 @@
      * STAGE 1: Compute discrete optimal path using appropriate optimizer.
      * Then STAGE 2: Compress into racing line segments.
      */
+    // DEPRECATED: This method is no longer used. Path planning now handled by view.js
+    // which uses PathPlanner or ObliquePathOptimizer and syncs with renderer.
+    // Keeping for reference/rollback only.
+    /*
     _computeOptimalPath() {
       // Initialize the appropriate optimizer if not already done
       if (!this.pathOptimizer) {
         if (this.allowOblique && typeof global.ObliquePathOptimizer !== 'undefined') {
-          this.pathOptimizer = new global.ObliquePathOptimizer(this.maze, true);
+          this.pathOptimizer = new global.ObliquePathOptimizer(this.maze, {
+            allowOblique: this.allowOblique,
+            vMax: 1.0,
+            aMax: 0.5,
+            dMax: 0.5
+          });
         } else {
           // Fallback: use internal 4-direction method
           this.pathOptimizer = { use4Dir: true };
@@ -438,16 +500,18 @@
       if (this.pathOptimizer.use4Dir) {
         this.racingLineSegments = this._compressToRacingLine(gridPath);
       } else {
-        this.racingLineSegments = this.pathOptimizer.compressToRacingLineOblique(gridPath);
+        this.racingLineSegments = this.pathOptimizer.compressToRacingLine(gridPath);
       }
       
       // Compute stats: exploration cost vs. optimal cost
       this._computeOptimizationStats(gridPath);
     }
+    */
 
     /**
      * Execute the racing line: follow the optimized discrete path.
      * Only move if path is valid (no walls blocking).
+     * CRITICAL: Uses strict wall validation to ensure safe movement.
      */
     _executeRacingLine() {
       if (!this.discreteOptimalPath || this.discreteOptimalPath.length === 0) {
@@ -475,12 +539,16 @@
       else if (dx === -1 && dy === 1) moveDir = "southWest";
       else if (dx === -1 && dy === -1) moveDir = "northWest";
       
-      // Check for wall using strict equality
+      // CRITICAL: Check for walls - any unknown wall blocks movement
       if (moveDir) {
         const isCardinal = ["east", "west", "north", "south"].includes(moveDir);
-        if (isCardinal && this.knownWalls[this.position.y][this.position.x][moveDir] === true) {
-          // Wall blocks this move, skip to next or end
-          return { done: true, error: "Wall blocks racing path" };
+        if (isCardinal) {
+          // Check if wall exists or is unknown (undefined = wall for safety)
+          const cell = this.knownWalls[this.position.y][this.position.x];
+          const w = cell ? cell[moveDir] : true;
+          if (w === true || w === undefined) {
+            return { done: true, error: "Wall blocks racing path" };
+          }
         }
         if (!isCardinal) {
           const diagonalDir = DIAGONAL_DIRS.find(d => d.name === moveDir);
@@ -530,15 +598,15 @@
       }
       distMap[0][0] = 0;
 
-      const pq = [];
-      pq.push({ cost: 0, x: 0, y: 0 });
+      // Use MinHeap instead of sorting (O(log n) vs O(n log n))
+      const pq = new MinHeap();
+      pq.push([0, 0, 0]);
 
       // Always 4-direction for cardinal pathfinding
       const dirs = DIRS.map(name => ({ name, dx: DELTAS[name].x, dy: DELTAS[name].y, diagonal: false, components: [name] }));
 
-      while (pq.length) {
-        pq.sort((a, b) => a.cost - b.cost);
-        const { cost, x, y } = pq.shift();
+      while (!pq.isEmpty()) {
+        const [cost, x, y] = pq.pop();
 
         if (cost > distMap[y][x]) continue;
         if (this.maze.goalCells.has(`${x},${y}`)) {
@@ -557,7 +625,7 @@
           if (newCost < distMap[ny][nx]) {
             distMap[ny][nx] = newCost;
             prev[ny][nx] = { x, y };
-            pq.push({ cost: newCost, x: nx, y: ny });
+            pq.push([newCost, nx, ny]);
           }
         }
       }
