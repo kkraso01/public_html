@@ -125,6 +125,11 @@ export class DronePhysicsEngine {
       this.state.position.y = this.params.floorHeight;
       if (this.state.velocity.y < 0) this.state.velocity.y = 0;
     }
+
+    if (this.state.position.y < 0.05) {
+      this.state.position.y = 0.05;
+      this.state.velocity.y = Math.max(0, this.state.velocity.y);
+    }
     if (this.state.position.y > this.params.ceilingHeight) {
       this.state.position.y = this.params.ceilingHeight;
       if (this.state.velocity.y > 0) this.state.velocity.y = 0;
