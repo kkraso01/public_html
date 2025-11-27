@@ -35,6 +35,8 @@ class DroneRaceDemo {
       options,
     );
 
+    this.floorHeight = options.floorHeight ?? 0.05;
+
     this.physicsRate = 240;
     this.timeScale = 1.0;
     this.state = 'COUNTDOWN';
@@ -84,7 +86,7 @@ class DroneRaceDemo {
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
+    floor.position.y = this.floorHeight;
     floor.receiveShadow = true;
     this.scene.add(floor);
 
@@ -97,7 +99,7 @@ class DroneRaceDemo {
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine();
+    this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
     const body = new THREE.Mesh(
       new THREE.CylinderGeometry(0.12, 0.12, 0.04, 12),
       new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x1f2937, metalness: 0.4, roughness: 0.3 }),

@@ -26,6 +26,7 @@ class ObstacleDropDemo {
   constructor(container, options) {
     this.container = container;
     this.options = Object.assign({ width: container.clientWidth || 640, height: container.clientHeight || 360 }, options);
+    this.floorHeight = options.floorHeight ?? 0.05;
     this.physicsRate = 200;
     this.userPaused = false;
     this.visibilityPaused = false;
@@ -72,13 +73,13 @@ class ObstacleDropDemo {
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
+    floor.position.y = this.floorHeight;
     floor.receiveShadow = true;
     this.scene.add(floor);
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine();
+    this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
     this.drone.reset({ position: new THREE.Vector3(0, 1.2, 0) });
 
     const body = new THREE.Mesh(
