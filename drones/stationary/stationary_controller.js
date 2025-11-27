@@ -108,7 +108,15 @@ export class StationaryController {
 
     let integral;
     if (this.useFOPID && !this.fractionalDisabled) {
-      integral = this._fractionalIntegral(posErr);
+      const fractional = this._fractionalIntegral(posErr);
+      const fractionalTerm = fractional.x + fractional.y + fractional.z;
+      if (!Number.isFinite(fractionalTerm)) {
+        this.useFOPID = false; // fall back to PID
+        this.fractionalDisabled = true;
+        integral = this._classicalIntegral(posErr, dt);
+      } else {
+        integral = fractional;
+      }
     } else {
       integral = this._classicalIntegral(posErr, dt);
     }

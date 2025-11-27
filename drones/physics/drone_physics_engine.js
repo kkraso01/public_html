@@ -16,10 +16,10 @@ export class DronePhysicsEngine {
   constructor(params = {}) {
     this.params = Object.assign(
       {
-        floorHeight: 0.05,
+        floorHeight: 0.0,
         ceilingHeight: 5.0,
-        minRPM: 0,
-        idleRPM: 1800,
+        minRPM: 3000,
+        idleRPM: 3000,
         maxRPM: 25000,
         kp_att: 8.0,
         kd_att: 2.5,
@@ -42,16 +42,19 @@ export class DronePhysicsEngine {
     this.params.hoverCommand = (hoverRPM - (this.params.idleRPM || 0)) / (this.params.maxRPM - (this.params.idleRPM || 0));
 
     this.motor = new MotorModel({ rpmMax: this.params.maxRPM, timeConstant: this.params.motorTimeConstant });
+    const baseOrientation = new THREE.Quaternion();
     this.state = {
       position: new THREE.Vector3(),
       velocity: new THREE.Vector3(),
-      orientation: new THREE.Quaternion(),
-      orientationQuat: new THREE.Quaternion(),
+      orientation: baseOrientation,
+      quaternion: baseOrientation,
+      orientationQuat: baseOrientation,
       angularVelocity: new THREE.Vector3(),
       motorRPM: [0, 0, 0, 0],
       totalThrust: 0,
     };
     this.desiredOrientationQuat = new THREE.Quaternion();
+    this.time = 0;
     this.reset();
   }
 
@@ -60,8 +63,9 @@ export class DronePhysicsEngine {
     startPos.y = Math.max(startPos.y, (this.params.floorHeight || 0) + 0.2);
     this.state.position.copy(startPos);
     this.state.velocity.copy(state.velocity || new THREE.Vector3());
-    const q = state.orientation || state.orientationQuat || new THREE.Quaternion();
+    const q = (state.orientation || state.orientationQuat || state.quaternion || new THREE.Quaternion()).clone();
     this.state.orientation.copy(q);
+    this.state.quaternion.copy(q);
     this.state.orientationQuat.copy(q);
     this.state.angularVelocity.copy(state.angularVelocity || new THREE.Vector3());
     this.motor.omegas = [0, 0, 0, 0];
@@ -69,6 +73,7 @@ export class DronePhysicsEngine {
     this.state.motorRPM = [0, 0, 0, 0];
     this.state.totalThrust = 0;
     this.desiredOrientationQuat.identity();
+    this.time = 0;
   }
 
   applyMotorCommands(u1, u2, u3, u4) {
@@ -96,6 +101,7 @@ export class DronePhysicsEngine {
 
   step(dt) {
     if (dt <= 0) return;
+    this.time += dt;
     const omegas = this.motor.step(dt); // rpm
     this.state.motorRPM = omegas.slice();
     const thrusts = omegas.map((w) => this.params.kF * w * w * (this.params.motorForceScale || 1));
@@ -104,15 +110,17 @@ export class DronePhysicsEngine {
     const rotationMatrix = new THREE.Matrix3().setFromMatrix4(
       new THREE.Matrix4().makeRotationFromQuaternion(this.state.orientation),
     );
-    const thrustWorld = new THREE.Vector3(0, 0, totalThrust).applyMatrix3(rotationMatrix);
+    const hover = this.params.mass * 9.81;
+    const baseThrust = Math.max(0.95 * hover, totalThrust);
+    const thrustWorld = new THREE.Vector3(0, 0, baseThrust).applyMatrix3(rotationMatrix);
 
     if (this.state.position.y < 0.25) {
       const h = Math.max(this.state.position.y, 0.01);
       const groundEffect = 0.2 / (h * h);
       thrustWorld.y += groundEffect;
-      this.state.totalThrust = totalThrust + groundEffect;
+      this.state.totalThrust = baseThrust + groundEffect;
     } else {
-      this.state.totalThrust = totalThrust;
+      this.state.totalThrust = baseThrust;
     }
 
     const drag = this.state.velocity.clone().multiplyScalar(-this.params.dragLinear);
@@ -121,14 +129,16 @@ export class DronePhysicsEngine {
     this.state.velocity.add(acc.multiplyScalar(dt));
     this.state.position.add(this.state.velocity.clone().multiplyScalar(dt));
 
-    if (this.state.position.y < this.params.floorHeight) {
-      this.state.position.y = this.params.floorHeight;
-      if (this.state.velocity.y < 0) this.state.velocity.y = 0;
-    }
+    if (this.time > 0.3) {
+      if (this.state.position.y < this.params.floorHeight) {
+        this.state.position.y = this.params.floorHeight;
+        if (this.state.velocity.y < 0) this.state.velocity.y = 0;
+      }
 
-    if (this.state.position.y < 0.05) {
-      this.state.position.y = 0.05;
-      this.state.velocity.y = Math.max(0, this.state.velocity.y);
+      if (this.state.position.y < 0.05) {
+        this.state.position.y = 0.05;
+        this.state.velocity.y = Math.max(0, this.state.velocity.y);
+      }
     }
     if (this.state.position.y > this.params.ceilingHeight) {
       this.state.position.y = this.params.ceilingHeight;
@@ -186,6 +196,7 @@ export class DronePhysicsEngine {
     this.state.orientation.z += qDot.z * dt;
     this.state.orientation.w += qDot.w * dt;
     this.state.orientation.normalize();
+    this.state.quaternion.copy(this.state.orientation);
     this.state.orientationQuat.copy(this.state.orientation);
   }
 

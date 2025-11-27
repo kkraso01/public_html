@@ -184,16 +184,16 @@
   <!-- Hero Header -->
   <section class="py-20 px-6 text-center relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Advanced Control Systems • Real-time Physics • LQR Feedback</p>
-      <h2 class="text-4xl font-bold">Drone Stability Demo</h2>
+      <p class="mission-brief text-indigo-300/80">Advanced Control Systems • Real-time Physics • Hover Control</p>
+      <h2 class="text-4xl font-bold">Stationary Hover Demo</h2>
       <p class="text-gray-400 max-w-3xl">
-        Geometric controller with real-time gain tuning for quadrotor attitude and position control. Adjust PID-like gains interactively and watch the drone stabilize in real-time.
+        Startup hover stability investigation with real-time gain tuning for quadrotor attitude and position control. Adjust PID-like gains interactively and watch the craft hold a 0.6 m hover.
       </p>
     </div>
   </section>
 
   <!-- Demo Section -->
-  <section id="drone-stability" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <section id="drone-stationary" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
     <!-- Canvas Container -->
     <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg mb-8">
       <div class="flex items-center gap-3">
@@ -214,8 +214,8 @@
         <span class="cue-badge">Adjust gains in real-time</span>
       </div>
       <div>
-        <h3 class="text-2xl font-semibold">Stability Gains</h3>
-        <p class="text-gray-400">Use the sliders to tune position and attitude controller parameters. The drone targets position (0, 1.5, 0).</p>
+        <h3 class="text-2xl font-semibold">Hover Gains</h3>
+        <p class="text-gray-400">Use the sliders to tune position and attitude controller parameters. The drone targets position (0, 0.6, 0).</p>
       </div>
       <!-- Control Panel will be injected here by drone demo -->
       <div id="control-panel-container"></div>
