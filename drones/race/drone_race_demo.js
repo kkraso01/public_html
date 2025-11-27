@@ -43,19 +43,28 @@ class DroneRaceDemo {
     this.lastFrame = null;
     this.accumulator = 0;
     this._frameReq = null;
+    this.debugEnabled = false;
+    this.cameraMode = 'chase';
 
     this._initScene();
     this._initDrone();
     this._initTrack();
     this._initHUD();
+    this._bindInputs();
     this.restart();
   }
 
   _initScene() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a1020);
-    this.camera = new THREE.PerspectiveCamera(60, this.options.width / this.options.height, 0.1, 500);
-    this.camera.position.set(0, 2.5, 8);
+    const aspect = this.options.width / this.options.height;
+    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
+    this.chaseCamera.position.set(0, 2.5, 8);
+    this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
+    this.overheadCamera.position.set(0, 25, 0);
+    this.overheadCamera.up.set(0, 0, -1);
+    this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
+    this.activeCamera = this.cameraMode === 'overhead' ? this.overheadCamera : this.chaseCamera;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: !!this.options.highQuality });
     this.renderer.setSize(this.options.width, this.options.height);
@@ -71,11 +80,11 @@ class DroneRaceDemo {
     dir.castShadow = !!this.options.shadows;
     this.scene.add(ambient, hemi, dir);
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(120, 120),
-      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6, metalness: 0.05 }),
-    );
+    const floorGeo = new THREE.PlaneGeometry(200, 200);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
     floor.receiveShadow = true;
     this.scene.add(floor);
 
@@ -131,6 +140,43 @@ class DroneRaceDemo {
 
   _initHUD() {
     this.overlay = createRaceHUD(this.container);
+    this.cameraLabel = document.createElement('div');
+    this.cameraLabel.style.cssText = 'font-size:12px; color:#cbd5f5; margin-top:4px;';
+    this.cameraLabel.textContent = `Camera: ${this.cameraMode.toUpperCase()}`;
+    this.overlay.appendChild(this.cameraLabel);
+
+    this.debugPanel = document.createElement('div');
+    this.debugPanel.style.cssText =
+      'position:absolute; top:8px; right:8px; background:rgba(6,8,18,0.85); color:#cbd5f5; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(14,165,233,0.45); border-radius:8px; z-index:6; display:none; min-width:220px;';
+    this.debugPanel.innerHTML = `
+      <div style="font-size:12px; color:#7dd3fc; margin-bottom:4px;">Debug</div>
+      <div id="dbgAlt" style="font-size:12px;">Alt: 0.00 m</div>
+      <div id="dbgVel" style="font-size:12px;">Vel: 0.00 m/s (0,0,0)</div>
+      <div id="dbgRPM" style="font-size:12px;">RPM: 0 | 0 | 0 | 0</div>
+      <div id="dbgThrust" style="font-size:12px;">Thrust: 0.0 N</div>
+      <div id="dbgAtt" style="font-size:12px;">R/P/Y: 0 / 0 / 0</div>
+      <div id="dbgAttErr" style="font-size:12px;">Att Err: 0.00</div>
+    `;
+    this.container.appendChild(this.debugPanel);
+  }
+
+  _bindInputs() {
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'd' || e.key === 'D') {
+        this.debugEnabled = !this.debugEnabled;
+        if (this.debugPanel) this.debugPanel.style.display = this.debugEnabled ? 'block' : 'none';
+      }
+      if (e.key === 'c' || e.key === 'C') {
+        if (this.cameraMode === 'chase') {
+          this.cameraMode = 'overhead';
+          this.activeCamera = this.overheadCamera;
+        } else {
+          this.cameraMode = 'chase';
+          this.activeCamera = this.chaseCamera;
+        }
+        if (this.cameraLabel) this.cameraLabel.textContent = `Camera: ${this.cameraMode.toUpperCase()}`;
+      }
+    });
   }
 
   restart() {
@@ -231,8 +277,6 @@ class DroneRaceDemo {
   _computeMotorCommands(target) {
     const kp = 4.5;
     const kd = 3.0;
-    const kR = 4.0;
-    const kOmega = 0.18;
     const params = this.drone.params;
 
     const posErr = target.position.clone().sub(this.drone.state.position);
@@ -246,12 +290,16 @@ class DroneRaceDemo {
     const thrustMag = clamp(thrustVector.length(), 0, params.mass * 30);
 
     const desiredOrientation = this._desiredOrientationFromThrust(thrustVector, target.yaw);
-    const qError = desiredOrientation.clone().multiply(this.drone.state.orientation.clone().invert());
-    const axis = new THREE.Vector3(qError.x, qError.y, qError.z);
-    const angle = 2 * Math.atan2(axis.length(), qError.w);
-    const attError = axis.length() > 1e-6 ? axis.normalize().multiplyScalar(angle) : new THREE.Vector3();
+    this.drone.desiredOrientationQuat.copy(desiredOrientation);
 
-    const torque = attError.multiplyScalar(kR).add(this.drone.state.angularVelocity.clone().multiplyScalar(-kOmega));
+    const kp_att = params.kp_att;
+    const kd_att = params.kd_att;
+
+    const currentQuat = this.drone.state.orientationQuat || this.drone.state.orientation;
+    const qError = desiredOrientation.clone().multiply(currentQuat.clone().invert());
+    const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
+
+    const torque = errorAxis.multiplyScalar(kp_att).add(this.drone.state.angularVelocity.clone().multiplyScalar(-kd_att));
 
     const kYaw = params.kM / Math.max(params.kF, 1e-9);
     const L = params.armLength;
@@ -262,13 +310,24 @@ class DroneRaceDemo {
 
     const thrusts = [m0, m1, m2, m3].map((m) => clamp(m, 0, thrustMag));
     const rpms = thrusts.map((t) => Math.sqrt(Math.max(t, 0) / Math.max(params.kF, 1e-9)));
+    const commands = rpms.map((rpm) => {
+      const clamped = clamp(rpm, params.minRPM, params.maxRPM);
+      return THREE.MathUtils.clamp((clamped - params.minRPM) / (params.maxRPM - params.minRPM), 0, 1);
+    });
 
-    const hoverRPM = Math.sqrt((params.mass * 9.81) / (4 * params.kF));
-    return rpms.map((r) => clamp(r, 0, params.rpmMax) || hoverRPM * 0.9);
+    return commands;
   }
 
   _render() {
-    this.camera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.2, 0)));
+    if (this.cameraMode === 'chase') {
+      const desiredPos = this.drone.state.position.clone().add(new THREE.Vector3(0, 1.5, 4));
+      this.chaseCamera.position.lerp(desiredPos, 0.08);
+      this.chaseCamera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.2, 0)));
+      this.activeCamera = this.chaseCamera;
+    } else {
+      this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
+      this.activeCamera = this.overheadCamera;
+    }
     this.droneMesh.position.copy(this.drone.state.position);
     this.droneMesh.quaternion.copy(this.drone.state.orientation);
 
@@ -276,6 +335,28 @@ class DroneRaceDemo {
     points.setXYZ(0, this.drone.state.position.x, this.drone.state.position.y, this.drone.state.position.z);
     points.setXYZ(1, this.drone.state.position.x, this.drone.state.position.y, this.drone.state.position.z);
     points.needsUpdate = true;
-    this.renderer.render(this.scene, this.camera);
+
+    this._updateDebugPanel();
+    this.renderer.render(this.scene, this.activeCamera || this.chaseCamera);
+  }
+
+  _updateDebugPanel() {
+    if (!this.debugEnabled || !this.debugPanel) return;
+    const st = this.drone.state;
+    const velMag = st.velocity.length();
+    const rpm = st.motorRPM || [0, 0, 0, 0];
+    const euler = new THREE.Euler().setFromQuaternion(st.orientationQuat || st.orientation);
+    const desired = this.drone.desiredOrientationQuat || new THREE.Quaternion();
+    const qErr = desired.clone().multiply((st.orientationQuat || st.orientation).clone().invert());
+    const attErrMag = 2 * new THREE.Vector3(qErr.x, qErr.y, qErr.z).length();
+
+    this.debugPanel.querySelector('#dbgAlt').textContent = `Alt: ${st.position.y.toFixed(2)} m`;
+    this.debugPanel.querySelector('#dbgVel').textContent =
+      `Vel: ${velMag.toFixed(2)} m/s (${st.velocity.x.toFixed(2)}, ${st.velocity.y.toFixed(2)}, ${st.velocity.z.toFixed(2)})`;
+    this.debugPanel.querySelector('#dbgRPM').textContent = `RPM: ${rpm.map((r) => r.toFixed(0)).join(' | ')}`;
+    this.debugPanel.querySelector('#dbgThrust').textContent = `Thrust: ${st.totalThrust.toFixed(2)} N`;
+    this.debugPanel.querySelector('#dbgAtt').textContent =
+      `R/P/Y: ${(THREE.MathUtils.radToDeg(euler.x)).toFixed(1)} / ${(THREE.MathUtils.radToDeg(euler.y)).toFixed(1)} / ${(THREE.MathUtils.radToDeg(euler.z)).toFixed(1)}`;
+    this.debugPanel.querySelector('#dbgAttErr').textContent = `Att Err: ${attErrMag.toFixed(3)}`;
   }
 }

@@ -14,28 +14,65 @@ function quatMultiply(q, r) {
 
 export class DronePhysicsEngine {
   constructor(params = {}) {
-    this.params = Object.assign({}, CRAZYFLIE_PARAMS, params);
-    this.motor = new MotorModel({ rpmMax: this.params.rpmMax, timeConstant: this.params.motorTimeConstant });
+    this.params = Object.assign(
+      {
+        floorHeight: 0.05,
+        ceilingHeight: 5.0,
+        minRPM: 3000,
+        maxRPM: 25000,
+        kp_att: 8.0,
+        kd_att: 2.5,
+      },
+      CRAZYFLIE_PARAMS,
+      params,
+    );
+
+    this.params.maxRPM = this.params.maxRPM || this.params.rpmMax || 25000;
+
+    // retune kF so that a 0.5 command (hover) produces approximately mass * g thrust
+    const yawRatio = this.params.kM / Math.max(this.params.kF, 1e-9);
+    const hoverRPM = this.params.minRPM + 0.5 * (this.params.maxRPM - this.params.minRPM);
+    const perMotorHover = (this.params.mass * 9.81) / 4;
+    const tunedKF = perMotorHover / (hoverRPM * hoverRPM);
+    this.params.kF = tunedKF;
+    this.params.kM = tunedKF * yawRatio;
+
+    this.motor = new MotorModel({ rpmMax: this.params.maxRPM, timeConstant: this.params.motorTimeConstant });
     this.state = {
       position: new THREE.Vector3(),
       velocity: new THREE.Vector3(),
       orientation: new THREE.Quaternion(),
+      orientationQuat: new THREE.Quaternion(),
       angularVelocity: new THREE.Vector3(),
+      motorRPM: [0, 0, 0, 0],
+      totalThrust: 0,
     };
+    this.desiredOrientationQuat = new THREE.Quaternion();
     this.reset();
   }
 
   reset(state = {}) {
     this.state.position.copy(state.position || new THREE.Vector3());
     this.state.velocity.copy(state.velocity || new THREE.Vector3());
-    this.state.orientation.copy(state.orientation || new THREE.Quaternion());
+    const q = state.orientation || state.orientationQuat || new THREE.Quaternion();
+    this.state.orientation.copy(q);
+    this.state.orientationQuat.copy(q);
     this.state.angularVelocity.copy(state.angularVelocity || new THREE.Vector3());
     this.motor.omegas = [0, 0, 0, 0];
     this.motor.commands = [0, 0, 0, 0];
+    this.state.motorRPM = [0, 0, 0, 0];
+    this.state.totalThrust = 0;
+    this.desiredOrientationQuat.identity();
   }
 
   applyMotorCommands(u1, u2, u3, u4) {
-    this.motor.setCommands(u1, u2, u3, u4);
+    const commands = [u1, u2, u3, u4].map((command) => {
+      const rpmCommand = THREE.MathUtils.clamp(command, 0, 1);
+      let rpm = this.params.minRPM + rpmCommand * (this.params.maxRPM - this.params.minRPM);
+      rpm = Math.max(this.params.minRPM, Math.min(rpm, this.params.maxRPM));
+      return rpm;
+    });
+    this.motor.setCommands(commands[0], commands[1], commands[2], commands[3]);
   }
 
   getState() {
@@ -43,27 +80,56 @@ export class DronePhysicsEngine {
       position: this.state.position.clone(),
       velocity: this.state.velocity.clone(),
       orientation: this.state.orientation.clone(),
+      orientationQuat: this.state.orientationQuat.clone(),
       angularVelocity: this.state.angularVelocity.clone(),
       motorRPM: this.motor.omegas.slice(),
+      totalThrust: this.state.totalThrust,
     };
   }
 
   step(dt) {
     if (dt <= 0) return;
     const omegas = this.motor.step(dt); // rpm
+    this.state.motorRPM = omegas.slice();
     const thrusts = omegas.map((w) => this.params.kF * w * w);
     const totalThrust = thrusts.reduce((a, b) => a + b, 0);
-
+    
     const rotationMatrix = new THREE.Matrix3().setFromMatrix4(
       new THREE.Matrix4().makeRotationFromQuaternion(this.state.orientation),
     );
     const thrustWorld = new THREE.Vector3(0, 0, totalThrust).applyMatrix3(rotationMatrix);
+
+    if (this.state.position.y < 0.25) {
+      const h = Math.max(this.state.position.y, 0.01);
+      const groundEffect = 0.2 / (h * h);
+      thrustWorld.y += groundEffect;
+      this.state.totalThrust = totalThrust + groundEffect;
+    } else {
+      this.state.totalThrust = totalThrust;
+    }
 
     const drag = this.state.velocity.clone().multiplyScalar(-this.params.dragLinear);
     const acc = thrustWorld.clone().multiplyScalar(1 / this.params.mass).add(GRAVITY).add(drag);
 
     this.state.velocity.add(acc.multiplyScalar(dt));
     this.state.position.add(this.state.velocity.clone().multiplyScalar(dt));
+
+    if (this.state.position.y < this.params.floorHeight) {
+      this.state.position.y = this.params.floorHeight;
+      if (this.state.velocity.y < 0) this.state.velocity.y = 0;
+    }
+    if (this.state.position.y > this.params.ceilingHeight) {
+      this.state.position.y = this.params.ceilingHeight;
+      if (this.state.velocity.y > 0) this.state.velocity.y = 0;
+    }
+
+    const worldMinX = -20;
+    const worldMaxX = 20;
+    const worldMinZ = -20;
+    const worldMaxZ = 20;
+
+    this.state.position.x = Math.max(worldMinX, Math.min(worldMaxX, this.state.position.x));
+    this.state.position.z = Math.max(worldMinZ, Math.min(worldMaxZ, this.state.position.z));
 
     const tau = this._torqueFromThrusts(thrusts);
     const inertia = this.params.inertia;
@@ -94,6 +160,7 @@ export class DronePhysicsEngine {
     this.state.orientation.z += qDot.z * dt;
     this.state.orientation.w += qDot.w * dt;
     this.state.orientation.normalize();
+    this.state.orientationQuat.copy(this.state.orientation);
   }
 
   _torqueFromThrusts(thrusts) {
