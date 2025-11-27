@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drone Stability Demo | Konstantin Krasovitskiy</title>
+
+  <!-- Tailwind CSS - Production via jsDelivr Play CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Custom styles for theme consistency -->
+  <style>
+    /* Fullscreen canvas for NN / constellation background */
+    #nn-bg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #020617 100%);
+      pointer-events: none;
+    }
+
+    /* Slight glass effect for hero buttons when over the animated background */
+    .glass-btn {
+      backdrop-filter: blur(8px);
+      background-color: rgba(79, 70, 229, 0.85);
+    }
+
+    .glass-outline {
+      backdrop-filter: blur(8px);
+      background-color: rgba(15, 23, 42, 0.7);
+    }
+
+    /* Optional: subtle fade-in for hero */
+    .fade-in {
+      animation: fadeIn 1.2s ease-out forwards;
+      opacity: 0;
+    }
+
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* HUD side navigation */
+    .hud-nav {
+      opacity: 0.25;
+      transition: opacity 0.4s ease;
+    }
+
+    .hud-nav:hover,
+    .hud-nav:focus-within {
+      opacity: 1;
+    }
+
+    .hud-nav .nav-link {
+      backdrop-filter: blur(10px);
+      background: linear-gradient(120deg, rgba(15, 23, 42, 0.65), rgba(51, 65, 85, 0.4));
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .hud-nav .nav-link:hover {
+      border-color: rgba(129, 140, 248, 0.9);
+      transform: translateX(2px);
+    }
+
+    .hud-nav .nav-link.active {
+      border-color: rgba(129, 140, 248, 1);
+      box-shadow: 0 15px 40px rgba(99, 102, 241, 0.35);
+    }
+
+    .hud-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(79, 70, 229, 0.12);
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .mission-brief {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .cue-badge {
+      font-size: 11px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.14);
+      border: 1px dashed rgba(148, 163, 184, 0.5);
+      padding: 6px 10px;
+      transition: opacity 0.3s ease;
+    }
+
+    .metric-flash {
+      animation: flash 0.6s ease;
+    }
+
+    @keyframes flash {
+      0% {
+        color: #a5b4fc;
+      }
+
+      50% {
+        color: #22c55e;
+      }
+
+      100% {
+        color: #e5e7eb;
+      }
+    }
+
+    /* Demo Container */
+    .demo-section {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px 20px;
+      position: relative;
+    }
+
+    .demo-content {
+      width: 100%;
+      max-width: 1200px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      align-items: center;
+    }
+
+    .demo-canvas-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: rgba(12, 17, 28, 0.6);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .demo-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .demo-heading {
+      margin: 0;
+      color: #a5b4fc;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .demo-subtitle {
+      color: #cbd5e1;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .demo-cue {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .demo-cue span {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #818cf8;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .demo-content {
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+
+      .demo-heading {
+        font-size: 24px;
+      }
+
+      .demo-canvas-container {
+        aspect-ratio: 4 / 3;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-gray-950 text-gray-100 font-sans scroll-smooth">
+
+  <!-- Neural Network / Constellation Background -->
+  <canvas id="nn-bg"></canvas>
+
+  <!-- Side Navigation (Command Links) -->
+  <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
+    <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Navigation</div>
+    <a href="home.html" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Back to Portfolio
+      <span class="text-[11px] text-indigo-300/80 ml-2">↵</span></a>
+  </nav>
+
+  <!-- Hero Header -->
+  <section class="pt-20 pb-12 px-6 text-center">
+    <div class="max-w-3xl mx-auto">
+      <p class="text-xs tracking-[0.3em] uppercase text-indigo-300 mb-4">
+        Advanced Control Systems • Real-time Physics • LQR Feedback
+      </p>
+      <h1 class="text-4xl sm:text-5xl font-bold mb-4 text-gray-100">
+        Drone Stability Demo
+      </h1>
+      <p class="text-lg md:text-xl text-gray-300">
+        Geometric controller with real-time gain tuning for quadrotor attitude and position control
+      </p>
+    </div>
+  </section>
+
+  <!-- Demo Section -->
+  <section class="demo-section">
+    <div class="demo-content">
+      <!-- Canvas Container -->
+      <div class="demo-canvas-container" id="drone-container"></div>
+
+      <!-- Controls Panel -->
+      <div class="demo-controls">
+        <div>
+          <h2 class="demo-heading">Controller Tuning</h2>
+          <p class="demo-subtitle">
+            Adjust gains in real-time to tune the quadrotor's response dynamics. Watch how position and attitude control interact.
+          </p>
+          <div class="demo-cue">
+            <span>Interactive</span>
+          </div>
+        </div>
+
+        <!-- Control Panel will be injected here by drone demo -->
+        <div id="control-panel-container"></div>
+
+        <!-- Info Box -->
+        <div class="mt-8 p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-lg">
+          <p class="text-sm text-indigo-300 font-mono">
+            <span style="color: #a5b4fc;">⌘ tip:</span> Use the sliders below to tune controller gains. The drone will stabilize at the target position (0, 1.5, 0).
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <section class="py-12 px-6 text-center border-t border-gray-800/50">
+    <p class="text-gray-400 text-sm">
+      Physics simulation at 240 Hz • Three.js rendering • Geometric Control Theory
+    </p>
+    <p class="text-gray-500 text-xs mt-2">
+      <a href="home.html" class="text-indigo-400 hover:text-indigo-300 transition">← Back to Portfolio</a>
+    </p>
+  </section>
+
+  <!-- Background Animation Script (same as home.html) -->
+  <script>
+    // Simple NN background animation
+    const nnCanvas = document.getElementById('nn-bg');
+    const nnCtx = nnCanvas.getContext('2d');
+
+    function resizeNNCanvas() {
+      nnCanvas.width = window.innerWidth;
+      nnCanvas.height = window.innerHeight;
+    }
+    resizeNNCanvas();
+    window.addEventListener('resize', resizeNNCanvas);
+
+    let particles = [];
+    class Particle {
+      constructor() {
+        this.x = Math.random() * nnCanvas.width;
+        this.y = Math.random() * nnCanvas.height;
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.radius = Math.random() * 1.5;
+        this.opacity = Math.random() * 0.5 + 0.3;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0 || this.x > nnCanvas.width) this.vx *= -1;
+        if (this.y < 0 || this.y > nnCanvas.height) this.vy *= -1;
+      }
+
+      draw() {
+        nnCtx.fillStyle = `rgba(129, 140, 248, ${this.opacity})`;
+        nnCtx.beginPath();
+        nnCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        nnCtx.fill();
+      }
+    }
+
+    for (let i = 0; i < 80; i++) {
+      particles.push(new Particle());
+    }
+
+    function animateNN() {
+      nnCtx.clearRect(0, 0, nnCanvas.width, nnCanvas.height);
+      particles.forEach((p) => {
+        p.update();
+        p.draw();
+      });
+      requestAnimationFrame(animateNN);
+    }
+    animateNN();
+  </script>
+
+  <!-- Drone Stability Demo Import and Initialization -->
+  <script type="module">
+    import { initDroneStabilityDemo } from './drones/stability/drone_stability_demo.js';
+
+    const container = document.getElementById('drone-container');
+    const demoInstance = initDroneStabilityDemo(container, {
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+
+    // Handle visibility changes
+    document.addEventListener('visibilitychange', () => {
+      demoInstance.setPausedFromVisibility(!document.hidden);
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      demoInstance.restart();
+    });
+  </script>
+
+</body>
+
+</html>
