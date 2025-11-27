@@ -68,6 +68,7 @@ export class Quadrotor {
       this.ammoBody.setWorldTransform(transform);
       this.ammoBody.setLinearVelocity(new Ammo.btVector3(0, 0, 0));
       this.ammoBody.setAngularVelocity(new Ammo.btVector3(0, 0, 0));
+      this.ammoBody.activate();
     }
   }
 
@@ -87,6 +88,34 @@ export class Quadrotor {
     body.setActivationState(4); // disable deactivation
     this.params.ammoWorld.addRigidBody(body);
     this.ammoBody = body;
+  }
+
+  applyControlToBody(controlInput) {
+    if (!this.ammoBody) return;
+    const thrust = clamp(controlInput.thrust ?? 0, 0, this.params.maxThrust);
+    const torque = controlInput.torque || new THREE.Vector3();
+
+    const transform = this.ammoBody.getWorldTransform();
+    const rot = transform.getRotation();
+    const quat = new THREE.Quaternion(rot.x(), rot.y(), rot.z(), rot.w());
+    const thrustWorld = new THREE.Vector3(0, 0, thrust).applyQuaternion(quat);
+
+    this.ammoBody.activate();
+    this.ammoBody.applyCentralForce(ammoVec3(thrustWorld));
+    this.ammoBody.applyTorque(ammoVec3(torque));
+  }
+
+  syncFromAmmoBody() {
+    if (!this.ammoBody) return;
+    const transform = this.ammoBody.getWorldTransform();
+    const origin = transform.getOrigin();
+    const rot = transform.getRotation();
+    this.state.position.set(origin.x(), origin.y(), origin.z());
+    this.state.quaternion.set(rot.x(), rot.y(), rot.z(), rot.w());
+    const linVel = this.ammoBody.getLinearVelocity();
+    const angVel = this.ammoBody.getAngularVelocity();
+    this.state.velocity.set(linVel.x(), linVel.y(), linVel.z());
+    this.state.omega.set(angVel.x(), angVel.y(), angVel.z());
   }
 
   _motorMix(controlInput) {
