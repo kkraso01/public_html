@@ -349,6 +349,19 @@
   <!-- Neural Network / Constellation Background -->
   <canvas id="nn-bg"></canvas>
 
+  <!-- System Dashboard Overlay (Disabled) -->
+  <!-- <div id="sys-dashboard" class="fixed top-4 right-4
+      bg-gray-900/60 backdrop-blur-lg px-6 py-4 rounded-2xl border border-gray-700 shadow-lg z-50">
+    <h3 class="text-indigo-300 text-sm mb-2 tracking-widest">SYSTEM STATUS</h3>
+    <div class="space-y-1 text-gray-200 text-xs font-mono">
+      <p>Node: <span id="hud-node" class="text-green-400">ACTIVE</span></p>
+      <p>Latency: <span id="hud-lat">0</span>ms</p>
+      <p>Token/s: <span id="hud-tps">0</span></p>
+      <p>GPU Load: <span id="hud-gpu">0</span>%</p>
+      <p>Vector Ops: <span id="hud-vops">0</span>/s</p>
+    </div>
+  </div> -->
+
   <!-- Side Navigation (Command Links) -->
   <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
     <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Command</div>
@@ -466,6 +479,10 @@
         <canvas id="attentionCanvas"
           class="w-full h-[300px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
       </article>
+
+      <!-- Hidden 2D & 3D System Visualizers (for plugin system - Disabled) -->
+      <!-- <canvas id="viz2d" style="display:none;"></canvas>
+      <canvas id="viz3d" style="display:none;"></canvas> -->
     </div>
   </section>
 
@@ -709,16 +726,78 @@
       <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
         <div class="flex items-center gap-3">
           <span class="hud-chip">Autonomy Stack</span>
-          <span class="cue-badge">Spline planner · VIO drift · PID control</span>
+          <span class="cue-badge opacity-60">Spline planner · VIO drift · PID control</span>
         </div>
         <div class="space-y-3">
           <h3 class="text-2xl font-semibold">Research-Flavored Controls</h3>
           <p class="text-gray-400">Catmull–Rom waypoints feed a minimum-snap-inspired trajectory; the controller follows using VIO-bias estimates, gate crossing detection, and lap timing.</p>
         </div>
-        <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside">
+        
+        <div class="flex flex-col gap-3 pt-4 border-t border-gray-700">
+          <div class="flex gap-2">
+            <button id="drone-race-toggle" class="flex-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors">Pause</button>
+            <button id="drone-race-restart" class="flex-1 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-semibold text-sm transition-colors border border-gray-700">Restart</button>
+          </div>
+          
+          <label class="text-sm text-gray-300">
+            <span class="block text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-2">Playback Speed</span>
+            <input id="drone-race-speed-slider" type="range" min="0.5" max="2" value="1" step="0.1" class="w-full accent-indigo-500">
+          </label>
+        </div>
+
+        <div class="pt-4 border-t border-gray-700">
+          <h4 class="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-3">🎛️ Controller Tuning</h4>
+          <div class="space-y-3">
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Pos P:</span>
+              <input id="drone-pid-posp" type="range" min="0.5" max="5" value="2.5" step="0.1" class="flex-1 accent-violet-500">
+              <span id="drone-posp-val" class="min-w-fit text-right font-mono text-indigo-300 font-semibold">2.50</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Vel P:</span>
+              <input id="drone-pid-velp" type="range" min="0.5" max="5" value="2.2" step="0.1" class="flex-1 accent-violet-500">
+              <span id="drone-velp-val" class="min-w-fit text-right font-mono text-indigo-300 font-semibold">2.20</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Yaw P:</span>
+              <input id="drone-pid-yawp" type="range" min="0.5" max="5" value="2.5" step="0.1" class="flex-1 accent-violet-500">
+              <span id="drone-yawp-val" class="min-w-fit text-right font-mono text-indigo-300 font-semibold">2.50</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Alt P:</span>
+              <input id="drone-pid-altp" type="range" min="0.5" max="6" value="3.0" step="0.1" class="flex-1 accent-violet-500">
+              <span id="drone-altp-val" class="min-w-fit text-right font-mono text-indigo-300 font-semibold">3.00</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-gray-700">
+          <h4 class="text-xs font-semibold text-emerald-300 uppercase tracking-wide mb-3">⚙️ Dynamics</h4>
+          <div class="space-y-3">
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Max Accel:</span>
+              <input id="drone-maxaccel" type="range" min="5" max="30" value="18" step="0.5" class="flex-1 accent-emerald-500">
+              <span id="drone-maxaccel-val" class="min-w-fit text-right font-mono text-emerald-300 font-semibold">18.0</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Max Speed:</span>
+              <input id="drone-maxspeed" type="range" min="5" max="20" value="12" step="0.5" class="flex-1 accent-emerald-500">
+              <span id="drone-maxspeed-val" class="min-w-fit text-right font-mono text-emerald-300 font-semibold">12.0</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="min-w-fit">Damping:</span>
+              <input id="drone-damping" type="range" min="0.90" max="1.0" value="0.98" step="0.01" class="flex-1 accent-amber-500">
+              <span id="drone-damping-val" class="min-w-fit text-right font-mono text-amber-300 font-semibold">0.98</span>
+            </label>
+          </div>
+        </div>
+
+        <button id="drone-pid-reset" class="w-full mt-4 px-3 py-2 rounded-lg bg-gradient-to-r from-violet-900/40 to-indigo-900/40 hover:from-violet-900/60 hover:to-indigo-900/60 border border-violet-700/50 text-violet-300 font-semibold text-xs uppercase tracking-wide transition-colors">↻ Reset Defaults</button>
+        
+        <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside pt-4 border-t border-gray-700">
           <li>Pause/resume + visibility-aware hooks</li>
-          <li>HUD with lap timing, gate count, speed, and VIO error</li>
-          <li>Speed slider and restart controls inside the overlay</li>
+          <li>Live gate crossing detection and timing</li>
+          <li>Tune controller gains and vehicle dynamics in real-time</li>
         </ul>
       </div>
 
@@ -970,9 +1049,9 @@
   <script src="background.js"></script>
   <script src="rag_pipeline.js"></script>
   <script src="system_status.js"></script>
-  <script src="system_visualizer_2d.js"></script>
+  <!-- <script src="system_visualizer_2d.js"></script>
   <script src="system_visualizer_3d.js"></script>
-  <script src="system_dashboard.js"></script>
+  <script src="system_dashboard.js"></script> -->
   <script src="system_plugins.js"></script>
   <script src="system_orchestrator.js"></script>
   <script src="llm_viz.js"></script>

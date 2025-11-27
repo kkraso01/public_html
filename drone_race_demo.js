@@ -112,15 +112,12 @@ class DroneRaceDemo {
     style.id = 'drone-race-demo-styles';
     style.textContent = `
       .drone-race-container { position: relative; overflow: hidden; background: linear-gradient(180deg, #0f172a 0%, #0b1020 100%); }
-      .drone-race-overlay { position: absolute; top: 10px; left: 10px; padding: 10px 12px; background: rgba(10, 14, 26, 0.65); color: #e5e7eb; font-family: 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
-      .drone-race-overlay h4 { margin: 0 0 6px 0; font-size: 13px; letter-spacing: 0.04em; color: #a5b4fc; }
-      .drone-race-overlay .stat { font-size: 12px; line-height: 1.4; }
-      .drone-race-controls { position: absolute; bottom: 12px; left: 10px; padding: 10px 12px; background: rgba(10, 14, 26, 0.65); color: #e5e7eb; font-family: 'Inter', system-ui, -apple-system, sans-serif; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 8px; min-width: 200px; }
-      .drone-race-controls button { cursor: pointer; padding: 8px 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: linear-gradient(135deg, rgba(79,70,229,0.8), rgba(59,130,246,0.75)); color: #fff; font-weight: 600; letter-spacing: 0.01em; transition: transform 0.08s ease, box-shadow 0.12s ease; }
-      .drone-race-controls button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(59,130,246,0.4); }
-      .drone-race-controls button:active { transform: translateY(0); box-shadow: none; }
-      .drone-race-controls label { font-size: 12px; color: #cbd5e1; display: flex; flex-direction: column; gap: 4px; }
-      .drone-race-controls input[type=range] { accent-color: #8b5cf6; }
+      
+      .drone-race-overlay { position: absolute; top: 10px; left: 10px; padding: 10px 12px; background: rgba(10, 14, 26, 0.75); backdrop-filter: blur(8px); color: #e5e7eb; font-family: 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; border: 1px solid rgba(129, 140, 248, 0.25); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); max-width: 140px; }
+      
+      .drone-race-overlay h4 { margin: 0 0 6px 0; font-size: 13px; letter-spacing: 0.04em; color: #a5b4fc; font-weight: 600; }
+      
+      .drone-race-overlay .stat { font-size: 12px; line-height: 1.4; color: #cbd5e1; }
     `;
     document.head.appendChild(style);
   }
@@ -324,20 +321,23 @@ class DroneRaceDemo {
       this.droneMesh.add(arm);
     });
 
-    // Simple rotor disks
+    // Simple rotor disks with correct rotation pairs
+    // Front-left (0) & back-right (3) spin one direction
+    // Front-right (1) & back-left (2) spin opposite direction
     const rotorGeo = new THREE.CircleGeometry(0.15, 16);
     const rotorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.6 });
     const rotorOffsets = [
-      [0.35, 0, 0.35],
-      [-0.35, 0, 0.35],
-      [0.35, 0, -0.35],
-      [-0.35, 0, -0.35],
+      { pos: [0.35, 0, 0.35], spinDir: 1 },   // Front-left: CCW
+      { pos: [-0.35, 0, 0.35], spinDir: -1 }, // Front-right: CW
+      { pos: [-0.35, 0, -0.35], spinDir: 1 }, // Back-left: CCW
+      { pos: [0.35, 0, -0.35], spinDir: -1 }, // Back-right: CW
     ];
     this.rotors = [];
-    rotorOffsets.forEach(([x, y, z]) => {
+    rotorOffsets.forEach(({ pos: [x, y, z], spinDir }) => {
       const rotor = new THREE.Mesh(rotorGeo, rotorMat);
       rotor.rotation.x = -Math.PI / 2;
       rotor.position.set(x, 0.12, z);
+      rotor.userData.spinDir = spinDir;
       this.droneMesh.add(rotor);
       this.rotors.push(rotor);
     });
@@ -357,16 +357,7 @@ class DroneRaceDemo {
       <div class="stat" id="drone-race-error"></div>
     `;
 
-    const controls = document.createElement('div');
-    controls.className = 'drone-race-controls';
-    controls.innerHTML = `
-      <button id="drone-race-toggle">Pause</button>
-      <button id="drone-race-restart">Restart Race</button>
-      <label>Playback Speed <input id="drone-race-speed-slider" type="range" min="0.5" max="2" value="1" step="0.1"></label>
-    `;
-
     this.container.appendChild(overlay);
-    this.container.appendChild(controls);
 
     this.stateLabel = overlay.querySelector('#drone-race-state');
     this.gateLabel = overlay.querySelector('#drone-race-gate');
@@ -374,27 +365,143 @@ class DroneRaceDemo {
     this.speedLabel = overlay.querySelector('#drone-race-speed');
     this.errorLabel = overlay.querySelector('#drone-race-error');
 
-    const toggleBtn = controls.querySelector('#drone-race-toggle');
-    toggleBtn.addEventListener('click', () => {
-      if (this._paused) {
-        this._userPaused = false;
-        this.resume();
-        toggleBtn.textContent = 'Pause';
-      } else {
-        this._userPaused = true;
-        this.pause();
-        toggleBtn.textContent = 'Resume';
-      }
-    });
+    // Attach to external control elements (will be in the HTML panel)
+    this._attachExternalControls();
+  }
 
-    controls.querySelector('#drone-race-restart').addEventListener('click', () => {
-      this.restart();
-      toggleBtn.textContent = 'Pause';
-    });
+  _attachExternalControls() {
+    const toggleBtn = document.querySelector('#drone-race-toggle');
+    const restartBtn = document.querySelector('#drone-race-restart');
+    const speedSlider = document.querySelector('#drone-race-speed-slider');
+    const pospSlider = document.querySelector('#drone-pid-posp');
+    const velpSlider = document.querySelector('#drone-pid-velp');
+    const yawpSlider = document.querySelector('#drone-pid-yawp');
+    const altpSlider = document.querySelector('#drone-pid-altp');
+    const maxaccelSlider = document.querySelector('#drone-maxaccel');
+    const maxspeedSlider = document.querySelector('#drone-maxspeed');
+    const dampingSlider = document.querySelector('#drone-damping');
+    const resetBtn = document.querySelector('#drone-pid-reset');
 
-    controls.querySelector('#drone-race-speed-slider').addEventListener('input', (e) => {
-      this.timeScale = parseFloat(e.target.value);
-    });
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (this._paused) {
+          this._userPaused = false;
+          this.resume();
+          toggleBtn.textContent = 'Resume';
+        } else {
+          this._userPaused = true;
+          this.pause();
+          toggleBtn.textContent = 'Pause';
+        }
+      });
+    }
+
+    if (restartBtn) {
+      restartBtn.addEventListener('click', () => {
+        this.restart();
+        if (toggleBtn) toggleBtn.textContent = 'Pause';
+      });
+    }
+
+    if (speedSlider) {
+      speedSlider.addEventListener('input', (e) => {
+        this.timeScale = parseFloat(e.target.value);
+      });
+    }
+
+    // Controller tuning
+    if (pospSlider) {
+      pospSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.pid.posP = val;
+        const display = document.querySelector('#drone-posp-val');
+        if (display) display.textContent = val.toFixed(2);
+      });
+    }
+
+    if (velpSlider) {
+      velpSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.pid.velP = val;
+        const display = document.querySelector('#drone-velp-val');
+        if (display) display.textContent = val.toFixed(2);
+      });
+    }
+
+    if (yawpSlider) {
+      yawpSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.pid.yawP = val;
+        const display = document.querySelector('#drone-yawp-val');
+        if (display) display.textContent = val.toFixed(2);
+      });
+    }
+
+    if (altpSlider) {
+      altpSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.pid.altitudeP = val;
+        const display = document.querySelector('#drone-altp-val');
+        if (display) display.textContent = val.toFixed(2);
+      });
+    }
+
+    // Dynamics
+    if (maxaccelSlider) {
+      maxaccelSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.maxAccel = val;
+        const display = document.querySelector('#drone-maxaccel-val');
+        if (display) display.textContent = val.toFixed(1);
+      });
+    }
+
+    if (maxspeedSlider) {
+      maxspeedSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.maxSpeed = val;
+        const display = document.querySelector('#drone-maxspeed-val');
+        if (display) display.textContent = val.toFixed(1);
+      });
+    }
+
+    if (dampingSlider) {
+      dampingSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        this.damping = val;
+        const display = document.querySelector('#drone-damping-val');
+        if (display) display.textContent = val.toFixed(2);
+      });
+    }
+
+    // Reset button
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        this.pid.posP = 2.5;
+        this.pid.velP = 2.2;
+        this.pid.yawP = 2.5;
+        this.pid.altitudeP = 3.0;
+        this.maxAccel = 18;
+        this.maxSpeed = 12;
+        this.damping = 0.98;
+
+        if (pospSlider) pospSlider.value = 2.5;
+        if (velpSlider) velpSlider.value = 2.2;
+        if (yawpSlider) yawpSlider.value = 2.5;
+        if (altpSlider) altpSlider.value = 3.0;
+        if (maxaccelSlider) maxaccelSlider.value = 18;
+        if (maxspeedSlider) maxspeedSlider.value = 12;
+        if (dampingSlider) dampingSlider.value = 0.98;
+
+        document.querySelector('#drone-posp-val').textContent = '2.50';
+        document.querySelector('#drone-velp-val').textContent = '2.20';
+        document.querySelector('#drone-yawp-val').textContent = '2.50';
+        document.querySelector('#drone-altp-val').textContent = '3.00';
+        document.querySelector('#drone-maxaccel-val').textContent = '18.0';
+        document.querySelector('#drone-maxspeed-val').textContent = '12.0';
+        document.querySelector('#drone-damping-val').textContent = '0.98';
+      });
+    }
   }
 
   _resetDrone() {
@@ -557,11 +664,12 @@ class DroneRaceDemo {
     this.droneMesh.position.copy(this.trueState.position);
     this.droneMesh.rotation.copy(this.trueState.orientation);
 
-    // Spin rotors visually
-    this.rotors.forEach((rotor, idx) => {
-      const spin = (idx % 2 === 0 ? 1 : -1) * 30 * dt;
+    // Spin rotors visually with correct opposing directions
+    this.rotors.forEach((rotor) => {
+      const spinDir = rotor.userData.spinDir || 1;
+      const spinSpeed = spinDir * 30 * dt;
       rotor.material.opacity = 0.45 + 0.15 * Math.random();
-      rotor.rotation.y += spin;
+      rotor.rotation.z += spinSpeed;
     });
   }
 
