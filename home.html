@@ -492,7 +492,7 @@
     </div>
 
     <!-- Line Following Robot Demo -->
-    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-6">
+    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-12">
       <div class="flex items-center gap-3 mb-3">
         <span class="hud-chip">Draggable Bot</span>
         <span class="cue-badge">Grab to reposition on the track</span>
@@ -509,181 +509,147 @@
 
 
     <!-- Control Panel Below Track -->
-    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-3 space-y-2">
-      <!-- PID Tuning Controls Grid (First) -->
+    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 space-y-4">
+      <!-- PID Tuning Controls Grid -->
       <div>
-        <h3 class="text-sm font-semibold mb-2">PID Tuning & Configuration</h3>
+        <h3 class="text-sm font-semibold text-indigo-300 mb-3 uppercase tracking-wide">🎛️ PID Tuning</h3>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
           <!-- Kp -->
-          <div class="space-y-1">
+          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
             <div class="flex items-center justify-between">
-              <label class="text-xs text-gray-300">Proportional (Kp)</label>
-              <span id="kp-value" class="text-xs font-mono text-indigo-300">1.30</span>
+              <label class="text-xs font-semibold text-gray-300">Proportional</label>
+              <span id="kp-value" class="text-sm font-mono text-indigo-400 font-bold">1.30</span>
             </div>
-            <input id="kp-slider" type="range" min="0" max="3" step="0.01" value="1.3" class="pid-slider w-full">
+            <input id="kp-slider" type="range" min="0" max="3" step="0.01" value="1.3" class="pid-slider w-full accent-indigo-500">
           </div>
 
           <!-- Ki -->
-          <div class="space-y-1">
+          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
             <div class="flex items-center justify-between">
-              <label class="text-xs text-gray-300">Integral (Ki)</label>
-              <span id="ki-value" class="text-xs font-mono text-indigo-300">0.42</span>
+              <label class="text-xs font-semibold text-gray-300">Integral</label>
+              <span id="ki-value" class="text-sm font-mono text-indigo-400 font-bold">0.42</span>
             </div>
-            <input id="ki-slider" type="range" min="0" max="1" step="0.01" value="0.42" class="pid-slider w-full">
+            <input id="ki-slider" type="range" min="0" max="1" step="0.01" value="0.42" class="pid-slider w-full accent-indigo-500">
           </div>
 
           <!-- Kd -->
-          <div class="space-y-1">
+          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
             <div class="flex items-center justify-between">
-              <label class="text-xs text-gray-300">Derivative (Kd)</label>
-              <span id="kd-value" class="text-xs font-mono text-indigo-300">0.32</span>
+              <label class="text-xs font-semibold text-gray-300">Derivative</label>
+              <span id="kd-value" class="text-sm font-mono text-indigo-400 font-bold">0.32</span>
             </div>
-            <input id="kd-slider" type="range" min="0" max="1" step="0.01" value="0.32" class="pid-slider w-full">
+            <input id="kd-slider" type="range" min="0" max="1" step="0.01" value="0.32" class="pid-slider w-full accent-indigo-500">
           </div>
 
           <!-- Speed -->
-          <div class="space-y-1">
+          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
             <div class="flex items-center justify-between">
-              <label class="text-xs text-gray-300">Speed</label>
-              <span id="speed-value" class="text-xs font-mono text-indigo-300">120 px/s</span>
+              <label class="text-xs font-semibold text-gray-300">Speed</label>
+              <span id="speed-value" class="text-sm font-mono text-emerald-400 font-bold">120 px/s</span>
             </div>
-            <input id="speed-slider" type="range" min="45" max="300" step="5" value="120" class="pid-slider w-full">
+            <input id="speed-slider" type="range" min="45" max="300" step="5" value="120" class="pid-slider w-full accent-emerald-500">
           </div>
+
+          <!-- Reset Button -->
+          <button id="pid-reset-btn"
+            class="py-2 px-3 bg-gradient-to-r from-rose-900/40 to-rose-800/40 hover:from-rose-900/60 hover:to-rose-800/60 border border-rose-700/50 rounded-lg transition text-xs font-bold text-rose-300 uppercase tracking-wide self-end">
+            ⟲ Reset
+          </button>
         </div>
       </div>
 
       <!-- Advanced Options -->
-      <div class="pt-2 border-t border-gray-700">
-        <h4 class="text-xs font-semibold mb-2">Advanced Options</h4>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input id="noise-toggle" type="checkbox" class="pid-checkbox">
-            <span class="text-xs text-gray-300">Sensor Noise</span>
+      <div class="pt-3 border-t border-gray-700">
+        <h4 class="text-xs font-semibold text-indigo-300 mb-3 uppercase tracking-wide">⚙️ Advanced</h4>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-indigo-600/50 hover:bg-indigo-900/10 transition">
+            <input id="noise-toggle" type="checkbox" class="pid-checkbox accent-indigo-500">
+            <span class="text-xs font-medium text-gray-300">Sensor Noise</span>
           </label>
 
-          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input id="anti-windup-toggle" type="checkbox" checked class="pid-checkbox">
-            <span class="text-xs text-gray-300">Anti-Windup</span>
+          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-emerald-600/50 hover:bg-emerald-900/10 transition">
+            <input id="anti-windup-toggle" type="checkbox" checked class="pid-checkbox accent-emerald-500">
+            <span class="text-xs font-medium text-gray-300">Anti-Windup</span>
           </label>
 
-          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input id="d-filter-toggle" type="checkbox" class="pid-checkbox">
-            <span class="text-xs text-gray-300">D-Filter</span>
+          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-amber-600/50 hover:bg-amber-900/10 transition">
+            <input id="d-filter-toggle" type="checkbox" class="pid-checkbox accent-amber-500">
+            <span class="text-xs font-medium text-gray-300">D-Filter</span>
           </label>
 
-          <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-800/30 p-1 rounded transition">
-            <input id="adaptive-speed-toggle" type="checkbox" class="pid-checkbox">
-            <span class="text-xs text-gray-300">Adaptive Speed</span>
+          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-cyan-600/50 hover:bg-cyan-900/10 transition">
+            <input id="adaptive-speed-toggle" type="checkbox" class="pid-checkbox accent-cyan-500">
+            <span class="text-xs font-medium text-gray-300">Adaptive Speed</span>
           </label>
         </div>
       </div>
 
-      <!-- Reset Button -->
-      <div class="flex gap-2 pt-2 border-t border-gray-700">
-        <button id="pid-reset-btn"
-          class="pid-reset-btn flex-1 py-1.5 px-2 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700 rounded-lg transition text-xs font-semibold text-rose-300">
-          ⟲ Reset to Default
-        </button>
-      </div>
-
-      <!-- Telemetry Section - Horizontal -->
-      <div class="pt-2 border-t border-gray-700">
-        <h3 class="text-sm font-semibold mb-2">Telemetry</h3>
+      <!-- Telemetry Section -->
+      <div class="pt-3 border-t border-gray-700">
+        <h3 class="text-xs font-semibold text-indigo-300 mb-3 uppercase tracking-wide">📊 Telemetry</h3>
         <div class="grid grid-cols-5 gap-2">
-          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
-            <p class="text-xs text-gray-400">P</p>
-            <p id="pid-p" class="text-sm font-mono text-indigo-300">0.00</p>
+          <div class="bg-gradient-to-br from-indigo-900/30 to-indigo-900/10 rounded-lg border border-indigo-700/50 p-2 text-center">
+            <p class="text-xs text-gray-400 font-semibold">P</p>
+            <p id="pid-p" class="text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
-            <p class="text-xs text-gray-400">I</p>
-            <p id="pid-i" class="text-sm font-mono text-indigo-300">0.00</p>
+          <div class="bg-gradient-to-br from-indigo-900/30 to-indigo-900/10 rounded-lg border border-indigo-700/50 p-2 text-center">
+            <p class="text-xs text-gray-400 font-semibold">I</p>
+            <p id="pid-i" class="text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
-            <p class="text-xs text-gray-400">D</p>
-            <p id="pid-d" class="text-sm font-mono text-indigo-300">0.00</p>
+          <div class="bg-gradient-to-br from-indigo-900/30 to-indigo-900/10 rounded-lg border border-indigo-700/50 p-2 text-center">
+            <p class="text-xs text-gray-400 font-semibold">D</p>
+            <p id="pid-d" class="text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
-            <p class="text-xs text-gray-400">Error</p>
-            <p id="pid-error" class="text-sm font-mono text-rose-300">0.00</p>
+          <div class="bg-gradient-to-br from-rose-900/30 to-rose-900/10 rounded-lg border border-rose-700/50 p-2 text-center">
+            <p class="text-xs text-gray-400 font-semibold">Error</p>
+            <p id="pid-error" class="text-sm font-mono text-rose-300 font-bold">0.00</p>
           </div>
-          <div class="bg-gray-950/60 rounded-lg border border-gray-800 p-1.5 text-center">
-            <p class="text-xs text-gray-400">Speed</p>
-            <p id="pid-speed" class="text-sm font-mono text-emerald-300">0.00</p>
+          <div class="bg-gradient-to-br from-emerald-900/30 to-emerald-900/10 rounded-lg border border-emerald-700/50 p-2 text-center">
+            <p class="text-xs text-gray-400 font-semibold">Speed</p>
+            <p id="pid-speed" class="text-sm font-mono text-emerald-300 font-bold">0.00</p>
           </div>
         </div>
       </div>
 
-      <!-- Sensor Array -->
-      <div class="pt-2 border-t border-gray-700">
-        <div class="flex items-center justify-between mb-2">
-          <h4 class="text-sm font-semibold">IR Sensor Array</h4>
+      <!-- Sensor Array (8 sensors) -->
+      <div class="pt-3 border-t border-gray-700">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-xs font-semibold text-indigo-300 uppercase tracking-wide">👀 IR Sensors (8×)</h4>
           <span class="text-xs text-gray-500">Left ← Center → Right</span>
         </div>
-        <div class="grid grid-cols-8 gap-1">
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S1</p>
-            <p data-sensor-index="0" class="sensor-value text-xs">0.00</p>
+        <div class="grid grid-cols-8 gap-2">
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S1</p>
+            <p data-sensor-index="0" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S2</p>
-            <p data-sensor-index="1" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S2</p>
+            <p data-sensor-index="1" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S3</p>
-            <p data-sensor-index="2" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S3</p>
+            <p data-sensor-index="2" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S4</p>
-            <p data-sensor-index="3" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S4</p>
+            <p data-sensor-index="3" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S5</p>
-            <p data-sensor-index="4" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S5</p>
+            <p data-sensor-index="4" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S6</p>
-            <p data-sensor-index="5" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S6</p>
+            <p data-sensor-index="5" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S7</p>
-            <p data-sensor-index="6" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S7</p>
+            <p data-sensor-index="6" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S8</p>
-            <p data-sensor-index="7" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S9</p>
-            <p data-sensor-index="8" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S10</p>
-            <p data-sensor-index="9" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S11</p>
-            <p data-sensor-index="10" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S12</p>
-            <p data-sensor-index="11" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S13</p>
-            <p data-sensor-index="12" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S14</p>
-            <p data-sensor-index="13" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S15</p>
-            <p data-sensor-index="14" class="sensor-value text-xs">0.00</p>
-          </div>
-          <div class="sensor-pill text-center">
-            <p class="text-xs text-gray-400">S16</p>
-            <p data-sensor-index="15" class="sensor-value text-xs">0.00</p>
+          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
+            <p class="text-xs text-gray-400 font-semibold">S8</p>
+            <p data-sensor-index="7" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
           </div>
         </div>
       </div>
@@ -697,17 +663,11 @@
         <span class="cue-badge">Center goal (2×2)</span>
       </div>
 
-      <div class="flex flex-col lg:flex-row gap-4">
-        <div class="flex-1 space-y-3">
+      <div class="flex flex-col lg:flex-row gap-8 items-start">
+        <div class="lg:w-96 space-y-3">
           <h3 class="text-xl font-semibold">Maze Solver</h3>
           <p class="text-gray-400 text-sm leading-relaxed">
-            Generates a Robotex-style maze, then runs a simplified version of the flood-fill controller you used in
-            Webots.
-            The robot senses ideal walls, updates its internal map, computes distances to the 2×2 center, and picks the
-            best
-            neighbor on each step. Distances are visualized in-cell so you can see the wavefront propagate as walls are
-            learned. Choose the new Chinese-style dynamic flood-fill explorer to see dead-end and dead-zone pruning in
-            action, and toggle oblique sprinting for 8-directional runs.
+            Micromouse-style exploration with dynamic flood-fill, intelligent dead-end pruning, and optional 8-directional sprinting. Watch the robot autonomously map walls, compute distances, and execute time-optimal racing strategies.
           </p>
 
           <div class="flex flex-wrap gap-2">
@@ -724,13 +684,10 @@
 
           <!-- Maze Controls Container for Speed, Algorithm, and Visualization Options -->
           <div id="maze-controls" class="space-y-3 mt-4 pt-4 border-t border-gray-700"></div>
-
-          <!-- Maze Stats Display -->
-          <div id="maze-stats" class="mt-3"></div>
         </div>
 
-        <div class="flex-[1.2] bg-gray-950/60 border border-gray-800 rounded-xl p-3">
-          <canvas id="maze-canvas" class="w-full h-[520px] rounded-lg bg-gray-900"></canvas>
+        <div class="flex-1 bg-gray-950/60 border border-gray-800  overflow-hidden flex items-center justify-center">
+          <canvas id="maze-canvas" class="w-full h-[520px]  bg-gray-900 block"></canvas>
         </div>
       </div>
     </div>
@@ -994,6 +951,7 @@
   <script src="maze-solver/path-planner.js"></script>
   <script src="maze-solver/advanced-renderer.js"></script>
   <script src="maze-solver/view.js"></script>
+  <!-- <script src="maze-solver/smooth-turns-test.js"></script> -->
 
   <script>
     // Scroll-linked navigation glow

@@ -40,6 +40,10 @@
      *   - dMax           : max linear deceleration (m/s^2)
      *   - aLatMax        : max lateral (centripetal) acceleration (m/s^2)
      *   - cornerRadius   : default corner arc radius (meters)
+     *   - bodyLength     : robot length (meters, e.g. 0.095 = 95mm)
+     *   - bodyWidth      : robot width (meters, e.g. 0.075 = 75mm)
+     *   - wheelbase      : distance front-to-rear wheel (meters, e.g. 0.055 = 55mm)
+     *   - trackWidth     : distance left-to-right wheel (meters, e.g. 0.070 = 70mm)
      */
     constructor(maze, knownWalls, options = {}) {
       this.maze = maze;
@@ -49,12 +53,39 @@
       // This allows diagonals to work correctly during race planning
       this.knownWalls = this._sanitizeWallMap(knownWalls);
 
+      // ===== ROBOT PARAMETERS (typical competitive micromouse) =====
+      // Real winners: 90-110mm length, 70-85mm width, wheelbase 50-60mm, track 65-75mm
+      this.bodyLength      = options.bodyLength   || 0.095;   // 95mm typical
+      this.bodyWidth       = options.bodyWidth    || 0.075;   // 75mm typical
+      this.wheelbase       = options.wheelbase    || 0.055;   // 55mm front-to-rear
+      this.trackWidth      = options.trackWidth   || 0.070;   // 70mm left-to-right
+
+      // ===== MOTION PARAMETERS =====
       this.cellSize     = options.cellSize     || 0.018;
       this.vMax         = options.vMax         || 3.0;   // 3 m/s typical sprint
       this.aMax         = options.aMax         || 5.0;   // 5 m/s^2
       this.dMax         = options.dMax         || 6.0;   // braking
       this.aLatMax      = options.aLatMax      || 7.0;   // lateral accel
-      this.cornerRadius = options.cornerRadius || 0.025; // 25mm arc
+      
+      // CORNER RADIUS: Set to realistic micromouse turning radius
+      // Real competition robots use 30-70mm radius for smooth, visible curves
+      // - 40mm (0.04m) is optimal for 18mm cells + reasonable max speed
+      // - Much larger than 3.6mm to ensure curves are visible on canvas
+      const geometricLimit = this.cellSize / 4;  // 4.5mm: theoretical minimum
+      const physicsLimit = (this.vMax * this.vMax) / this.aLatMax;  // v² / a_lat
+      
+      if (options.cornerRadius !== undefined) {
+        this.cornerRadius = options.cornerRadius;
+      } else {
+        // DEFAULT: 40mm radius (competitive micromouse standard, visible on screen)
+        this.cornerRadius = 0.04;
+      }
+      console.log(
+        `[RacePlanner] Robot: ${(this.bodyLength*1000).toFixed(0)}×${(this.bodyWidth*1000).toFixed(0)}mm ` +
+        `wheelbase=${(this.wheelbase*1000).toFixed(0)}mm track=${(this.trackWidth*1000).toFixed(0)}mm | ` +
+        `Motion: vMax=${this.vMax}m/s aLat=${this.aLatMax}m/s² | ` +
+        `Turn radius: ${(this.cornerRadius * 1000).toFixed(1)}mm (competitive standard)`
+      );
 
       this._enforceCardinalSymmetry();
     }
@@ -360,6 +391,10 @@
           else              ok = this._canMoveCardinal(x, y, dir);
           if (!ok) continue;
 
+          // CRITICAL: Diagonal moves cost √2 ≈ 1.414 cells (Euclidean distance)
+          // Cardinal moves cost exactly 1.0 cell
+          // This ensures the path planner prefers efficient diagonal shortcuts
+          // while maintaining realistic physical costs for time-optimal racing
           const stepLengthCells = dir.diagonal ? Math.SQRT2 : 1.0;
           const stepCost = stepLengthCells;
 
@@ -702,9 +737,75 @@
     }
 
     /**
+     * Classify turn type based on angle delta.
+     * Returns: { mode: string, radius: number, description: string }
+     */
+    _classifyTurn(dTheta) {
+      const QUARTER_PI = Math.PI / 4;
+      const normTheta = this._normalizeAngle(dTheta);
+      const absDTheta = Math.abs(normTheta);
+      
+      // Map angle deltas to turn types
+      if (absDTheta < 0.1) return null; // Straight (skip)
+      
+      if (Math.abs(absDTheta - QUARTER_PI) < 0.1) {
+        // 45° turn
+        return {
+          mode: dTheta > 0 ? "corner45Left" : "corner45Right",
+          radius: this.cornerRadius,
+          description: `45° ${dTheta > 0 ? "left" : "right"}`,
+          angle: normTheta
+        };
+      }
+      
+      if (Math.abs(absDTheta - Math.PI / 2) < 0.1) {
+        // 90° turn
+        return {
+          mode: dTheta > 0 ? "corner90Left" : "corner90Right",
+          radius: this.cornerRadius * 0.8,  // Tighter for 90°
+          description: `90° ${dTheta > 0 ? "left" : "right"}`,
+          angle: normTheta
+        };
+      }
+      
+      if (Math.abs(absDTheta - 3 * QUARTER_PI) < 0.1) {
+        // 135° turn (sharp)
+        return {
+          mode: dTheta > 0 ? "corner135Left" : "corner135Right",
+          radius: this.cornerRadius * 0.6,  // Even tighter for 135°
+          description: `135° ${dTheta > 0 ? "left" : "right"}`,
+          angle: normTheta
+        };
+      }
+      
+      // Generic arc for any other angle
+      return {
+        mode: "arcR",
+        radius: Math.max(this.cornerRadius * 0.4, Math.abs(this.vMax * this.vMax / (this.aLatMax || 7.0))),
+        description: `Arc ${(absDTheta * 180 / Math.PI).toFixed(0)}°`,
+        angle: normTheta
+      };
+    }
+
+    /**
+     * Normalize angle to [-π, π]
+     */
+    _normalizeAngle(a) {
+      while (a <= -Math.PI) a += 2 * Math.PI;
+      while (a >  Math.PI) a -= 2 * Math.PI;
+      return a;
+    }
+
+    /**
      * Insert circular arcs at corners between line segments.
-     * Trims each line by t = r * tan(theta/2).
-     * Returns array of { type:"line"|"arc", length, angle, radius?, ccw? }
+     * Enhanced version that generates Asian-style turn primitives.
+     * 
+     * Output: array of { type:"line"|"arc", length, angle, radius?, mode?, ccw?, 
+     *                     centerX?, centerY?, startAngle?, endAngle? }
+     * 
+     * Turn modes: corner45Left/Right, corner90Left/Right, corner135Left/Right, arcR
+     * 
+     * Arc geometry includes full circle info for renderer to draw with ctx.arc()
      */
     _insertCornerArcs(lineSegments) {
       if (!lineSegments || lineSegments.length === 0) return [];
@@ -712,13 +813,12 @@
       const result = [];
       const r = this.cornerRadius;
 
-      const normAngle = (a) => {
-        while (a <= -Math.PI) a += 2 * Math.PI;
-        while (a >  Math.PI) a -= 2 * Math.PI;
-        return a;
-      };
+      result.push({ type: "line", ...lineSegments[0] });
 
-      result.push({ ...lineSegments[0] });
+      // Track current position in 2D space for arc center calculation
+      let currentX = 0;
+      let currentY = 0;
+      let currentAngle = lineSegments[0].angle;
 
       for (let i = 1; i < lineSegments.length; i++) {
         const prev = result[result.length - 1];
@@ -726,36 +826,82 @@
 
         const a0 = prev.angle;
         const a1 = next.angle;
-        let dTheta = normAngle(a1 - a0);
+        let dTheta = this._normalizeAngle(a1 - a0);
 
         if (Math.abs(dTheta) < 1e-3) {
           // Same direction; extend previous
           prev.length += next.length;
+          // Update position
+          currentX += Math.cos(currentAngle) * next.length;
+          currentY += Math.sin(currentAngle) * next.length;
           continue;
         }
 
-        // Corner detected
+        // Classify turn type
+        const turnInfo = this._classifyTurn(dTheta);
+        if (!turnInfo) {
+          result.push({ type: "line", ...next });
+          currentX += Math.cos(currentAngle) * next.length;
+          currentY += Math.sin(currentAngle) * next.length;
+          continue;
+        }
+
+        const arcRadius = turnInfo.radius;
         const absTheta = Math.abs(dTheta);
-        const t = r * Math.tan(absTheta / 2);
+        const t = arcRadius * Math.tan(absTheta / 2);
 
-        // If lines too short, skip arc
+        // If lines too short for arc, skip it (too tight corner)
         if (prev.length < 2 * t || next.length < 2 * t) {
-          result.push({ ...next });
+          result.push({ type: "line", ...next });
+          currentX += Math.cos(currentAngle) * next.length;
+          currentY += Math.sin(currentAngle) * next.length;
           continue;
         }
 
-        // Trim previous, add arc, trim next
+        // === TRIM AND INSERT TURN ===
+
+        // Trim previous line
         prev.length -= t;
 
+        // Move to start of arc (end of trimmed previous line)
+        currentX += Math.cos(currentAngle) * t;
+        currentY += Math.sin(currentAngle) * t;
+
+        // Compute arc center
+        // Arc is perpendicular to current direction, offset by radius
+        const perpAngle = currentAngle + (dTheta > 0 ? Math.PI / 2 : -Math.PI / 2);
+        const centerX = currentX + arcRadius * Math.cos(perpAngle);
+        const centerY = currentY + arcRadius * Math.sin(perpAngle);
+
+        // Start angle: direction from center to current position
+        const startAngle = Math.atan2(currentY - centerY, currentX - centerX);
+        // End angle: after turning by dTheta
+        const endAngle = startAngle + dTheta;
+
+        // Insert arc with turn primitive + geometry
         const arc = {
           type: "arc",
-          radius: r,
+          mode: turnInfo.mode,
+          radius: arcRadius,
           angle: dTheta,
-          length: Math.abs(dTheta) * r,
-          ccw: dTheta > 0
+          length: Math.abs(dTheta) * arcRadius,
+          ccw: dTheta > 0,
+          description: turnInfo.description,
+          // NEW: Full geometry for renderer
+          centerX: centerX,
+          centerY: centerY,
+          startAngle: startAngle,
+          endAngle: endAngle
         };
+        console.log(`[RacePlanner._insertCornerArcs] Arc inserted: ${turnInfo.description}, center=(${centerX.toFixed(3)}, ${centerY.toFixed(3)}), radius=${arcRadius.toFixed(4)}, angles=[${startAngle.toFixed(3)}, ${endAngle.toFixed(3)}]`);
         result.push(arc);
 
+        // Move to end of arc
+        currentX = centerX + arcRadius * Math.cos(endAngle);
+        currentY = centerY + arcRadius * Math.sin(endAngle);
+        currentAngle = a1;
+
+        // Add trimmed next line
         const trimmedNext = {
           type: "line",
           angle: next.angle,

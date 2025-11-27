@@ -43,6 +43,7 @@
       this.distance += length;
       
       return {
+        type: "line",
         length,
         totalTime: accelPhase.time + constantPhase.time + decelPhase.time,
         phases: {
@@ -56,6 +57,108 @@
           ...decelPhase.speedProfile
         ]
       };
+    }
+
+    /**
+     * Generate motion profile for an arc segment
+     * Applies centripetal acceleration constraint: v² / r ≤ aLatMax
+     * 
+     * @param {Object} arc - { type: "arc", radius, angle, mode?, length }
+     * @param {boolean} isLast - true if final segment (should end at 0)
+     * @returns {Object} - { type: "arc", length, totalTime, vIn, vOut, maxSpeed, ... }
+     */
+    profileArc(arc, isLast = false) {
+      const { radius, angle, length, mode } = arc;
+      
+      if (!radius || radius <= 0) {
+        // Degenerate arc, treat as line
+        return this.profileSegment(length / this.cellSize, isLast);
+      }
+
+      // Maximum safe speed for this radius (centripetal constraint)
+      // v_max_curve = sqrt(aLatMax * r)
+      const vMaxArc = Math.sqrt(this.maxCornering * radius);
+      const vLimit = Math.min(this.maxSpeed, vMaxArc);
+
+      // For arc, we need to manage speed carefully to keep lateral acceleration within limits
+      const vIn = this.currentSpeed;
+      const targetSpeed = isLast ? 0 : vLimit;
+
+      // Phase 1: Entry (ramp to arc speed if needed)
+      let entryDist = 0;
+      let entryTime = 0;
+      let entrySpeed = vIn;
+
+      if (vIn < vLimit - 0.01) {
+        // Need to accelerate to arc speed
+        const dv = Math.min(vLimit - vIn, this.maxAccel * 0.1);
+        entryDist = vIn * 0.05 + 0.5 * this.maxAccel * 0.05 * 0.05;  // 50ms accel
+        entryTime = 0.05;
+        entrySpeed = vIn + this.maxAccel * 0.05;
+      }
+
+      // Phase 2: Arc at constant speed (or slight accel within arc length)
+      const arcDist = length - entryDist;
+      const arcSpeed = Math.min(vLimit, entrySpeed);
+      const arcTime = arcDist > 0 ? arcDist / arcSpeed : 0;
+
+      // Phase 3: Exit (prepare for next segment)
+      // Don't decelerate here; velocity planning will handle it
+      const vOut = arcSpeed;
+      
+      this.currentSpeed = vOut;
+      this.distance += length;
+
+      const profile = {
+        type: "arc",
+        mode: mode,
+        length: length,
+        radius: radius,
+        angle: angle,
+        vIn: vIn,
+        vOut: vOut,
+        maxSpeedCurve: vMaxArc,
+        totalTime: entryTime + arcTime,
+        phases: {
+          entry: { time: entryTime, distance: entryDist, speed: entrySpeed },
+          arc: { time: arcTime, distance: arcDist, speed: arcSpeed }
+        },
+        speedProfile: this._generateArcSpeedProfile(vIn, arcSpeed, entryTime, arcTime)
+      };
+
+      if (isLast) {
+        // Add deceleration phase to reach stop
+        const decelDist = vOut * 0.1 - 0.5 * this.maxDecel * 0.1 * 0.1; // Rough estimate
+        const decelTime = vOut / this.maxDecel;
+        profile.totalTime += decelTime;
+        profile.phases.exit = { time: decelTime, distance: decelDist, speed: 0 };
+        this.currentSpeed = 0;
+      }
+
+      return profile;
+    }
+
+    _generateArcSpeedProfile(vIn, vArc, entryTime, arcTime) {
+      const points = 15;
+      const profile = [];
+      const totalTime = entryTime + arcTime;
+
+      for (let i = 0; i < points; i++) {
+        const t = (i / points) * totalTime;
+        let v;
+
+        if (t < entryTime) {
+          // Entry ramp
+          v = vIn + (vArc - vIn) * (t / entryTime);
+        } else {
+          // Arc at constant speed
+          v = vArc;
+        }
+
+        profile.push(Math.max(0, v));
+      }
+
+      return profile;
     }
 
     _accelWithJerk(startSpeed, targetSpeed, maxLength) {
@@ -159,6 +262,38 @@
     }
 
     /**
+     * Profile an array of segments that may include lines and arcs
+     * Used by RacePlanner's velocity planning
+     * 
+     * @param {Array} segments - [{ type: "line"|"arc", length, radius?, mode?, angle? }, ...]
+     * @returns {Array} - segment profiles with timings
+     */
+    profileSegments(segments) {
+      const profiles = [];
+      this.currentSpeed = 0;
+      
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const isLast = i === segments.length - 1;
+        
+        let profile;
+        
+        if (seg.type === "arc") {
+          // Use arc profiler for arc segments
+          profile = this.profileArc(seg, isLast);
+        } else {
+          // Use line profiler for straight segments
+          const lengthCells = seg.length / this.cellSize;
+          profile = this.profileSegment(lengthCells, isLast);
+        }
+        
+        profiles.push(profile);
+      }
+      
+      return profiles;
+    }
+
+    /**
      * Calculate time for a turn
      */
     getTurnTime(angleDegrees = 90) {
@@ -182,24 +317,20 @@
     }
 
     /**
-     * Optimize velocity profile for a path
+     * Optimize velocity profile for a path (segments may include arcs)
      * Reduces total time while respecting acceleration/jerk limits
      */
-    optimizePath(path) {
-      if (!path || path.length < 2) return { path, time: 0, profiles: [] };
+    optimizePath(segments) {
+      if (!segments || segments.length === 0) return { segments, time: 0, profiles: [] };
       
-      const profiles = [];
+      const profiles = this.motionProfile.profileSegments(segments);
       let totalTime = 0;
-      
-      // For each segment, compute optimal motion
-      for (let i = 0; i < path.length - 1; i++) {
-        const isLast = i === path.length - 2;
-        const segment = this.motionProfile.profileSegment(1, isLast);
-        profiles.push(segment);
-        totalTime += segment.totalTime;
-      }
-      
-      return { path, time: totalTime, profiles };
+
+      profiles.forEach(p => {
+        totalTime += p.totalTime;
+      });
+
+      return { segments, time: totalTime, profiles };
     }
 
     /**

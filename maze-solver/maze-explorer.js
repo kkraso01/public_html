@@ -96,6 +96,19 @@
       this.racingPathIndex = 0;         // Current position in racing line execution
       this.pathOptimizer = null;        // 4-dir or 8-dir optimizer (initialized based on allowOblique)
 
+      // ==================== SENSOR STATE ====================
+      // Diagonal sensor readings (for steering control)
+      this.sensorReadings = {
+        diagFL: 0,      // Front-left 45° diagonal
+        diagFR: 0,      // Front-right 45° diagonal
+        diagRL: 0,      // Rear-left 135° diagonal
+        diagRR: 0       // Rear-right 225° diagonal
+      };
+      this.diagonalSteeringEnabled = true;
+      this.diagonalVisibilityThreshold = 0.5; // Trigger distance in cell units
+      this.diagonalKp = 0.3;                  // PID proportional gain for diagonal error
+      this.targetWallDistance = 0.3;          // Preferred wall distance in cell units
+
       this._dynamicFloodFill();
       this._computeDeadZones();
     }
@@ -143,7 +156,40 @@
         checks.push([x - 1, y, "north"], [x, y - 1, "west"]);
       }
 
-      return checks.every(([cx, cy, facing]) => this._inBounds(cx, cy) && this.knownWalls[cy][cx][facing] !== true);
+      const wallsOk = checks.every(([cx, cy, facing]) => this._inBounds(cx, cy) && this.knownWalls[cy][cx][facing] !== true);
+      if (!wallsOk) return false;
+
+      // ==================== SENSOR-BASED POST AVOIDANCE ====================
+      // If diagonal sensors indicate wall posts are too close, forbid the diagonal move
+      // This implements the "post-avoidance rule" from Asian-style diagonal running
+      if (this.diagonalSteeringEnabled) {
+        const sensorThresh = 0.15; // Post detection threshold (cells)
+        
+        // Check diagonals based on intended movement direction
+        if (dir.dx > 0 && dir.dy < 0) { // Moving northEast (up-right)
+          // Check front-right post from diagFR sensor
+          if (this.sensorReadings.diagFR < sensorThresh && this.sensorReadings.diagFR > 0) {
+            return false; // Right post too close, forbid NE diagonal
+          }
+        } else if (dir.dx > 0 && dir.dy > 0) { // Moving southEast (down-right)
+          // Check rear-right post from diagRR sensor
+          if (this.sensorReadings.diagRR < sensorThresh && this.sensorReadings.diagRR > 0) {
+            return false; // Right post too close, forbid SE diagonal
+          }
+        } else if (dir.dx < 0 && dir.dy > 0) { // Moving southWest (down-left)
+          // Check rear-left post from diagRL sensor
+          if (this.sensorReadings.diagRL < sensorThresh && this.sensorReadings.diagRL > 0) {
+            return false; // Left post too close, forbid SW diagonal
+          }
+        } else if (dir.dx < 0 && dir.dy < 0) { // Moving northWest (up-left)
+          // Check front-left post from diagFL sensor
+          if (this.sensorReadings.diagFL < sensorThresh && this.sensorReadings.diagFL > 0) {
+            return false; // Left post too close, forbid NW diagonal
+          }
+        }
+      }
+
+      return true;
     }
 
     _dynamicFloodFill(goalSet = this.currentGoalSet || this.maze.goalCells) {
@@ -392,6 +438,61 @@
       // 5) Final fallback: any neighbor closest in Manhattan distance.
       candidates.sort((a, b) => a.manhattan - b.manhattan);
       return candidates[0].dir;
+    }
+
+    /**
+     * Compute diagonal sensor steering error for wall-following control.
+     * Uses 45° diagonal sensors (FL, FR) to maintain constant distance from walls.
+     * 
+     * Returns steer value in range [-1, +1]:
+     *   Negative = steer left
+     *   Positive = steer right
+     *   0 = balanced (centered between walls)
+     */
+    _computeDiagonalSteeringError() {
+      if (!this.diagonalSteeringEnabled) return 0;
+
+      const eL = this.sensorReadings.diagFL;
+      const eR = this.sensorReadings.diagFR;
+      const target = this.targetWallDistance;
+
+      // If both sensors are too far (wall not visible), no steering input
+      if (eL > this.diagonalVisibilityThreshold && eR > this.diagonalVisibilityThreshold) {
+        return 0;
+      }
+
+      // Compute error: how far off-center are we?
+      let error = 0;
+
+      if (eL <= this.diagonalVisibilityThreshold) {
+        // Left wall visible: positive error if too far left
+        const leftError = eL - target;
+        error += leftError; // Positive = steer right (away from left wall)
+      }
+
+      if (eR <= this.diagonalVisibilityThreshold) {
+        // Right wall visible: negative error if too far right
+        const rightError = target - eR;
+        error -= rightError; // Negative = steer left (away from right wall)
+      }
+
+      // Scale and clamp to [-1, +1]
+      const steer = Math.max(-1, Math.min(1, error * this.diagonalKp));
+      return steer;
+    }
+
+    /**
+     * Update sensor readings from renderer (called by external system).
+     * The renderer will call this with sensor distances from raycasting.
+     */
+    setSensorReadings(sensorData) {
+      if (sensorData && typeof sensorData === 'object') {
+        // Extract diagonal sensors (cardinal sensors are optional here)
+        if (sensorData.diagFL !== undefined) this.sensorReadings.diagFL = sensorData.diagFL;
+        if (sensorData.diagFR !== undefined) this.sensorReadings.diagFR = sensorData.diagFR;
+        if (sensorData.diagRL !== undefined) this.sensorReadings.diagRL = sensorData.diagRL;
+        if (sensorData.diagRR !== undefined) this.sensorReadings.diagRR = sensorData.diagRR;
+      }
     }
 
     step() {

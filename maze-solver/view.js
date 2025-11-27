@@ -195,6 +195,7 @@
       this.currentAlgorithm = "dynamic-explorer";
       this.explorerType = "dynamic"; // dynamic (Chinese FF) or bfs
       this.allowObliqueSprint = false;
+      this.smoothCurvesEnabled = true;  // NEW TOGGLE: smooth arc racing or straight-line grid
       this.stepDelay = 200; // milliseconds between steps
       this.stats = {
         nodesExplored: 0,
@@ -390,33 +391,86 @@
             try {
               // Prefer RacePlanner (production-ready, time-optimal) if available
               if (this.allowObliqueSprint && typeof global.RacePlanner !== 'undefined') {
-                console.log("[View] Using production RacePlanner (8D, time-optimal)...");
-                if (!this.racePlanner) {
-                  // CRITICAL FIX: Pass maze structure (size, goalCells) but use ONLY discovered walls
-                  // First param: maze object for size/goalCells structure
-                  // Second param: knownWalls (discovered walls, NOT the perfect maze.cells)
-                  this.racePlanner = new global.RacePlanner(this.maze, this.explorer.knownWalls, {
-                    cellSize: 0.018,      // 18mm cells (Japan spec)
-                    vMax: 3.0,            // 3 m/s
-                    aMax: 5.0,
-                    dMax: 6.0,
-                    aLatMax: 7.0,
-                    cornerRadius: 0.025   // 25mm arc radius
-                  });
-                  console.log("[View] RacePlanner initialized with maze structure but ONLY explored walls (no god vision)");
-                }
-                this.cachedRacePlan = this.racePlanner.computeRacePlan(0, 0);
-                const elapsed = Date.now() - startTime;
-                if (this.cachedRacePlan) {
-                  console.log(
-                    `[View] RacePlanner computed in ${elapsed}ms: ` +
-                    `${this.cachedRacePlan.gridPath.length} cells, ` +
-                    `${this.cachedRacePlan.segments.length} segments, ` +
-                    `${this.cachedRacePlan.totalTime.toFixed(3)}s`
-                  );
+                
+                if (this.smoothCurvesEnabled) {
+                  console.log("[View] Smooth-curves racing enabled: using RacePlanner with arcs.");
+
+                  if (!this.racePlanner) {
+                    // CRITICAL FIX: Pass maze structure (size, goalCells) but use ONLY discovered walls
+                    // First param: maze object for size/goalCells structure
+                    // Second param: knownWalls (discovered walls, NOT the perfect maze.cells)
+                    this.racePlanner = new global.RacePlanner(this.maze, this.explorer.knownWalls, {
+                      cellSize: 0.018,      // 18mm cells (Japan spec)
+                      vMax: 3.0,            // 3 m/s
+                      aMax: 5.0,
+                      dMax: 6.0,
+                      aLatMax: 7.0,
+                      cornerRadius: 0.04    // 40mm: standard micromouse turning radius (visible curves)
+                    });
+                    console.log("[View] RacePlanner initialized with smooth curves + discovered walls");
+                  }
+                  
+                  this.cachedRacePlan = this.racePlanner.computeRacePlan(0, 0);
+                  const elapsed = Date.now() - startTime;
+                  if (this.cachedRacePlan) {
+                    console.log(
+                      `[View] RacePlanner computed in ${elapsed}ms: ` +
+                      `${this.cachedRacePlan.gridPath.length} cells, ` +
+                      `${this.cachedRacePlan.segments.length} segments, ` +
+                      `${this.cachedRacePlan.totalTime.toFixed(3)}s`
+                    );
+                  } else {
+                    console.warn("[View] RacePlanner returned null (no path found)");
+                  }
+                  
                 } else {
-                  console.warn("[View] RacePlanner returned null (no path found)");
+                  console.log("[View] Smooth curves DISABLED: running oblique straight-line grid mode.");
+                  
+                  // Use oblique optimizer but generate only straight segments (no arcs)
+                  if (!this.obliqueOptimizer) {
+                    console.error("[View] ObliquePathOptimizer not available");
+                    return result;
+                  }
+                  
+                  if (!this.wallMapInitialized) {
+                    this.obliqueOptimizer.setWallMap(this.explorer.knownWalls);
+                    this.wallMapInitialized = true;
+                  }
+                  
+                  const gridPath = this.obliqueOptimizer.computeGridPath ? 
+                    this.obliqueOptimizer.computeGridPath(0, 0) :
+                    this.obliqueOptimizer.computeRacePlan(0, 0, "east")?.gridPath || [];
+                  
+                  // Generate straight-line segments only (8-direction diagonal grid)
+                  const segments = [];
+                  for (let i = 1; i < gridPath.length; i++) {
+                    const prev = gridPath[i - 1];
+                    const curr = gridPath[i];
+                    const dx = curr.x - prev.x;
+                    const dy = curr.y - prev.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) * 0.018; // convert to meters
+                    const angle = Math.atan2(dy, dx);
+                    
+                    segments.push({
+                      type: "line",
+                      length: dist,
+                      angle: angle
+                    });
+                  }
+                  
+                  this.cachedRacePlan = {
+                    gridPath: gridPath,
+                    segments: segments,
+                    totalTime: segments.length * 0.05  // Estimate: 50ms per segment
+                  };
+                  
+                  const elapsed = Date.now() - startTime;
+                  console.log(
+                    `[View] Grid-only mode computed in ${elapsed}ms: ` +
+                    `${gridPath.length} cells, ${segments.length} straight segments`
+                  );
                 }
+                
               } else if (this.allowObliqueSprint) {
                 // Fallback: Use legacy ObliquePathOptimizer
                 console.log("[View] Falling back to ObliquePathOptimizer (legacy 8D)...");
@@ -505,6 +559,14 @@
             if (this.renderer.racingSegments !== undefined) {
               this.renderer.racingSegments = this.cachedRacePlan.segments;
               this.renderer.totalRaceTime = this.cachedRacePlan.totalTime || 0;
+              
+              // Debug: count arc segments
+              const arcCount = (this.cachedRacePlan.segments || []).filter(s => s.type === "arc").length;
+              const lineCount = (this.cachedRacePlan.segments || []).filter(s => s.type === "line").length;
+              console.log(`[View] Segments assigned to renderer: ${lineCount} lines, ${arcCount} arcs`);
+              if (arcCount > 0) {
+                console.log(`[View] First arc segment:`, this.cachedRacePlan.segments.find(s => s.type === "arc"));
+              }
             }
           } else if (this.renderer.setRacingPathInfo) {
             console.warn("[View] No race plan available - visualization will be empty");
@@ -542,25 +604,40 @@
       if (!container) return null;
       
       const section = document.createElement("div");
-      section.style.marginBottom = "12px";
+      section.style.marginBottom = "16px";
+      section.style.padding = "12px";
+      section.style.borderRadius = "8px";
+      section.style.background = "linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(99, 102, 241, 0.08) 100%)";
+      section.style.border = "1px solid rgba(99, 102, 241, 0.3)";
+      section.style.boxShadow = "0 2px 8px rgba(99, 102, 241, 0.1)";
       
       const label = document.createElement("label");
       label.style.display = "block";
-      label.style.fontWeight = "600";
-      label.style.marginBottom = "8px";
-      label.style.color = "#cbd5e1";
-      label.style.fontSize = "0.9rem";
+      label.style.fontWeight = "700";
+      label.style.marginBottom = "12px";
+      label.style.color = "#e2e8f0";
+      label.style.fontSize = "0.85rem";
       label.style.textTransform = "uppercase";
-      label.style.letterSpacing = "0.5px";
-      label.textContent = "Algorithm";
+      label.style.letterSpacing = "1px";
+      label.textContent = "🤖 Exploration Algorithm";
       section.appendChild(label);
       
       const radioGroup = document.createElement("div");
       radioGroup.className = "radio-group";
+      radioGroup.style.display = "flex";
+      radioGroup.style.flexDirection = "column";
+      radioGroup.style.gap = "10px";
 
       // Dynamic flood-fill explorer (Chinese enhancements)
+      const dynamicContainer = document.createElement("div");
+      dynamicContainer.style.display = "flex";
+      dynamicContainer.style.alignItems = "center";
+      dynamicContainer.style.gap = "12px";
+      
       const dynamicOption = document.createElement("label");
       dynamicOption.className = "radio-option";
+      dynamicOption.style.flex = "1";
+      dynamicOption.style.margin = "0";
       const dynamicRadio = document.createElement("input");
       dynamicRadio.type = "radio";
       dynamicRadio.name = "maze-algorithm";
@@ -582,12 +659,141 @@
         this.renderer.draw();
       });
       dynamicOption.appendChild(dynamicRadio);
-      dynamicOption.appendChild(document.createTextNode("Dynamic Flood-Fill Explorer"));
-      radioGroup.appendChild(dynamicOption);
+      const dynamicText = document.createElement("span");
+      dynamicText.style.fontSize = "0.95rem";
+      dynamicText.style.fontWeight = "500";
+      dynamicText.style.color = "#e2e8f0";
+      dynamicText.textContent = "Dynamic Flood-Fill";
+      dynamicOption.appendChild(dynamicText);
+      
+      // Oblique sprint checkbox next to dynamic option
+      const obliqueToggle = document.createElement("label");
+      obliqueToggle.style.display = "flex";
+      obliqueToggle.style.alignItems = "center";
+      obliqueToggle.style.gap = "8px";
+      obliqueToggle.style.padding = "8px 12px";
+      obliqueToggle.style.borderRadius = "6px";
+      obliqueToggle.style.background = "rgba(16, 185, 129, 0.1)";
+      obliqueToggle.style.border = "1px solid rgba(16, 185, 129, 0.3)";
+      obliqueToggle.style.cursor = "pointer";
+      obliqueToggle.style.whiteSpace = "nowrap";
+      obliqueToggle.style.transition = "all 0.2s ease";
+      
+      const obliqueCheckbox = document.createElement("input");
+      obliqueCheckbox.type = "checkbox";
+      obliqueCheckbox.checked = this.allowObliqueSprint;
+      obliqueCheckbox.style.cursor = "pointer";
+      obliqueCheckbox.addEventListener("change", (e) => {
+        this.allowObliqueSprint = e.target.checked;
+        if (this.explorer && this.explorer.allowOblique !== undefined) {
+          this.explorer.allowOblique = this.allowObliqueSprint;
+          this.explorer._dynamicFloodFill();
+          this.explorer._computeDeadZones();
+        }
+        if (this.pathPlanner) {
+          this.pathPlanner.allowOblique = this.allowObliqueSprint;
+          if (this.pathPlanner.knownWalls) this.pathPlanner._buildGraph();
+        }
+        if (this.obliqueOptimizer) {
+          this.obliqueOptimizer.allowOblique = this.allowObliqueSprint;
+        }
+        // Update checkbox visual state
+        updateCheckboxStyle();
+      });
+      
+      const obliqueLabel = document.createElement("span");
+      obliqueLabel.style.fontSize = "0.85rem";
+      obliqueLabel.style.fontWeight = "500";
+      obliqueLabel.style.color = "#10b981";
+      obliqueLabel.textContent = "8-Dir";
+      
+      obliqueToggle.appendChild(obliqueCheckbox);
+      obliqueToggle.appendChild(obliqueLabel);
+      
+      // Update checkbox visual styling function
+      const updateCheckboxStyle = () => {
+        if (obliqueCheckbox.checked) {
+          obliqueToggle.style.background = "rgba(16, 185, 129, 0.25)";
+          obliqueToggle.style.borderColor = "rgba(16, 185, 129, 0.6)";
+          obliqueToggle.style.boxShadow = "0 0 8px rgba(16, 185, 129, 0.2)";
+        } else {
+          obliqueToggle.style.background = "rgba(16, 185, 129, 0.1)";
+          obliqueToggle.style.borderColor = "rgba(16, 185, 129, 0.3)";
+          obliqueToggle.style.boxShadow = "none";
+        }
+      };
+      
+      obliqueToggle.addEventListener("mouseover", () => {
+        obliqueToggle.style.background = "rgba(16, 185, 129, 0.2)";
+      });
+      
+      obliqueToggle.addEventListener("mouseout", updateCheckboxStyle);
+      
+      // NEW: Smooth Curves Toggle (visible by default)
+      const smoothCurvesToggle = document.createElement("label");
+      smoothCurvesToggle.style.display = "inline-flex";
+      smoothCurvesToggle.style.alignItems = "center";
+      smoothCurvesToggle.style.gap = "6px";
+      smoothCurvesToggle.style.padding = "4px 8px";
+      smoothCurvesToggle.style.borderRadius = "4px";
+      smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.1)";
+      smoothCurvesToggle.style.border = "1px solid rgba(59, 130, 246, 0.3)";
+      smoothCurvesToggle.style.cursor = "pointer";
+      smoothCurvesToggle.style.whiteSpace = "nowrap";
+      smoothCurvesToggle.style.transition = "all 0.2s ease";
+      smoothCurvesToggle.style.marginLeft = "6px";
+      smoothCurvesToggle.style.display = "inline-flex";
+      
+      const smoothCurvesCheckbox = document.createElement("input");
+      smoothCurvesCheckbox.type = "checkbox";
+      smoothCurvesCheckbox.checked = this.smoothCurvesEnabled;
+      smoothCurvesCheckbox.style.cursor = "pointer";
+      smoothCurvesCheckbox.addEventListener("change", (e) => {
+        this.smoothCurvesEnabled = e.target.checked;
+        this.cachedRacePlan = null; // Force recomputation on next race
+        console.log(`[UI] Smooth curves ${this.smoothCurvesEnabled ? 'ENABLED ✓ (arcs)' : 'DISABLED ✗ (straight lines)'}`);
+        updateSmoothCurvesStyle();
+      });
+      
+      const smoothCurvesLabel = document.createElement("span");
+      smoothCurvesLabel.style.fontSize = "0.85rem";
+      smoothCurvesLabel.style.fontWeight = "500";
+      smoothCurvesLabel.style.color = "#3b82f6";
+      smoothCurvesLabel.textContent = "Smoothing";
+      
+      smoothCurvesToggle.appendChild(smoothCurvesCheckbox);
+      smoothCurvesToggle.appendChild(smoothCurvesLabel);
+      
+      // Smooth curves visual styling
+      const updateSmoothCurvesStyle = () => {
+        if (smoothCurvesCheckbox.checked) {
+          smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.25)";
+          smoothCurvesToggle.style.borderColor = "rgba(59, 130, 246, 0.6)";
+          smoothCurvesToggle.style.boxShadow = "0 0 8px rgba(59, 130, 246, 0.2)";
+        } else {
+          smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.1)";
+          smoothCurvesToggle.style.borderColor = "rgba(59, 130, 246, 0.3)";
+          smoothCurvesToggle.style.boxShadow = "none";
+        }
+      };
+      
+      smoothCurvesToggle.addEventListener("mouseover", () => {
+        smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.2)";
+      });
+      
+      smoothCurvesToggle.addEventListener("mouseout", updateSmoothCurvesStyle);
+      
+      // Smooth curves toggle is always visible (not conditional on oblique state)
+      
+      dynamicContainer.appendChild(dynamicOption);
+      dynamicContainer.appendChild(obliqueToggle);
+      dynamicContainer.appendChild(smoothCurvesToggle);
+      radioGroup.appendChild(dynamicContainer);
 
       // Flood Fill (baseline)
       const floodOption = document.createElement("label");
       floodOption.className = "radio-option";
+      floodOption.style.margin = "0";
       const floodRadio = document.createElement("input");
       floodRadio.type = "radio";
       floodRadio.name = "maze-algorithm";
@@ -608,12 +814,18 @@
         this.renderer.draw();
       });
       floodOption.appendChild(floodRadio);
-      floodOption.appendChild(document.createTextNode("Flood Fill"));
+      const floodText = document.createElement("span");
+      floodText.style.fontSize = "0.95rem";
+      floodText.style.fontWeight = "500";
+      floodText.style.color = "#e2e8f0";
+      floodText.textContent = "Flood Fill";
+      floodOption.appendChild(floodText);
       radioGroup.appendChild(floodOption);
 
       // LPA*
       const lpaOption = document.createElement("label");
       lpaOption.className = "radio-option";
+      lpaOption.style.margin = "0";
       const lpaRadio = document.createElement("input");
       lpaRadio.type = "radio";
       lpaRadio.name = "maze-algorithm";
@@ -634,63 +846,15 @@
         this.renderer.draw();
       });
       lpaOption.appendChild(lpaRadio);
-      lpaOption.appendChild(document.createTextNode("LPA*"));
+      const lpaText = document.createElement("span");
+      lpaText.style.fontSize = "0.95rem";
+      lpaText.style.fontWeight = "500";
+      lpaText.style.color = "#e2e8f0";
+      lpaText.textContent = "LPA*";
+      lpaOption.appendChild(lpaText);
       radioGroup.appendChild(lpaOption);
 
-      /*
-      // BFS Explorer
-      const bfsOption = document.createElement("label");
-      bfsOption.className = "radio-option";
-      const bfsRadio = document.createElement("input");
-      bfsRadio.type = "radio";
-      bfsRadio.name = "maze-algorithm";
-      bfsRadio.value = "bfs-explorer";
-      bfsRadio.addEventListener("change", () => {
-        this.useLPA = false;
-        this.currentAlgorithm = "explore";
-        this.explorerType = "bfs";
-        this._resetStats();
-        this.stop();
-        this._initializeExplorer();
-        if (this.renderer.setVisualizationMode) {
-          this.renderer.setVisualizationMode("heatmap");
-        }
-        if (this.renderer.clearPath) {
-          this.renderer.clearPath();
-        }
-        this.renderer.draw();
-      });
-      bfsOption.appendChild(bfsRadio);
-      bfsOption.appendChild(document.createTextNode("BFS Explorer"));
-      radioGroup.appendChild(bfsOption);
-      */
-
       section.appendChild(radioGroup);
-
-      const obliqueToggle = document.createElement("label");
-      obliqueToggle.className = "radio-option";
-      obliqueToggle.style.marginTop = "8px";
-      const obliqueCheckbox = document.createElement("input");
-      obliqueCheckbox.type = "checkbox";
-      obliqueCheckbox.checked = this.allowObliqueSprint;
-      obliqueCheckbox.addEventListener("change", (e) => {
-        this.allowObliqueSprint = e.target.checked;
-        if (this.explorer && this.explorer.allowOblique !== undefined) {
-          this.explorer.allowOblique = this.allowObliqueSprint;
-          this.explorer._dynamicFloodFill();
-          this.explorer._computeDeadZones();
-        }
-        if (this.pathPlanner) {
-          this.pathPlanner.allowOblique = this.allowObliqueSprint;
-          if (this.pathPlanner.knownWalls) this.pathPlanner._buildGraph();
-        }
-        if (this.obliqueOptimizer) {
-          this.obliqueOptimizer.allowOblique = this.allowObliqueSprint;
-        }
-      });
-      obliqueToggle.appendChild(obliqueCheckbox);
-      obliqueToggle.appendChild(document.createTextNode("Enable Oblique Sprint (8-dir)"));
-      section.appendChild(obliqueToggle);
       container.appendChild(section);
       return null;
     }
@@ -840,51 +1004,51 @@
       return this._runExploreStep();
     }
 
-    _updateStatsDisplay() {
-      const statsEl = document.getElementById("maze-stats");
-      if (!statsEl) return;
+     _updateStatsDisplay() {
+    //   const statsEl = document.getElementById("maze-stats");
+    //   if (!statsEl) return;
       
-      const timeSaved = this.useLPA 
-        ? Math.max(0, (this.stats.nodesExplored * 0.05 - this.stats.timeSeconds)).toFixed(2)
-        : 0;
+    //   const timeSaved = this.useLPA 
+    //     ? Math.max(0, (this.stats.nodesExplored * 0.05 - this.stats.timeSeconds)).toFixed(2)
+    //     : 0;
       
-      // Include optimization stats from explorer if available
-      const optimStats = this.explorer && this.explorer.optimizationStats 
-        ? this.explorer.optimizationStats 
-        : null;
+    //   // Include optimization stats from explorer if available
+    //   const optimStats = this.explorer && this.explorer.optimizationStats 
+    //     ? this.explorer.optimizationStats 
+    //     : null;
 
-      let html = `
-        <div style="font-size: 12px; color: #64748b;">
-          <p><strong>Phase:</strong> <span style="color: #3b82f6;">${this.stats.currentPhase || "..."}</span></p>
-          <p><strong>Algorithm:</strong> ${this.currentAlgorithm.toUpperCase()}</p>
-          <p>Nodes Explored: ${this.stats.nodesExplored}</p>
-          <p>Wall Discoveries: ${this.stats.wallDiscoveries}</p>
-          <p>Elapsed: ${this.stats.timeSeconds.toFixed(2)}s</p>`;
+    //   let html = `
+    //     <div style="font-size: 12px; color: #64748b;">
+    //       <p><strong>Phase:</strong> <span style="color: #3b82f6;">${this.stats.currentPhase || "..."}</span></p>
+    //       <p><strong>Algorithm:</strong> ${this.currentAlgorithm.toUpperCase()}</p>
+    //       <p>Nodes Explored: ${this.stats.nodesExplored}</p>
+    //       <p>Wall Discoveries: ${this.stats.wallDiscoveries}</p>
+    //       <p>Elapsed: ${this.stats.timeSeconds.toFixed(2)}s</p>`;
 
-      if (optimStats) {
-        html += `
-          <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
-          <p><strong>🏁 Path Optimization (Stage 1&2):</strong></p>
-          <p>Exploration Steps: ${optimStats.explorationSteps}</p>
-          <p>Optimal Path Steps: ${optimStats.optimalSteps}</p>
-          <p>Improvement: ${optimStats.improvementFactor}x faster</p>
-          <p>Time Saved: <span style="color: #10b981; font-weight: bold;">${optimStats.timeSavedPercent}%</span></p>`;
-      }
+    //   if (optimStats) {
+    //     html += `
+    //       <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
+    //       <p><strong>🏁 Path Optimization (Stage 1&2):</strong></p>
+    //       <p>Exploration Steps: ${optimStats.explorationSteps}</p>
+    //       <p>Optimal Path Steps: ${optimStats.optimalSteps}</p>
+    //       <p>Improvement: ${optimStats.improvementFactor}x faster</p>
+    //       <p>Time Saved: <span style="color: #10b981; font-weight: bold;">${optimStats.timeSavedPercent}%</span></p>`;
+    //   }
 
-      if (this.stats.racingSegments) {
-        html += `
-          <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
-          <p><strong>⚡ Racing Phase:</strong></p>
-          <p>Race Segments: ${this.stats.racingSegments}</p>
-          <p>Est. Race Time: ${this.stats.totalRaceTime}s</p>`;
-      }
+    //   if (this.stats.racingSegments) {
+    //     html += `
+    //       <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
+    //       <p><strong>⚡ Racing Phase:</strong></p>
+    //       <p>Race Segments: ${this.stats.racingSegments}</p>
+    //       <p>Est. Race Time: ${this.stats.totalRaceTime}s</p>`;
+    //   }
 
-      html += `
-          <p>Estimated Time Saved: ${timeSaved}s (LPA*)</p>
-        </div>
-      `;
+    //   html += `
+    //       <p>Estimated Time Saved: ${timeSaved}s (LPA*)</p>
+    //     </div>
+    //   `;
       
-      statsEl.innerHTML = html;
+    //   statsEl.innerHTML = html;
     }
 
     draw() {
@@ -945,6 +1109,28 @@
       }
     }
   }
-  // Attach MazeUI to window for global access
+  
+  // Attach MazeUI to window for global access + expose toggle switches
   global.MazeUI = MazeUI;
+  
+  // Getter/setter for smooth curves toggle (accessible from console)
+  Object.defineProperty(global, 'smoothCurvesEnabled', {
+    get() {
+      return global.ui?.smoothCurvesEnabled ?? true;
+    },
+    set(value) {
+      if (global.ui) {
+        global.ui.smoothCurvesEnabled = value;
+        console.log(`[Global] Smooth curves ${value ? 'ENABLED (arcs ON)' : 'DISABLED (straight lines only)'}`);
+      }
+    }
+  });
+  
+  // Quick reference for toggling
+  global.toggleSmoothCurves = function() {
+    if (global.ui) {
+      global.ui.smoothCurvesEnabled = !global.ui.smoothCurvesEnabled;
+      console.log(`[Toggle] Smooth curves now: ${global.ui.smoothCurvesEnabled ? 'ON ✓' : 'OFF ✗'}`);
+    }
+  };
 })(window);

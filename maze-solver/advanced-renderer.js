@@ -46,6 +46,25 @@
       this.raceWalls = null;                 // Discovered walls only (for renderer synchronization)
       this.racingPlannerMode = "4D";         // Track which planner was used ('4D' or '8D')
       
+      // ==================== SENSOR STATE ====================
+      // Realistic IR sensor ranges based on actual micromouse hardware
+      // 1 cell = 18 cm
+      this.robotSensors = {
+        // Front sensors: 5-8 cm (0.28-0.44 cells) - sees current cell + tiny bit into next
+        front:      { angle: 0,                 distance: 0.4, color: "#00ffff", maxRange: 0.4 },
+        // Side sensors: 2-6 cm (0.11-0.33 cells) - sees current cell wall only
+        left:       { angle: Math.PI / 2,       distance: 0.3, color: "#00ff00", maxRange: 0.3 },
+        right:      { angle: -Math.PI / 2,      distance: 0.3, color: "#ff00ff", maxRange: 0.3 },
+        // Diagonal sensors: 8-14 cm (0.44-0.78 cells) - sees to next cell corner (~0.71 cells at 45°)
+        diagFL:     { angle: Math.PI / 4,       distance: 0.7, color: "#ffff00", maxRange: 0.7 },
+        diagFR:     { angle: -Math.PI / 4,      distance: 0.7, color: "#ffff00", maxRange: 0.7 },
+        diagRL:     { angle: (3 * Math.PI) / 4, distance: 0.7, color: "#ff8800", maxRange: 0.7 },
+        diagRR:     { angle: -(3 * Math.PI) / 4, distance: 0.7, color: "#ff8800", maxRange: 0.7 }
+      };
+      this.showSensors = true;                // Toggle sensor visualization
+      this.sensorRayLength = 0.8;             // Max raycast distance in cell units (realistic ~14cm max)
+      this.diagonalSensorThreshold = 0.5;     // Trigger distance for diagonal steering
+      
       this._onResize = () => this._resize();
       this._resize();
       window.addEventListener("resize", this._onResize);
@@ -65,6 +84,86 @@
       
       // Redraw after resize
       this.draw();
+    }
+
+    /**
+     * Raycast from robot position in a given direction.
+     * Returns distance to nearest wall (in cell units) or max range if clear.
+     * Handles both cardinal (4-dir) and diagonal (8-dir) movements.
+     * 
+     * CRITICAL: Uses knownWalls from solver to respect what robot has actually discovered.
+     */
+    _raycastSensor(robotX, robotY, robotHeading, sensorAngle, maxDist = this.sensorRayLength) {
+      // Combine robot heading with sensor offset angle
+      const rayAngle = robotHeading + sensorAngle;
+      const dx = Math.cos(rayAngle);
+      const dy = Math.sin(rayAngle);
+      
+      // Use the solver's known walls to avoid Perfect information
+      const walls = (this.currentSolver && this.currentSolver.knownWalls) || this.maze.cells;
+      const size = this.maze.size;
+      
+      // Raycast in small steps for realistic sensor sampling
+      const step = 0.08;
+      let dist = 0;
+      
+      while (dist < maxDist) {
+        const x = robotX + dx * dist;
+        const y = robotY + dy * dist;
+        
+        // Check if we've hit a boundary
+        if (x < 0 || x >= size || y < 0 || y >= size) {
+          return dist;
+        }
+        
+        // Check which cell we're in
+        const cellX = Math.floor(x);
+        const cellY = Math.floor(y);
+        const nextCellX = Math.floor(x + dx * step);
+        const nextCellY = Math.floor(y + dy * step);
+        
+        // If we're moving to a different cell, check for wall
+        if (cellX !== nextCellX || cellY !== nextCellY) {
+          // Determine which direction we're crossing
+          let crossedWall = false;
+          
+          if (cellX !== nextCellX) {
+            const wallDir = nextCellX > cellX ? "east" : "west";
+            if (walls[cellY] && walls[cellY][cellX] && walls[cellY][cellX][wallDir] === true) {
+              crossedWall = true;
+            }
+          }
+          
+          if (cellY !== nextCellY && !crossedWall) {
+            const wallDir = nextCellY > cellY ? "south" : "north";
+            if (walls[cellY] && walls[cellY][cellX] && walls[cellY][cellX][wallDir] === true) {
+              crossedWall = true;
+            }
+          }
+          
+          if (crossedWall) {
+            return dist;
+          }
+        }
+        
+        dist += step;
+      }
+      
+      return maxDist; // No wall hit within range
+    }
+
+    /**
+     * Update all 8 sensor readings based on robot position and heading.
+     * Called during draw to update distance values in real-time.
+     */
+    _updateSensorReadings(robotX, robotY, robotHeading) {
+      const solver = this.currentSolver || this.solver;
+      if (!solver) return;
+      
+      // Update each sensor
+      for (const [name, sensor] of Object.entries(this.robotSensors)) {
+        sensor.distance = this._raycastSensor(robotX, robotY, robotHeading, sensor.angle);
+      }
     }
 
     setVisualizationMode(mode) {
@@ -303,6 +402,196 @@
         }
       }
       ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    /**
+     * Draw a circular arc segment on the canvas.
+     * Used for smooth turn visualization.
+     * 
+     * @param {Object} startPos - { x, y } in cell coordinates
+     * @param {Object} endPos - { x, y } in cell coordinates
+     * @param {number} radius - arc radius in cell units
+     * @param {boolean} ccw - true for counter-clockwise arc
+     * @param {string} mode - turn mode (corner45, corner90, etc.)
+     * @param {number} cellSize - canvas pixels per cell
+     */
+    _drawArcSegment(ctx, startPos, endPos, radius, ccw, mode, cellSize) {
+      if (!startPos || !endPos || radius <= 0) return;
+
+      // Convert cell coordinates to canvas pixels
+      const x1 = startPos.x * cellSize + cellSize / 2;
+      const y1 = startPos.y * cellSize + cellSize / 2;
+      const x2 = endPos.x * cellSize + cellSize / 2;
+      const y2 = endPos.y * cellSize + cellSize / 2;
+
+      // Calculate midpoint and perpendicular vector
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < 0.01) return; // Segment too short
+
+      // Perpendicular direction (rotate 90°)
+      const px = -dy / dist;
+      const py = dx / dist;
+
+      // Calculate arc center
+      const h = Math.sqrt(Math.max(0, radius * radius - dist * dist / 4));
+      const centerX = mx + (ccw ? 1 : -1) * px * h;
+      const centerY = my + (ccw ? 1 : -1) * py * h;
+
+      // Calculate start and end angles from center
+      const angle1 = Math.atan2(y1 - centerY, x1 - centerX);
+      const angle2 = Math.atan2(y2 - centerY, x2 - centerX);
+
+      // Draw the arc
+      ctx.strokeStyle = "rgba(34, 197, 94, 0.85)"; // Green for arcs
+      ctx.lineWidth = cellSize * 0.4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * cellSize, angle1, angle2, !ccw);
+      ctx.stroke();
+    }
+
+    /**
+     * Draw a line segment (used for straight portions of the path).
+     * 
+     * @param {Object} startPos - { x, y } in cell coordinates
+     * @param {Object} endPos - { x, y } in cell coordinates
+     * @param {number} cellSize - canvas pixels per cell
+     */
+    _drawLineSegment(ctx, startPos, endPos, cellSize) {
+      if (!startPos || !endPos) return;
+
+      const x1 = startPos.x * cellSize + cellSize / 2;
+      const y1 = startPos.y * cellSize + cellSize / 2;
+      const x2 = endPos.x * cellSize + cellSize / 2;
+      const y2 = endPos.y * cellSize + cellSize / 2;
+
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.85)"; // Red for lines
+      ctx.lineWidth = cellSize * 0.35;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    /**
+     * Draw racing segments (lines and arcs) from RacePlanner output.
+     * This is the PRIMARY method for rendering smooth racing trajectories.
+     * 
+     * Segments include:
+     *   - type:"line" with angle, length (in cell units)
+     *   - type:"arc" with centerX, centerY, radius, startAngle, endAngle, ccw, mode
+     * 
+     * Renders arcs as smooth curves (not polygons) using HTML5 ctx.arc()
+     */
+    _drawRacingSegments() {
+      if (!this.racingSegments || this.racingSegments.length === 0) return;
+      if (this.currentPhase !== "race") return;
+
+      const { ctx } = this;
+      const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
+
+      console.log(`[Renderer._drawRacingSegments] Drawing ${this.racingSegments.length} segments`);
+
+      // Draw all segments as a continuous path
+      // Lines are drawn as straight line segments
+      // Arcs are drawn as smooth curves
+
+      // First pass: draw lines in one color, arcs in another for clarity
+      let arcCount = 0;
+      for (let i = 0; i < this.racingSegments.length; i++) {
+        const segment = this.racingSegments[i];
+
+        if (segment.type === "line") {
+          // Line segments are just visual guides (actual trajectory is through waypoints)
+          // Draw as light dashed line
+          ctx.strokeStyle = "rgba(100, 150, 255, 0.4)"; // Light blue
+          ctx.lineWidth = cellSize * 0.15;
+          ctx.setLineDash([cellSize * 0.3, cellSize * 0.3]);
+          ctx.lineCap = "round";
+
+          // For this simple visualization, we skip drawing line segments
+          // (they're already drawn via waypoint path)
+        } else if (segment.type === "arc") {
+          // ARC SEGMENT - draw as smooth curve
+          const { centerX, centerY, radius, startAngle, endAngle, ccw, mode } = segment;
+          arcCount++;
+
+          console.log(`[Renderer._drawRacingSegments] Arc ${arcCount}: center=(${centerX}, ${centerY}), radius=${radius}, angles=[${startAngle}, ${endAngle}], mode=${mode}`);
+
+          if (typeof centerX === 'number' && typeof centerY === 'number' &&
+              typeof radius === 'number' && typeof startAngle === 'number' &&
+              typeof endAngle === 'number') {
+
+            // Convert from world coordinates to canvas coordinates (in cell units)
+            const arcCenterX = centerX * cellSize + cellSize / 2;
+            const arcCenterY = centerY * cellSize + cellSize / 2;
+            const arcRadius = radius * cellSize;
+
+            // Draw arc segment with distinctive color based on turn mode
+            let arcColor = "rgba(255, 100, 0, 0.8)";  // Orange for generic arcs
+            if (mode === "corner45Left" || mode === "corner45Right") {
+              arcColor = "rgba(100, 200, 255, 0.85)"; // Light blue for 45°
+            } else if (mode === "corner90Left" || mode === "corner90Right") {
+              arcColor = "rgba(255, 200, 0, 0.85)";   // Gold for 90°
+            } else if (mode === "corner135Left" || mode === "corner135Right") {
+              arcColor = "rgba(255, 100, 150, 0.85)"; // Pink for 135°
+            }
+
+            ctx.strokeStyle = arcColor;
+            ctx.lineWidth = cellSize * 0.4;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.setLineDash([]);  // Solid line for arcs
+
+            ctx.beginPath();
+            ctx.arc(
+              arcCenterX,
+              arcCenterY,
+              arcRadius,
+              startAngle,
+              endAngle,
+              !ccw  // Canvas uses counterclockwise=true for left turns
+            );
+            ctx.stroke();
+
+            // Draw arc center point (small circle) for debugging
+            ctx.fillStyle = "rgba(255, 100, 0, 0.3)";
+            ctx.beginPath();
+            ctx.arc(arcCenterX, arcCenterY, cellSize * 0.08, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw start and end points of arc
+            const startX = arcCenterX + arcRadius * Math.cos(startAngle);
+            const startY = arcCenterY + arcRadius * Math.sin(startAngle);
+            const endX = arcCenterX + arcRadius * Math.cos(endAngle);
+            const endY = arcCenterY + arcRadius * Math.sin(endAngle);
+
+            ctx.fillStyle = "rgba(100, 200, 0, 0.6)";
+            ctx.beginPath();
+            ctx.arc(startX, startY, cellSize * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "rgba(200, 100, 0, 0.6)";
+            ctx.beginPath();
+            ctx.arc(endX, endY, cellSize * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            console.warn(`[Renderer._drawRacingSegments] Arc missing geometry:`, segment);
+          }
+        }
+      }
+
+      console.log(`[Renderer._drawRacingSegments] Total arcs drawn: ${arcCount}`);
+
+      // Reset line dash
       ctx.setLineDash([]);
     }
 
@@ -672,35 +961,15 @@
         ctx.stroke();
       }
       
-      // Draw start position marker
-      if (this.forwardPath.length > 0) {
-        const startPos = this.forwardPath[0];
-        const startCenterX = startPos.x * cellSize + cellSize / 2;
-        const startCenterY = startPos.y * cellSize + cellSize / 2;
-        
-        // Draw start marker circle with star
-        ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
-        ctx.beginPath();
-        ctx.arc(startCenterX, startCenterY, cellSize * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Draw star symbol at start
-        ctx.fillStyle = "#3b82f6";
-        ctx.font = `bold ${Math.max(12, cellSize * 0.4)}px Arial`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("⭐", startCenterX, startCenterY);
-        
-        // Draw direct line from start to current position
-        ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(startCenterX, startCenterY);
-        ctx.lineTo(centerX, centerY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+      // Draw start position marker at (0, 0)
+      const startCenterX = 0 * cellSize + cellSize / 2;
+      const startCenterY = 0 * cellSize + cellSize / 2;
+      
+      // Draw start marker circle
+      ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
+      ctx.beginPath();
+      ctx.arc(startCenterX, startCenterY, cellSize * 0.35, 0, Math.PI * 2);
+      ctx.fill();
       
       // Draw robot body
       ctx.fillStyle = "#fbbf24";
@@ -726,6 +995,87 @@
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(centerX + Math.cos(angle) * r * 1.2, centerY + Math.sin(angle) * r * 1.2);
       ctx.stroke();
+
+      // ==================== DRAW SENSOR RAYS ====================
+      // Sensor visualization disabled - use showSensors to re-enable
+      // if (this.showSensors) {
+      //   this._updateSensorReadings(x, y, angle);
+      //   this._drawSensorRays(x, y, angle, cellSize);
+      // }
+    }
+
+    /**
+     * Draw all 8 sensor rays on the canvas.
+     * Cardinal sensors in bright colors, diagonal sensors in distinct colors.
+     */
+    _drawSensorRays(robotX, robotY, robotHeading, cellSize) {
+      const { ctx } = this;
+      const robotCenterX = robotX * cellSize + cellSize / 2;
+      const robotCenterY = robotY * cellSize + cellSize / 2;
+
+      // Draw each sensor ray
+      for (const [name, sensor] of Object.entries(this.robotSensors)) {
+        const rayAngle = robotHeading + sensor.angle;
+        const rayDx = Math.cos(rayAngle);
+        const rayDy = Math.sin(rayAngle);
+        
+        // Use actual sensor distance (realistic range)
+        const maxRangeCells = sensor.maxRange || this.sensorRayLength;
+        const distCells = Math.min(sensor.distance, maxRangeCells);
+        const rayDist = distCells * cellSize;
+        const endX = robotCenterX + rayDx * rayDist;
+        const endY = robotCenterY + rayDy * rayDist;
+        
+        // Draw max range boundary (faint cone)
+        const maxRayDist = maxRangeCells * cellSize;
+        ctx.strokeStyle = sensor.color;
+        ctx.lineWidth = 0.8;
+        ctx.globalAlpha = 0.15;
+        ctx.beginPath();
+        ctx.arc(robotCenterX, robotCenterY, maxRayDist, rayAngle - 0.3, rayAngle + 0.3);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        
+        // Draw detected ray line
+        ctx.strokeStyle = sensor.color;
+        ctx.lineWidth = 2.2;
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.moveTo(robotCenterX, robotCenterY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        
+        // Draw endpoint marker
+        ctx.fillStyle = sensor.color;
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        ctx.arc(endX, endY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        
+        // Draw sensor label with arrow symbols for direction
+        const labelOffsetX = endX + rayDx * cellSize * 0.15;
+        const labelOffsetY = endY + rayDy * cellSize * 0.15;
+        
+        ctx.fillStyle = sensor.color;
+        ctx.globalAlpha = 0.9;
+        ctx.font = "bold 11px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        let label = name;
+        if (name === "diagFL") label = "↗";
+        else if (name === "diagFR") label = "↘";
+        else if (name === "diagRL") label = "↖";
+        else if (name === "diagRR") label = "↙";
+        else if (name === "front") label = "↑";
+        else if (name === "left") label = "←";
+        else if (name === "right") label = "→";
+        
+        ctx.fillText(label, labelOffsetX, labelOffsetY);
+        ctx.globalAlpha = 1.0;
+      }
     }
 
     draw() {
@@ -764,6 +1114,9 @@
       // ==================== STEP 5: DRAW RACING PATH ====================
       // Show optimized racing path only during race phase
       if (this.currentPhase === "race") {
+        // Draw smooth racing segments (lines + arcs) first
+        this._drawRacingSegments();
+        // Then draw waypoint path overlay
         this._drawRacingPath();
       }
       

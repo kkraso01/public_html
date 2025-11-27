@@ -49,22 +49,14 @@
   };
 
   const sensorOffsets = [
-    { angle: -0.54, distance: 50 },
-    { angle: -0.47, distance: 50 },
-    { angle: -0.40, distance: 50 },
-    { angle: -0.33, distance: 50 },
-    { angle: -0.26, distance: 50 },
-    { angle: -0.19, distance: 50 },
-    { angle: -0.12, distance: 50 },
-    { angle: -0.05, distance: 50 },
-    { angle: 0.05, distance: 50 },
-    { angle: 0.12, distance: 50 },
-    { angle: 0.19, distance: 50 },
-    { angle: 0.26, distance: 50 },
-    { angle: 0.33, distance: 50 },
-    { angle: 0.40, distance: 50 },
-    { angle: 0.47, distance: 50 },
-    { angle: 0.54, distance: 50 }
+    { angle: -0.27, distance: 50 },
+    { angle: -0.18, distance: 50 },
+    { angle: -0.09, distance: 50 },
+    { angle: 0, distance: 50 },
+    { angle: 0.09, distance: 50 },
+    { angle: 0.18, distance: 50 },
+    { angle: 0.27, distance: 50 },
+    { angle: 0.36, distance: 50 }
   ];
 
   // const weights = sensorOffsets.map((_, i) => i - (sensorOffsets.length - 1) / 2);
@@ -133,15 +125,19 @@ function buildTrackPath() {
   const radiusX = w / 2 - margin;
   const radiusY = h / 2 - margin;
 
-  // Generate random control points around a circle
-  const pointsCount = 5;
-  const pts = [];
+  const pointsCount = 16;
+  let pts = [];
 
+  // --- 1. Create evenly spaced angles (prevents tight turns) ---
   for (let i = 0; i < pointsCount; i++) {
-    const angle = Math.random() * Math.PI * 2;
+    const baseAngle = (i / pointsCount) * Math.PI * 2;
 
-    const rx = radiusX * (0.65 + Math.random() * 0.35);
-    const ry = radiusY * (0.65 + Math.random() * 0.35);
+    // Small random drift to avoid perfect symmetry
+    const angle = baseAngle + (Math.random() - 0.5) * 0.25;
+
+    // Moderate random radius variation (no sudden spikes)
+    const rx = radiusX * (0.8 + Math.random() * 0.2);
+    const ry = radiusY * (0.8 + Math.random() * 0.2);
 
     pts.push({
       angle,
@@ -150,29 +146,54 @@ function buildTrackPath() {
     });
   }
 
-  // Sort by angle to avoid crossings
+  // Sort by angle (keeps shape simple → no self crossing)
   pts.sort((a, b) => a.angle - b.angle);
 
-  // Loop back to start
-  pts.push(pts[0]);
+  // --- 2. Smooth the control points BEFORE building the spline ---
+  // Average each point with its neighbors to eliminate corner spikes
+  const smoothed = [];
+  for (let i = 0; i < pts.length; i++) {
+    const pPrev = pts[(i - 1 + pts.length) % pts.length];
+    const p = pts[i];
+    const pNext = pts[(i + 1) % pts.length];
 
-  // Smooth curve using cosine interpolation
-  const smoothSteps = 20; // more = smoother
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i];
-    const p1 = pts[i + 1];
+    smoothed.push({
+      x: (pPrev.x + p.x * 2 + pNext.x) / 4,
+      y: (pPrev.y + p.y * 2 + pNext.y) / 4
+    });
+  }
+  pts = smoothed;
 
-    for (let t = 0; t <= 1; t += 1 / smoothSteps) {
-      // cosine interpolation factor
-      const ft = (1 - Math.cos(t * Math.PI)) / 2;
+  // --- 3. Pad for Catmull-Rom ---
+  pts = [
+    pts[pts.length - 2],
+    pts[pts.length - 1],
+    ...pts,
+    pts[0],
+    pts[1]
+  ];
 
-      const x = p0.x * (1 - ft) + p1.x * ft;
-      const y = p0.y * (1 - ft) + p1.y * ft;
+  // --- 4. Catmull-Rom interpolation ---
+  function catmullRom(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
 
-      track.path.push({ x, y });
+    return {
+      x: 0.5 * (2*p1.x + (-p0.x+p2.x)*t + (2*p0.x-5*p1.x+4*p2.x-p3.x)*t2 + (-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+      y: 0.5 * (2*p1.y + (-p0.y+p2.y)*t + (2*p0.y-5*p1.y+4*p2.y-p3.y)*t2 + (-p0.y+3*p1.y-3*p2.y+p3.y)*t3)
+    };
+  }
+
+  const smoothSteps = 30;
+
+  for (let i = 0; i < pts.length - 3; i++) {
+    for (let s = 0; s <= smoothSteps; s++) {
+      const p = catmullRom(pts[i], pts[i+1], pts[i+2], pts[i+3], s / smoothSteps);
+      track.path.push({ x: p.x, y: p.y });
     }
   }
 }
+
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
