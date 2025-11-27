@@ -79,7 +79,7 @@ export class GeometricController {
     const basisY = new THREE.Vector3();
     const basisZ = new THREE.Vector3();
     R.extractBasis(basisX, basisY, basisZ);
-    const thrust = clamp(accMag * this.params.mass, 0, this.params.maxThrust);
+    const thrust = clamp(accCmd.dot(basisZ) * this.params.mass, 0, this.params.maxThrust);
 
     return { thrust, torque };
   }
