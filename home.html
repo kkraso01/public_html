@@ -358,7 +358,7 @@
       <span class="text-[11px] text-indigo-300/80 ml-2">⌥2</span></a>
     <a href="#maze-solver" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Maze Solver
       <span class="text-[11px] text-indigo-300/80 ml-2">⌥3</span></a>
-    <a href="#drone-lab" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Drone Lab
+    <a href="#drone-race" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Drone Race
       <span class="text-[11px] text-indigo-300/80 ml-2">⌥4</span></a>
     <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects
       <span class="text-[11px] text-indigo-300/80 ml-2">⌥5</span></a>
@@ -695,71 +695,41 @@
     </div>
   </section>
 
-  <!-- Drone Lab Section -->
-  <section id="drone-lab" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <!-- Drone Race Section -->
+  <section id="drone-race" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Mission: Autonomous aerial perception and mapping systems.</p>
-      <h2 class="text-3xl font-bold">Drone Lab: SLAM & Autonomy</h2>
+      <p class="mission-brief text-indigo-300/80">Mission: Autonomous racing intelligence and flight control.</p>
+      <h2 class="text-3xl font-bold">AlphaPilot-Style Drone Race Demo</h2>
       <p class="text-gray-400 max-w-3xl">
-        Visual-Inertial SLAM with real-time pose tracking, obstacle detection, and telemetry. Simulates onboard drone sensors and autonomous navigation pipelines for research and visualization.
+        Visualizes a single autonomous racing drone flying a spline-planned indoor track with a chase camera, gate timing, VIO noise, and PID control. Built for portfolio embedding with pause/resume hooks that play nicely with IntersectionObserver.
       </p>
     </div>
 
-    <div class="grid grid-cols-1 gap-12">
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
+      <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
         <div class="flex items-center gap-3">
-          <span class="hud-chip">SLAM Visualization</span>
-          <span class="cue-badge">Watch pose tracking and occupancy mapping</span>
+          <span class="hud-chip">Autonomy Stack</span>
+          <span class="cue-badge">Spline planner · VIO drift · PID control</span>
         </div>
-        <div>
-          <h3 class="text-2xl font-semibold">Autonomous Drone Perception</h3>
-          <p class="text-gray-400">Real-time SLAM with pose estimation and obstacle detection. Simulates onboard range sensors and visual inertial odometry for autonomous navigation.</p>
+        <div class="space-y-3">
+          <h3 class="text-2xl font-semibold">Research-Flavored Controls</h3>
+          <p class="text-gray-400">Catmull–Rom waypoints feed a minimum-snap-inspired trajectory; the controller follows using VIO-bias estimates, gate crossing detection, and lap timing.</p>
         </div>
-        <canvas id="drone-slam-canvas" class="w-full h-96 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
-      </article>
+        <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside">
+          <li>Pause/resume + visibility-aware hooks</li>
+          <li>HUD with lap timing, gate count, speed, and VIO error</li>
+          <li>Speed slider and restart controls inside the overlay</li>
+        </ul>
+      </div>
 
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-        <div class="flex items-center gap-3">
-          <span class="hud-chip">Detection Pipeline</span>
-          <span class="cue-badge">Monitor detection and tracking</span>
-        </div>
-        <div>
-          <h3 class="text-2xl font-semibold">Object Detection & Tracking</h3>
-          <p class="text-gray-400">Processes drone frames in real-time, tracks detections across frames, and maintains confidence scoring for robust perception systems.</p>
-        </div>
-        <canvas id="drone-detection-canvas" class="w-full h-80 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
-      </article>
-
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-        <div class="flex items-center gap-3">
-          <span class="hud-chip">Telemetry Feed</span>
-          <span class="cue-badge">Real-time sensor metrics</span>
-        </div>
-        <div>
-          <h3 class="text-2xl font-semibold">Live System Telemetry</h3>
-          <p class="text-gray-400">Pose updates, odometry readings, range sensor data, and detection confidence metrics flowing through the telemetry bus.</p>
-        </div>
-        <div id="drone-telemetry-display" class="bg-gray-950/60 rounded-xl border border-gray-700 p-4 font-mono text-sm">
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-gray-900/50 rounded p-3 border border-gray-700">
-              <p class="text-xs text-gray-400 font-semibold">Pose X</p>
-              <p id="drone-pose-x" class="text-indigo-300 font-bold">0.00</p>
-            </div>
-            <div class="bg-gray-900/50 rounded p-3 border border-gray-700">
-              <p class="text-xs text-gray-400 font-semibold">Pose Y</p>
-              <p id="drone-pose-y" class="text-indigo-300 font-bold">0.00</p>
-            </div>
-            <div class="bg-gray-900/50 rounded p-3 border border-gray-700">
-              <p class="text-xs text-gray-400 font-semibold">Theta</p>
-              <p id="drone-pose-theta" class="text-indigo-300 font-bold">0.00</p>
-            </div>
-            <div class="bg-gray-900/50 rounded p-3 border border-gray-700">
-              <p class="text-xs text-gray-400 font-semibold">Detections</p>
-              <p id="drone-detections-count" class="text-emerald-300 font-bold">0</p>
-            </div>
+      <div class="lg:col-span-3">
+        <div class="bg-gradient-to-br from-gray-900/80 via-slate-900/80 to-gray-950/90 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
+          <div id="drone-race-demo" class="w-full h-[520px]"></div>
+          <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
+            Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
           </div>
         </div>
-      </article>
+      </div>
     </div>
   </section>
 
@@ -1022,14 +992,11 @@
   <script src="maze-solver/view.js"></script>
   <!-- <script src="maze-solver/smooth-turns-test.js"></script> -->
 
-  <!-- Drone Lab Scripts (Modular SLAM, Detection, Telemetry) -->
-  <script type="module" src="drone-lab/telemetry-bus.js"></script>
-  <script type="module" src="drone-lab/slam-core.js"></script>
-  <script type="module" src="drone-lab/detection-pipeline.js"></script>
-  <script type="module" src="drone-lab/index.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="drone_race_demo.js"></script>
 
   <script>
-    // Drone Lab Initialization & Visualization
+    // Navigation & interaction helpers
     const navLinks = Array.from(document.querySelectorAll('.nav-link'));
     const sections = Array.from(document.querySelectorAll('[data-nav-section]'));
 
@@ -1037,7 +1004,7 @@
       ['1', '#research-systems'],
       ['2', '#playful-demos'],
       ['3', '#maze-solver'],
-      ['4', '#drone-lab'],
+      ['4', '#drone-race'],
       ['5', '#projects']
     ]);
 
@@ -1090,148 +1057,35 @@
       parentSection.addEventListener('click', handleInteraction, { once: true });
     });
 
-    // Drone Lab Initialization & Visualization
-    async function initDroneLab() {
-      try {
-        // Dynamically import drone lab modules
-        const { DroneLabController } = await import('./drone-lab/index.js');
-        
-        const droneController = new DroneLabController({
-          gridSize: 50,
-          resolution: 0.1,
-          confidenceThreshold: 0.4
+    // Drone race demo integration
+    function initDroneRaceSection() {
+      const container = document.getElementById('drone-race-demo');
+      if (!container || typeof initDroneRaceDemo !== 'function') return;
+
+      const demo = initDroneRaceDemo(container, {
+        width: container.clientWidth || 960,
+        height: container.clientHeight || 520,
+        enableShadows: true,
+        highQuality: true
+      });
+
+      const visibilityObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          demo.setPausedFromVisibility(entry.isIntersecting);
         });
+      }, { threshold: 0.2 });
 
-        // SLAM Canvas visualization
-        const slamCanvas = document.getElementById('drone-slam-canvas');
-        if (!slamCanvas) return;
-        
-        const slamCtx = slamCanvas.getContext('2d');
-        const dpr = window.devicePixelRatio || 1;
-        slamCanvas.width = slamCanvas.offsetWidth * dpr;
-        slamCanvas.height = slamCanvas.offsetHeight * dpr;
-        slamCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      visibilityObserver.observe(container);
 
-        // Detection Canvas visualization
-        const detCanvas = document.getElementById('drone-detection-canvas');
-        const detCtx = detCanvas.getContext('2d');
-        detCanvas.width = detCanvas.offsetWidth * dpr;
-        detCanvas.height = detCanvas.offsetHeight * dpr;
-        detCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        // Telemetry display elements
-        const telemetryElements = {
-          poseX: document.getElementById('drone-pose-x'),
-          poseY: document.getElementById('drone-pose-y'),
-          poseTheta: document.getElementById('drone-pose-theta'),
-          detectionCount: document.getElementById('drone-detections-count')
-        };
-
-        // Listen to drone controller events
-        droneController.on('pose', (pose) => {
-          telemetryElements.poseX.textContent = pose.x.toFixed(2);
-          telemetryElements.poseY.textContent = pose.y.toFixed(2);
-          telemetryElements.poseTheta.textContent = (pose.theta * 180 / Math.PI).toFixed(1);
-        });
-
-        droneController.on('detections', (detections) => {
-          telemetryElements.detectionCount.textContent = detections.length;
-        });
-
-        droneController.on('map', (map) => {
-          // Render occupancy map on SLAM canvas
-          const cellSize = slamCanvas.offsetWidth / 50;
-          slamCtx.fillStyle = '#020617';
-          slamCtx.fillRect(0, 0, slamCanvas.offsetWidth, slamCanvas.offsetHeight);
-
-          map.forEach((row, y) => {
-            row.forEach((occupancy, x) => {
-              if (occupancy > 0) {
-                slamCtx.fillStyle = `rgba(99, 102, 241, ${occupancy * 0.8})`;
-                slamCtx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-              }
-            });
-          });
-
-          // Draw drone pose
-          const centerX = slamCanvas.offsetWidth / 2;
-          const centerY = slamCanvas.offsetHeight / 2;
-          slamCtx.fillStyle = '#22c55e';
-          slamCtx.beginPath();
-          slamCtx.arc(centerX, centerY, 6, 0, Math.PI * 2);
-          slamCtx.fill();
-
-          // Draw heading direction
-          const headingLength = 15;
-          const endX = centerX + Math.cos(droneController.slam.pose.theta) * headingLength;
-          const endY = centerY + Math.sin(droneController.slam.pose.theta) * headingLength;
-          slamCtx.strokeStyle = '#22c55e';
-          slamCtx.lineWidth = 2;
-          slamCtx.beginPath();
-          slamCtx.moveTo(centerX, centerY);
-          slamCtx.lineTo(endX, endY);
-          slamCtx.stroke();
-        });
-
-        // Simulation loop - update every frame
-        let frame = 0;
-        const simulate = () => {
-          frame++;
-
-          // Simulate odometry and range readings
-          const odometry = {
-            dx: Math.cos(frame * 0.02) * 0.5,
-            dy: Math.sin(frame * 0.01) * 0.5,
-            dtheta: 0.01
-          };
-
-          const rangeReadings = Array.from({ length: 16 }, (_, i) => {
-            const angle = (i / 16) * Math.PI * 2;
-            return 5 + Math.sin(frame * 0.05 + angle) * 2 + Math.random();
-          });
-
-          droneController.step({
-            odometry,
-            rangeReadings,
-            fov: Math.PI / 2
-          });
-
-          // Render detection visualization
-          detCtx.fillStyle = '#020617';
-          detCtx.fillRect(0, 0, detCanvas.offsetWidth, detCanvas.offsetHeight);
-
-          detCtx.fillStyle = 'rgba(34, 197, 94, 0.6)';
-          detCtx.font = '12px monospace';
-          detCtx.fillText(`Frame: ${frame}`, 10, 20);
-          detCtx.fillText(`Range Readings: ${rangeReadings.length}`, 10, 40);
-          detCtx.fillText(`Confidence: ${(0.8 + Math.random() * 0.2).toFixed(2)}`, 10, 60);
-
-          requestAnimationFrame(simulate);
-        };
-
-        // Start simulation
-        simulate();
-
-        // Handle canvas resize
-        window.addEventListener('resize', () => {
-          slamCanvas.width = slamCanvas.offsetWidth * dpr;
-          slamCanvas.height = slamCanvas.offsetHeight * dpr;
-          slamCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-          detCanvas.width = detCanvas.offsetWidth * dpr;
-          detCanvas.height = detCanvas.offsetHeight * dpr;
-          detCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        });
-      } catch (err) {
-        console.warn('Drone Lab initialization skipped:', err);
-      }
+      document.addEventListener('visibilitychange', () => {
+        demo.setPausedFromVisibility(document.visibilityState === 'visible');
+      });
     }
 
-    // Initialize Drone Lab on page load
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initDroneLab);
+      document.addEventListener('DOMContentLoaded', initDroneRaceSection);
     } else {
-      initDroneLab();
+      initDroneRaceSection();
     }
 
     // Maze Solver UI initialization
