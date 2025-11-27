@@ -119,9 +119,9 @@ export function chooseFrontierTarget(grid, currentPos) {
     if (!best || dist < best.dist) return { cluster: c, dist };
     return best;
   }, null);
-  const largest = clusters.reduce((best, c) => (!best || c.cells.length > best.cells.length ? { cluster: c } : best), null);
+  const largest = clusters.reduce((best, c) => (!best || c.cells.length > best.cells.length ? c : best), null);
 
-  const targetCluster = nearest?.dist < 4 ? nearest.cluster : largest.cluster;
+  const targetCluster = nearest?.dist < 4 ? nearest.cluster : largest;
   const targetCell = targetCluster.cells[0];
   const worldTarget = worldFromCell(grid, targetCell);
   worldTarget.y = currentPos.y;

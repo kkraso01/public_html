@@ -1214,7 +1214,10 @@
   <script src="maze-solver/view.js"></script>
   <!-- <script src="maze-solver/smooth-turns-test.js"></script> -->
 
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    window.THREE = THREE;
+  </script>
   <script type="module" src="drone-sim/ui/main_demo.js"></script>
 
   <script>
