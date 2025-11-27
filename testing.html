@@ -123,92 +123,49 @@
       }
     }
 
-    /* Demo Container */
-    .demo-section {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 60px 20px;
-      position: relative;
-    }
-
-    .demo-content {
+    /* Slider Styling */
+    .pid-slider {
+      -webkit-appearance: none;
+      appearance: none;
       width: 100%;
-      max-width: 1200px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 40px;
-      align-items: center;
+      height: 6px;
+      background: linear-gradient(to right, rgba(99, 102, 241, 0.2), rgba(99, 102, 241, 0.4));
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
     }
 
-    .demo-canvas-container {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      background: rgba(12, 17, 28, 0.6);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    .pid-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #4f46e5;
+      border: 2px solid #6366f1;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: box-shadow 0.2s;
     }
 
-    .demo-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
+    .pid-slider::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 8px rgba(79, 70, 229, 0.6);
     }
 
-    .demo-heading {
-      margin: 0;
-      color: #a5b4fc;
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-bottom: 12px;
+    .pid-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: #4f46e5;
+      border: 2px solid #6366f1;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: box-shadow 0.2s;
     }
 
-    .demo-subtitle {
-      color: #cbd5e1;
-      font-size: 16px;
-      line-height: 1.6;
-      margin-bottom: 16px;
+    .pid-slider::-moz-range-thumb:hover {
+      box-shadow: 0 0 8px rgba(79, 70, 229, 0.6);
     }
 
-    .demo-cue {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
 
-    .demo-cue span {
-      padding: 4px 10px;
-      border-radius: 6px;
-      background: rgba(99, 102, 241, 0.15);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #818cf8;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .demo-content {
-        grid-template-columns: 1fr;
-        gap: 32px;
-      }
-
-      .demo-heading {
-        font-size: 24px;
-      }
-
-      .demo-canvas-container {
-        aspect-ratio: 4 / 3;
-      }
-    }
   </style>
 </head>
 
@@ -225,53 +182,48 @@
   </nav>
 
   <!-- Hero Header -->
-  <section class="pt-20 pb-12 px-6 text-center">
-    <div class="max-w-3xl mx-auto">
-      <p class="text-xs tracking-[0.3em] uppercase text-indigo-300 mb-4">
-        Advanced Control Systems • Real-time Physics • LQR Feedback
-      </p>
-      <h1 class="text-4xl sm:text-5xl font-bold mb-4 text-gray-100">
-        Drone Stability Demo
-      </h1>
-      <p class="text-lg md:text-xl text-gray-300">
-        Geometric controller with real-time gain tuning for quadrotor attitude and position control
+  <section class="py-20 px-6 text-center relative max-w-6xl mx-auto">
+    <div class="flex flex-col gap-3 mb-10">
+      <p class="mission-brief text-indigo-300/80">Advanced Control Systems • Real-time Physics • LQR Feedback</p>
+      <h2 class="text-4xl font-bold">Drone Stability Demo</h2>
+      <p class="text-gray-400 max-w-3xl">
+        Geometric controller with real-time gain tuning for quadrotor attitude and position control. Adjust PID-like gains interactively and watch the drone stabilize in real-time.
       </p>
     </div>
   </section>
 
   <!-- Demo Section -->
-  <section class="demo-section">
-    <div class="demo-content">
-      <!-- Canvas Container -->
-      <div class="demo-canvas-container" id="drone-container"></div>
-
-      <!-- Controls Panel -->
-      <div class="demo-controls">
-        <div>
-          <h2 class="demo-heading">Controller Tuning</h2>
-          <p class="demo-subtitle">
-            Adjust gains in real-time to tune the quadrotor's response dynamics. Watch how position and attitude control interact.
-          </p>
-          <div class="demo-cue">
-            <span>Interactive</span>
-          </div>
-        </div>
-
-        <!-- Control Panel will be injected here by drone demo -->
-        <div id="control-panel-container"></div>
-
-        <!-- Info Box -->
-        <div class="mt-8 p-4 bg-indigo-950/40 border border-indigo-500/30 rounded-lg">
-          <p class="text-sm text-indigo-300 font-mono">
-            <span style="color: #a5b4fc;">⌘ tip:</span> Use the sliders below to tune controller gains. The drone will stabilize at the target position (0, 1.5, 0).
-          </p>
-        </div>
+  <section id="drone-stability" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+    <!-- Canvas Container -->
+    <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg mb-8">
+      <div class="flex items-center gap-3">
+        <span class="hud-chip">Real-time Simulation</span>
+        <span class="cue-badge">Interactive controller tuning</span>
       </div>
-    </div>
+      <div>
+        <h3 class="text-2xl font-semibold">Quadrotor Physics & Control</h3>
+        <p class="text-gray-400">Watch the drone respond to controller gains. The physics engine runs at 240 Hz with geometric attitude control.</p>
+      </div>
+      <div id="drone-container" style="width: 100%; height: 500px; background: rgba(12, 17, 28, 0.6); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; position: relative;"></div>
+    </article>
+
+    <!-- Controls Panel -->
+    <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+      <div class="flex items-center gap-3">
+        <span class="hud-chip">Controller Tuning</span>
+        <span class="cue-badge">Adjust gains in real-time</span>
+      </div>
+      <div>
+        <h3 class="text-2xl font-semibold">Stability Gains</h3>
+        <p class="text-gray-400">Use the sliders to tune position and attitude controller parameters. The drone targets position (0, 1.5, 0).</p>
+      </div>
+      <!-- Control Panel will be injected here by drone demo -->
+      <div id="control-panel-container"></div>
+    </article>
   </section>
 
   <!-- Footer -->
-  <section class="py-12 px-6 text-center border-t border-gray-800/50">
+  <section class="py-12 px-6 text-center border-t border-gray-800/50 relative max-w-6xl mx-auto">
     <p class="text-gray-400 text-sm">
       Physics simulation at 240 Hz • Three.js rendering • Geometric Control Theory
     </p>
@@ -335,24 +287,69 @@
   </script>
 
   <!-- Drone Stability Demo Import and Initialization -->
-  <script type="module">
-    import { initDroneStabilityDemo } from './drones/stability/drone_stability_demo.js';
+  <script>
+    // Ensure Three.js is loaded before initializing
+    function initDroneDemo() {
+      if (typeof THREE === 'undefined') {
+        console.error('Three.js not loaded yet');
+        setTimeout(initDroneDemo, 100);
+        return;
+      }
 
-    const container = document.getElementById('drone-container');
-    const demoInstance = initDroneStabilityDemo(container, {
-      width: container.clientWidth,
-      height: container.clientHeight,
-    });
+      import('./drones/stability/drone_stability_demo.js').then(module => {
+        const { initDroneStabilityDemo } = module;
+        const container = document.getElementById('drone-container');
+        const controlPanel = document.getElementById('control-panel-container');
+        
+        if (!container) {
+          console.error('Drone container not found!');
+          return;
+        }
 
-    // Handle visibility changes
-    document.addEventListener('visibilitychange', () => {
-      demoInstance.setPausedFromVisibility(!document.hidden);
-    });
+        console.log('Container found:', container);
+        console.log('Container size:', container.clientWidth, 'x', container.clientHeight);
 
-    // Handle window resize
-    window.addEventListener('resize', () => {
-      demoInstance.restart();
-    });
+        try {
+          const demoInstance = initDroneStabilityDemo(container, {
+            width: container.clientWidth,
+            height: container.clientHeight,
+          });
+
+          console.log('Drone demo initialized successfully');
+
+          // Move the overlay controls to the control panel container
+          setTimeout(() => {
+            const overlay = container.querySelector('[style*="position:absolute"]');
+            if (overlay && controlPanel) {
+              console.log('Moving overlay to control panel');
+              overlay.style.cssText = 'position: static; background: transparent; border: none; padding: 0; max-width: 100%;';
+              controlPanel.appendChild(overlay);
+            }
+          }, 100);
+
+          // Handle visibility changes
+          document.addEventListener('visibilitychange', () => {
+            demoInstance.setPausedFromVisibility(!document.hidden);
+          });
+
+          // Handle window resize
+          window.addEventListener('resize', () => {
+            demoInstance.restart();
+          });
+        } catch (error) {
+          console.error('Error initializing drone demo:', error);
+        }
+      }).catch(err => {
+        console.error('Failed to load drone demo module:', err);
+      });
+    }
+
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initDroneDemo);
+    } else {
+      initDroneDemo();
+    }
   </script>
 
 </body>

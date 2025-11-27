@@ -159,12 +159,28 @@ class DroneStabilityDemo {
   }
 
   _initOverlay() {
-    this.container.style.position = 'relative';
-    this.overlay = document.createElement('div');
-    this.overlay.style.cssText =
-      'position:absolute; top:8px; left:8px; background:rgba(12,17,28,0.9); color:#e5e7eb; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(34,211,238,0.45); border-radius:8px; z-index:5; max-width:260px;';
-    this.overlay.innerHTML = '<div style="color:#22d3ee; font-size:13px; margin-bottom:6px;">Stability Tuning</div>';
-    this.container.appendChild(this.overlay);
+    // Try to find an external control panel container
+    let controlContainer = document.getElementById('control-panel-container');
+    
+    if (!controlContainer) {
+      // Fallback: create overlay inside container
+      this.container.style.position = 'relative';
+      this.overlay = document.createElement('div');
+      this.overlay.style.cssText =
+        'position:absolute; top:8px; left:8px; background:rgba(12,17,28,0.9); color:#e5e7eb; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(34,211,238,0.45); border-radius:8px; z-index:5; max-width:260px;';
+    } else {
+      // Use external control container
+      this.overlay = document.createElement('div');
+      this.overlay.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 12px;';
+    }
+
+    this.overlay.innerHTML = '<div style="color:#22d3ee; font-size:13px; margin-bottom:6px; grid-column: 1 / -1;">Stability Tuning</div>';
+    
+    if (!controlContainer) {
+      this.container.appendChild(this.overlay);
+    } else {
+      controlContainer.appendChild(this.overlay);
+    }
 
     this.controls = {};
     const sliderDefs = [
@@ -179,21 +195,21 @@ class DroneStabilityDemo {
 
     sliderDefs.forEach((def) => {
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'margin-bottom:6px; font-size:12px;';
+      wrapper.style.cssText = 'margin-bottom:6px; font-size:12px; padding: 8px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 6px; display: flex; flex-direction: column; gap: 4px;';
       const label = document.createElement('label');
-      label.textContent = `${def.label}: `;
-      label.style.marginRight = '6px';
+      label.textContent = `${def.label}`;
+      label.style.cssText = 'font-weight: 600; color: #cbd5e1;';
       const value = document.createElement('span');
-      value.textContent = this.gains[def.key];
-      value.style.color = '#a5b4fc';
-      value.style.marginLeft = '4px';
+      value.textContent = this.gains[def.key].toFixed(2);
+      value.style.cssText = 'color: #a5b4fc; font-weight: bold; font-size: 11px;';
       const input = document.createElement('input');
       input.type = 'range';
       input.min = def.min;
       input.max = def.max;
       input.step = def.step;
       input.value = this.gains[def.key];
-      input.style.width = '160px';
+      input.style.cssText = 'width: 100%;';
+      input.className = 'pid-slider';
       input.addEventListener('input', () => {
         const val = parseFloat(input.value);
         this.gains[def.key] = val;
