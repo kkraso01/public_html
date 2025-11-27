@@ -135,7 +135,12 @@ export class DronePhysicsEngine {
     const desiredQuat = this.desiredOrientationQuat || new THREE.Quaternion();
     const currentQuat = this.state.orientationQuat || this.state.orientation;
     const qError = desiredQuat.clone().multiply(currentQuat.clone().invert());
-    if (qError.w < 0) qError.multiplyScalar(-1);
+    if (qError.w < 0) {
+      qError.x *= -1;
+      qError.y *= -1;
+      qError.z *= -1;
+      qError.w *= -1;
+    }
     const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
     const attTorque = errorAxis
       .multiplyScalar(this.params.kp_att)
