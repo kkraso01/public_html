@@ -10,6 +10,10 @@ function ammoVec3(v) {
   return new Ammo.btVector3(v.x, v.y, v.z);
 }
 
+function addQuaternion(q, delta) {
+  return new THREE.Quaternion(q.x + delta.x, q.y + delta.y, q.z + delta.z, q.w + delta.w);
+}
+
 export function createAmmoWorld(gravity = new THREE.Vector3(0, 0, 0)) {
   if (typeof Ammo === 'undefined') {
     console.warn('Ammo.js not loaded; collisions disabled');
@@ -201,12 +205,15 @@ export class Quadrotor {
     const s1 = {
       position: s0.position.clone().addScaledVector(k1.posDot, dt * 0.5),
       velocity: s0.velocity.clone().addScaledVector(k1.velDot, dt * 0.5),
-      quaternion: s0.quaternion.clone().add(new THREE.Quaternion(
-        k1.qDot.x * dt * 0.5,
-        k1.qDot.y * dt * 0.5,
-        k1.qDot.z * dt * 0.5,
-        k1.qDot.w * dt * 0.5,
-      )).normalize(),
+      quaternion: addQuaternion(
+        s0.quaternion,
+        new THREE.Quaternion(
+          k1.qDot.x * dt * 0.5,
+          k1.qDot.y * dt * 0.5,
+          k1.qDot.z * dt * 0.5,
+          k1.qDot.w * dt * 0.5,
+        ),
+      ).normalize(),
       omega: s0.omega.clone().addScaledVector(k1.omegaDot, dt * 0.5),
     };
 
@@ -215,12 +222,15 @@ export class Quadrotor {
     const s2 = {
       position: s0.position.clone().addScaledVector(k2.posDot, dt * 0.5),
       velocity: s0.velocity.clone().addScaledVector(k2.velDot, dt * 0.5),
-      quaternion: s0.quaternion.clone().add(new THREE.Quaternion(
-        k2.qDot.x * dt * 0.5,
-        k2.qDot.y * dt * 0.5,
-        k2.qDot.z * dt * 0.5,
-        k2.qDot.w * dt * 0.5,
-      )).normalize(),
+      quaternion: addQuaternion(
+        s0.quaternion,
+        new THREE.Quaternion(
+          k2.qDot.x * dt * 0.5,
+          k2.qDot.y * dt * 0.5,
+          k2.qDot.z * dt * 0.5,
+          k2.qDot.w * dt * 0.5,
+        ),
+      ).normalize(),
       omega: s0.omega.clone().addScaledVector(k2.omegaDot, dt * 0.5),
     };
 
@@ -229,12 +239,15 @@ export class Quadrotor {
     const s3 = {
       position: s0.position.clone().addScaledVector(k3.posDot, dt),
       velocity: s0.velocity.clone().addScaledVector(k3.velDot, dt),
-      quaternion: s0.quaternion.clone().add(new THREE.Quaternion(
-        k3.qDot.x * dt,
-        k3.qDot.y * dt,
-        k3.qDot.z * dt,
-        k3.qDot.w * dt,
-      )).normalize(),
+      quaternion: addQuaternion(
+        s0.quaternion,
+        new THREE.Quaternion(
+          k3.qDot.x * dt,
+          k3.qDot.y * dt,
+          k3.qDot.z * dt,
+          k3.qDot.w * dt,
+        ),
+      ).normalize(),
       omega: s0.omega.clone().addScaledVector(k3.omegaDot, dt),
     };
 
@@ -254,7 +267,7 @@ export class Quadrotor {
       (k1.qDot.z + 2 * k2.qDot.z + 2 * k3.qDot.z + k4.qDot.z) * dt / 6,
       (k1.qDot.w + 2 * k2.qDot.w + 2 * k3.qDot.w + k4.qDot.w) * dt / 6,
     );
-    this.state.quaternion.add(dq).normalize();
+    this.state.quaternion.copy(addQuaternion(this.state.quaternion, dq)).normalize();
     this.state.omega.addScaledVector(
       k1.omegaDot.clone().add(k2.omegaDot.clone().multiplyScalar(2)).add(k3.omegaDot.clone().multiplyScalar(2)).add(k4.omegaDot),
       dt / 6,
