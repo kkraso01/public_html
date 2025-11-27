@@ -720,10 +720,19 @@
       <p class="text-gray-400 max-w-3xl">
         Visualizes a single autonomous racing drone flying a spline-planned indoor track with a chase camera, gate timing, VIO noise, and PID control. Built for portfolio embedding with pause/resume hooks that play nicely with IntersectionObserver.
       </p>
+      <div class="flex flex-wrap items-center gap-3 text-sm text-gray-200">
+        <label for="drone-demo-selector" class="text-xs uppercase tracking-wide text-indigo-300 font-semibold">Select Demo</label>
+        <select id="drone-demo-selector" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
+          <option value="race">Drone Race Demo</option>
+          <option value="cave">Cave Explorer Demo</option>
+          <option value="obstacle">Obstacle Drop Demo</option>
+        </select>
+        <span id="drone-demo-status" class="text-xs px-2 py-1 rounded-md border border-indigo-600/60 bg-indigo-900/40 text-indigo-200 tracking-wide">Autonomous Drone Race</span>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
-      <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+      <div id="drone-race-controls" class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
         <div class="flex items-center gap-3">
           <span class="hud-chip">Autonomy Stack</span>
           <span class="cue-badge opacity-60">Spline planner · VIO drift · PID control</span>
@@ -1072,7 +1081,18 @@
   <!-- <script src="maze-solver/smooth-turns-test.js"></script> -->
 
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <script src="drone_race_demo.js"></script>
+  <script type="module" src="drone-sim/core/utils/drone_math.js"></script>
+  <script type="module" src="drone-sim/core/physics/drone_core_physics.js"></script>
+  <script type="module" src="drone-sim/core/sensors/lidar.js"></script>
+  <script type="module" src="drone-sim/world/obstacle_presets.js"></script>
+  <script type="module" src="drone-sim/world/obstacle_manager.js"></script>
+  <script type="module" src="drone-sim/world/cave_sim.js"></script>
+  <script type="module" src="drone-sim/core/ai/drone_control.js"></script>
+  <script type="module" src="drone-sim/core/ai/drone_ai.js"></script>
+  <script type="module" src="drone-sim/demos/drone_race/drone_race_demo.js"></script>
+  <script type="module" src="drone-sim/demos/cave_explorer/drone_cave_demo.js"></script>
+  <script type="module" src="drone-sim/demos/obstacle_drop/obstacle_drop_demo.js"></script>
+  <script type="module" src="drone-sim/ui/main_demo.js"></script>
 
   <script>
     // Navigation & interaction helpers
@@ -1135,37 +1155,6 @@
       parentSection.addEventListener('pointerenter', handleInteraction, { once: true });
       parentSection.addEventListener('click', handleInteraction, { once: true });
     });
-
-    // Drone race demo integration
-    function initDroneRaceSection() {
-      const container = document.getElementById('drone-race-demo');
-      if (!container || typeof initDroneRaceDemo !== 'function') return;
-
-      const demo = initDroneRaceDemo(container, {
-        width: container.clientWidth || 960,
-        height: container.clientHeight || 520,
-        enableShadows: true,
-        highQuality: true
-      });
-
-      const visibilityObserver = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          demo.setPausedFromVisibility(entry.isIntersecting);
-        });
-      }, { threshold: 0.2 });
-
-      visibilityObserver.observe(container);
-
-      document.addEventListener('visibilitychange', () => {
-        demo.setPausedFromVisibility(document.visibilityState === 'visible');
-      });
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initDroneRaceSection);
-    } else {
-      initDroneRaceSection();
-    }
 
     // Maze Solver UI initialization
     window.addEventListener('DOMContentLoaded', function () {

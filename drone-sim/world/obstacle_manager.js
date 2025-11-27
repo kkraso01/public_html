@@ -35,6 +35,17 @@ export class ObstacleManager {
     this._id = 0;
   }
 
+  clear() {
+    for (const obstacle of this.obstacles) {
+      this.scene.remove(obstacle.mesh);
+      if (obstacle.body && this.world) {
+        this.world.removeRigidBody(obstacle.body);
+      }
+    }
+    this.obstacles = [];
+    this._notify();
+  }
+
   spawn(type, position = new THREE.Vector3(), overrides = {}) {
     const preset = buildObstaclePreset(type, overrides);
     const mesh = new THREE.Mesh(preset.geometry, preset.material);
