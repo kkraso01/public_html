@@ -149,7 +149,7 @@ class LidarSimulator {
       if (callback.hasHit()) {
         const pt = callback.get_hitPointWorld();
         const distance = pose.position.distanceTo(new THREE.Vector3(pt.x(), pt.y(), pt.z()));
-        const noisy = distance + gaussianNoise(0, 0.05);
+        const noisy = clamp(distance + gaussianNoise(0, 0.05), 0.05, this.maxRange);
         hits.push({
           distance: noisy,
           direction: dir,
@@ -622,12 +622,13 @@ class DroneCaveDemo {
 
   _updateGridFromScan(hits, pose) {
     for (const h of hits) {
+      if (!Number.isFinite(h.distance) || h.distance <= 0) continue;
       const hitPoint = h.point;
       const cell = this.grid.indexFromWorld(hitPoint);
       if (this.grid.isInside(cell.x, cell.y)) this.grid.updateCell(cell.x, cell.y, 1.2);
 
       // Carve free space along ray
-      const steps = Math.ceil(h.distance / this.grid.resolution);
+      const steps = Math.max(1, Math.ceil(h.distance / this.grid.resolution));
       const dir2d = new THREE.Vector2(h.direction.x, h.direction.z).normalize();
       for (let i = 1; i < steps; i++) {
         const pt = new THREE.Vector2(pose.position.x, pose.position.z).add(dir2d.clone().multiplyScalar(i * this.grid.resolution));
