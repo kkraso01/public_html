@@ -132,6 +132,20 @@ export class DronePhysicsEngine {
     this.state.position.z = Math.max(worldMinZ, Math.min(worldMaxZ, this.state.position.z));
 
     const tau = this._torqueFromThrusts(thrusts);
+    const desiredQuat = this.desiredOrientationQuat || new THREE.Quaternion();
+    const currentQuat = this.state.orientationQuat || this.state.orientation;
+    const qError = desiredQuat.clone().multiply(currentQuat.clone().invert());
+    if (qError.w < 0) {
+      qError.x *= -1;
+      qError.y *= -1;
+      qError.z *= -1;
+      qError.w *= -1;
+    }
+    const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
+    const attTorque = errorAxis
+      .multiplyScalar(this.params.kp_att)
+      .add(this.state.angularVelocity.clone().multiplyScalar(-this.params.kd_att));
+    const torque = tau.add(attTorque);
     const inertia = this.params.inertia;
     const inertiaVec = new THREE.Vector3(
       inertia.x * this.state.angularVelocity.x,
@@ -140,9 +154,9 @@ export class DronePhysicsEngine {
     );
     const omegaCrossIomega = this.state.angularVelocity.clone().cross(inertiaVec);
     const omegaDot = new THREE.Vector3(
-      (tau.x - omegaCrossIomega.x) / inertia.x,
-      (tau.y - omegaCrossIomega.y) / inertia.y,
-      (tau.z - omegaCrossIomega.z) / inertia.z,
+      (torque.x - omegaCrossIomega.x) / inertia.x,
+      (torque.y - omegaCrossIomega.y) / inertia.y,
+      (torque.z - omegaCrossIomega.z) / inertia.z,
     );
 
     this.state.angularVelocity.add(omegaDot.multiplyScalar(dt));
