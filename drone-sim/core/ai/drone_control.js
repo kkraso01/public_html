@@ -2,7 +2,7 @@
 // This controller follows the structure popularized by Lee et al., providing thrust and body torques
 // from desired acceleration / yaw commands.
 
-import { clamp } from './drone_math.js';
+import { clamp } from '../utils/drone_math.js';
 
 export class GeometricController {
   constructor(params = {}) {

@@ -1,14 +1,7 @@
-import { CaveSim } from './cave_sim.js';
-import { OBSTACLE_TYPES, listPresets } from './obstacle_presets.js';
+import { CaveSim } from '../../world/cave_sim.js';
+import { OBSTACLE_TYPES, listPresets } from '../../world/obstacle_presets.js';
 
-export function initObstacleDemo(container, options = {}) {
-  const sim = new CaveSim(container, options);
-  sim.start();
-  const panel = buildUI(container, sim);
-  return { sim, panel };
-}
-
-function buildUI(container, sim) {
+function buildPanel(container, sim) {
   const panel = document.createElement('div');
   panel.style.cssText =
     'position:absolute; top:10px; left:10px; display:flex; flex-direction:column; gap:8px; background:rgba(9,12,20,0.72); padding:10px; border:1px solid rgba(56,189,248,0.35); border-radius:10px; color:#e2e8f0; font-family:"Inter",sans-serif; z-index:20; backdrop-filter: blur(6px);';
@@ -48,4 +41,31 @@ function buildUI(container, sim) {
   container.style.position = 'relative';
   container.appendChild(panel);
   return panel;
+}
+
+export function initObstacleDropDemo(container, options = {}) {
+  const sim = new CaveSim(container, options);
+  sim.start();
+  const panel = buildPanel(container, sim);
+
+  const cleanup = () => {
+    if (panel?.parentNode) panel.parentNode.removeChild(panel);
+    sim.destroy?.();
+  };
+
+  return {
+    pause: () => sim.pause?.(),
+    resume: () => sim.resume?.(),
+    restart: () => {
+      sim.pause?.();
+      sim.resetObstacles();
+      sim.spawnObstacle(OBSTACLE_TYPES.boulder);
+      sim.resume?.();
+    },
+    setPausedFromVisibility: (visible) => {
+      if (visible) sim.resume?.();
+      else sim.pause?.();
+    },
+    destroy: cleanup,
+  };
 }

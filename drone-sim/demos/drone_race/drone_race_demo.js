@@ -1,8 +1,8 @@
 // Autonomous drone race demo with research-inspired physics + control stack.
 // Exposes initDroneRaceDemo(container, options) -> { pause, resume, restart, setPausedFromVisibility }
 
-import { Quadrotor } from './drone_core_physics.js';
-import { GeometricController } from './drone_control.js';
+import { Quadrotor } from '../../core/physics/drone_core_physics.js';
+import { GeometricController } from '../../core/ai/drone_control.js';
 
 class ReferenceTrajectory {
   // Min-snap placeholder implemented as Catmull-Rom splines but structured so a true solver can drop in later.
@@ -50,7 +50,7 @@ class ReferenceTrajectory {
 export function initDroneRaceDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
     console.warn('Drone race demo requires a valid container and Three.js');
-    return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {} };
+    return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {}, destroy() {} };
   }
   const demo = new DroneRaceDemo(container, options);
   demo.start();
@@ -59,6 +59,7 @@ export function initDroneRaceDemo(container, options = {}) {
     resume: () => demo.resume(true),
     restart: () => demo.restart(),
     setPausedFromVisibility: (visible) => demo.setPausedFromVisibility(visible),
+    destroy: () => demo.destroy(),
   };
 }
 
@@ -83,6 +84,7 @@ class DroneRaceDemo {
     this.visibilityPaused = false;
     this.lastFrame = null;
     this.accumulator = 0;
+    this._frameReq = null;
 
     this._initScene();
     this._initHUD();
@@ -225,6 +227,10 @@ class DroneRaceDemo {
   pause(user = false) {
     this.userPaused = user ? true : this.userPaused;
     this._paused = true;
+    if (this._frameReq) {
+      cancelAnimationFrame(this._frameReq);
+      this._frameReq = null;
+    }
   }
 
   resume(user = false) {
@@ -317,5 +323,17 @@ class DroneRaceDemo {
     this.overlay.querySelector('#raceTime').textContent = `t = ${this.raceTime.toFixed(2)} s`;
     this.overlay.querySelector('#raceGate').textContent = `Gate: ${Math.min(this.gateIndex, this.gates.length)} / ${this.gates.length}`;
     this.overlay.querySelector('#raceSpeed').textContent = `Speed: ${speed.toFixed(1)} m/s`;
+  }
+
+  destroy() {
+    this.pause(true);
+    if (this._frameReq) {
+      cancelAnimationFrame(this._frameReq);
+      this._frameReq = null;
+    }
+    if (this.overlay?.parentNode === this.container) this.container.removeChild(this.overlay);
+    if (this.renderer?.domElement?.parentNode === this.container) {
+      this.container.removeChild(this.renderer.domElement);
+    }
   }
 }

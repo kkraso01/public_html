@@ -1,9 +1,9 @@
 // Autonomous cave exploration demo with LiDAR mapping, frontier planning, and Ammo.js collisions.
 // Entry point: initDroneCaveDemo(container, options)
 
-import { Quadrotor, createAmmoWorld } from './drone_core_physics.js';
-import { GeometricController } from './drone_control.js';
-import { clamp, gaussianNoise } from './drone_math.js';
+import { Quadrotor, createAmmoWorld } from '../../core/physics/drone_core_physics.js';
+import { GeometricController } from '../../core/ai/drone_control.js';
+import { clamp, gaussianNoise } from '../../core/utils/drone_math.js';
 
 const ammoVec3 = (v) => new Ammo.btVector3(v.x, v.y, v.z);
 
@@ -315,7 +315,7 @@ class CaveEnvironment {
 export function initDroneCaveDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
     console.warn('Cave demo requires a valid container and Three.js');
-    return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {} };
+    return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {}, destroy() {} };
   }
   const demo = new DroneCaveDemo(container, options);
   demo.start();
@@ -324,6 +324,7 @@ export function initDroneCaveDemo(container, options = {}) {
     resume: () => demo.resume(true),
     restart: () => demo.restart(),
     setPausedFromVisibility: (visible) => demo.setPausedFromVisibility(visible),
+    destroy: () => demo.destroy(),
   };
 }
 
@@ -345,6 +346,7 @@ class DroneCaveDemo {
     this.visibilityPaused = false;
     this.lastFrame = null;
     this.accumulator = 0;
+    this._frameReq = null;
 
     this._initScene();
     this._initHUD();
@@ -439,6 +441,7 @@ class DroneCaveDemo {
       <button data-action="spawn" style="padding:6px 10px;">Spawn obstacle</button>
     `;
     this.container.appendChild(panel);
+    this._controlPanel = panel;
     panel.addEventListener('click', (e) => {
       const action = e.target.dataset?.action;
       if (!action) return;
@@ -501,6 +504,10 @@ class DroneCaveDemo {
   pause(user = false) {
     this.userPaused = user || this.userPaused;
     this.running = false;
+    if (this._frameReq) {
+      cancelAnimationFrame(this._frameReq);
+      this._frameReq = null;
+    }
   }
 
   resume(user = false) {
@@ -508,7 +515,7 @@ class DroneCaveDemo {
     if (this.visibilityPaused) return;
     this.running = true;
     this.lastFrame = performance.now();
-    requestAnimationFrame((t) => this._loop(t));
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
   }
 
   setPausedFromVisibility(visible) {
@@ -518,9 +525,10 @@ class DroneCaveDemo {
   }
 
   start() {
+    if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
-    requestAnimationFrame((t) => this._loop(t));
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
   }
 
   _loop(timestamp) {
@@ -535,7 +543,7 @@ class DroneCaveDemo {
       this.time += fixedDt;
     }
     this._render();
-    requestAnimationFrame((t) => this._loop(t));
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
   }
 
   _stepPhysics(dt) {
@@ -690,5 +698,15 @@ class DroneCaveDemo {
     this.overlay.querySelector('#caveTime').textContent = `t = ${this.time.toFixed(2)} s`;
     this.overlay.querySelector('#caveCoverage').textContent = `Coverage: ${(coverage * 100).toFixed(1)}%`;
     this.overlay.querySelector('#caveFrontiers').textContent = `Frontiers: ${frontiers}`;
+  }
+
+  destroy() {
+    this.pause();
+    if (this._controlPanel?.parentNode === this.container) this.container.removeChild(this._controlPanel);
+    if (this.overlay?.parentNode === this.container) this.container.removeChild(this.overlay);
+    if (this.minimap?.parentNode === this.container) this.container.removeChild(this.minimap);
+    if (this.renderer?.domElement?.parentNode === this.container) {
+      this.container.removeChild(this.renderer.domElement);
+    }
   }
 }

@@ -2,7 +2,7 @@
 // The design mirrors lightweight research simulators (RotorS / Flightmare style)
 // but is intentionally browser-friendly and dependency free beyond Three.js.
 
-import { clamp } from './drone_math.js';
+import { clamp } from '../utils/drone_math.js';
 
 const GRAVITY = new THREE.Vector3(0, -9.81, 0);
 

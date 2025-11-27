@@ -1,5 +1,5 @@
-import { AmmoLidar } from './lidar.js';
-import { clamp } from './drone_math.js';
+import { AmmoLidar } from '../sensors/lidar.js';
+import { clamp } from '../utils/drone_math.js';
 
 class OccupancyGrid {
   constructor(resolution = 0.35, size = 96) {

@@ -1,8 +1,8 @@
-import { Quadrotor, createAmmoWorld } from './drone_core_physics.js';
-import { GeometricController } from './drone_control.js';
-import { DroneAI } from './drone_ai.js';
+import { Quadrotor, createAmmoWorld } from '../core/physics/drone_core_physics.js';
+import { GeometricController } from '../core/ai/drone_control.js';
+import { DroneAI } from '../core/ai/drone_ai.js';
 import { ObstacleManager } from './obstacle_manager.js';
-import { DraggableControls } from './draggable_controls.js';
+import { DraggableControls } from '../ui/draggable_controls.js';
 import { OBSTACLE_TYPES } from './obstacle_presets.js';
 
 const ammoVec3 = (v) => new Ammo.btVector3(v.x, v.y, v.z);
@@ -23,6 +23,7 @@ export class CaveSim {
     this.accumulator = 0;
     this.lastFrame = null;
     this.running = false;
+    this._frameReq = null;
 
     this._initScene();
     this._initWorld();
@@ -124,20 +125,40 @@ export class CaveSim {
   }
 
   resetObstacles() {
-    for (const ob of this.obstacles.obstacles) {
-      this.scene.remove(ob.mesh);
-      if (ob.body && this.world) {
-        this.world.removeRigidBody(ob.body);
-      }
-    }
-    this.obstacles.obstacles = [];
+    this.obstacles.clear();
     this.ai.onEnvironmentChanged();
   }
 
   start() {
+    if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
-    requestAnimationFrame((t) => this._loop(t));
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
+  }
+
+  pause() {
+    this.running = false;
+    if (this._frameReq) {
+      cancelAnimationFrame(this._frameReq);
+      this._frameReq = null;
+    }
+  }
+
+  resume() {
+    if (this.running) return;
+    this.running = true;
+    this.lastFrame = performance.now();
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
+  }
+
+  destroy() {
+    this.pause();
+    if (this.dragControls) this.dragControls.dispose();
+    if (this.renderer?.domElement?.parentNode === this.container) {
+      this.container.removeChild(this.renderer.domElement);
+    }
+    this.obstacles?.clear?.();
+    this.scene = null;
   }
 
   _loop(time) {
@@ -151,7 +172,7 @@ export class CaveSim {
       this.accumulator -= fixed;
     }
     this._render();
-    requestAnimationFrame((t) => this._loop(t));
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
   }
 
   _step(dt) {
