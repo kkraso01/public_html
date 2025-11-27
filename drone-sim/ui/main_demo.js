@@ -1,6 +1,6 @@
-import { initDroneRaceDemo } from '../demos/drone_race/drone_race_demo.js';
-import { initDroneCaveDemo } from '../demos/cave_explorer/drone_cave_demo.js';
-import { initObstacleDropDemo } from '../demos/obstacle_drop/obstacle_drop_demo.js';
+import { initDroneRaceDemo } from '../../drones/race/drone_race_demo.js';
+import { initDroneCaveDemo } from '../../drones/cave/drone_cave_demo.js';
+import { initObstacleDropDemo } from '../../drones/obstacles/obstacle_sim.js';
 
 function setupDemo(containerId, demoFactory, controlsId, toggleBtnId, restartBtnId) {
   const container = document.getElementById(containerId);

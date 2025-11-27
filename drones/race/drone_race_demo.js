@@ -1,0 +1,281 @@
+import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
+import { buildRaceTrack, ReferenceTrajectory } from './track.js';
+import { createRaceHUD, updateHUD } from './ui.js';
+
+function clamp(x, min, max) {
+  return Math.min(Math.max(x, min), max);
+}
+
+export function initDroneRaceDemo(container, options = {}) {
+  if (!container || typeof THREE === 'undefined') {
+    console.warn('Drone race demo requires a valid container and Three.js');
+    return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {}, destroy() {} };
+  }
+  const demo = new DroneRaceDemo(container, options);
+  demo.start();
+  return {
+    pause: () => demo.pause(true),
+    resume: () => demo.resume(true),
+    restart: () => demo.restart(),
+    setPausedFromVisibility: (visible) => demo.setPausedFromVisibility(visible),
+    destroy: () => demo.destroy(),
+  };
+}
+
+class DroneRaceDemo {
+  constructor(container, options) {
+    this.container = container;
+    this.options = Object.assign(
+      {
+        highQuality: true,
+        shadows: true,
+        width: container.clientWidth || 800,
+        height: container.clientHeight || 450,
+      },
+      options,
+    );
+
+    this.physicsRate = 240;
+    this.timeScale = 1.0;
+    this.state = 'COUNTDOWN';
+    this.userPaused = false;
+    this.visibilityPaused = false;
+    this.lastFrame = null;
+    this.accumulator = 0;
+    this._frameReq = null;
+
+    this._initScene();
+    this._initDrone();
+    this._initTrack();
+    this._initHUD();
+    this.restart();
+  }
+
+  _initScene() {
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x0a1020);
+    this.camera = new THREE.PerspectiveCamera(60, this.options.width / this.options.height, 0.1, 500);
+    this.camera.position.set(0, 2.5, 8);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: !!this.options.highQuality });
+    this.renderer.setSize(this.options.width, this.options.height);
+    this.renderer.setPixelRatio(this.options.highQuality ? window.devicePixelRatio : 1);
+    this.renderer.shadowMap.enabled = !!this.options.shadows;
+    this.container.innerHTML = '';
+    this.container.appendChild(this.renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0x8899ff, 0.35);
+    const hemi = new THREE.HemisphereLight(0x6272ff, 0x090b14, 0.65);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+    dir.position.set(6, 10, 6);
+    dir.castShadow = !!this.options.shadows;
+    this.scene.add(ambient, hemi, dir);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(120, 120),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6, metalness: 0.05 }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    this.scene.add(floor);
+
+    this.trailGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    this.trailLine = new THREE.Line(
+      this.trailGeometry,
+      new THREE.LineBasicMaterial({ color: 0x8be9fd, transparent: true, opacity: 0.55 }),
+    );
+    this.scene.add(this.trailLine);
+  }
+
+  _initDrone() {
+    this.drone = new DronePhysicsEngine();
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, 0.04, 12),
+      new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x1f2937, metalness: 0.4, roughness: 0.3 }),
+    );
+    body.rotation.z = Math.PI / 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
+
+    const arms = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, 0.02, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x0ea5e9 }),
+    );
+    arms.castShadow = true;
+
+    this.droneMesh = new THREE.Group();
+    this.droneMesh.add(body, arms);
+
+    const prop = new THREE.Mesh(
+      new THREE.RingGeometry(0.06, 0.08, 16),
+      new THREE.MeshBasicMaterial({ color: 0xf8fafc }),
+    );
+    prop.rotation.x = Math.PI / 2;
+    [-0.17, 0.17].forEach((x) => {
+      [-0.17, 0.17].forEach((y) => {
+        const p = prop.clone();
+        p.position.set(x, 0.01, y);
+        this.droneMesh.add(p);
+      });
+    });
+
+    this.scene.add(this.droneMesh);
+  }
+
+  _initTrack() {
+    const { gates, waypoints } = buildRaceTrack(this.scene);
+    this.gates = gates;
+    this.waypoints = waypoints;
+    this.trajectory = new ReferenceTrajectory(waypoints, 22);
+  }
+
+  _initHUD() {
+    this.overlay = createRaceHUD(this.container);
+  }
+
+  restart() {
+    this.drone.reset({ position: new THREE.Vector3(0, 1.6, 0), orientation: new THREE.Quaternion() });
+    this.simTime = 0;
+    this.gateIndex = 0;
+    this.state = 'RUNNING';
+    this.trailGeometry.setFromPoints([this.drone.state.position.clone(), this.drone.state.position.clone()]);
+  }
+
+  pause(user = false) {
+    if (user) this.userPaused = true;
+    if (this._frameReq) cancelAnimationFrame(this._frameReq);
+    this._frameReq = null;
+  }
+
+  resume(user = false) {
+    if (user) this.userPaused = false;
+    if (!this._frameReq && !this.userPaused && !this.visibilityPaused) {
+      this.lastFrame = null;
+      this._frameReq = requestAnimationFrame((t) => this._loop(t));
+    }
+  }
+
+  setPausedFromVisibility(visible) {
+    this.visibilityPaused = !visible;
+    if (this.visibilityPaused) {
+      this.pause(false);
+    } else {
+      this.resume(false);
+    }
+  }
+
+  start() {
+    this.resume(false);
+  }
+
+  destroy() {
+    this.pause(false);
+    this.container.innerHTML = '';
+  }
+
+  _loop(timestamp) {
+    if (this.userPaused || this.visibilityPaused) return;
+    if (this.lastFrame === null) this.lastFrame = timestamp;
+    const dt = ((timestamp - this.lastFrame) / 1000) * this.timeScale;
+    this.lastFrame = timestamp;
+
+    const fixedDt = 1 / this.physicsRate;
+    this.accumulator += dt;
+    while (this.accumulator >= fixedDt) {
+      this._stepPhysics(fixedDt);
+      this.accumulator -= fixedDt;
+    }
+
+    this._render();
+    this._frameReq = requestAnimationFrame((t) => this._loop(t));
+  }
+
+  _stepPhysics(dt) {
+    if (this.state !== 'RUNNING') return;
+    this.simTime += dt;
+    const target = this.trajectory.sample(this.simTime % this.trajectory.totalTime);
+    const commands = this._computeMotorCommands(target);
+    this.drone.applyMotorCommands(commands[0], commands[1], commands[2], commands[3]);
+    this.drone.step(dt);
+
+    const pos = this.drone.state.position;
+    const vel = this.drone.state.velocity.length();
+    updateHUD(this.overlay, {
+      state: this.state,
+      time: this.simTime,
+      gateIdx: this.gateIndex,
+      gateTotal: this.gates.length,
+      speed: vel,
+    });
+
+    const gatePos = this.waypoints[this.gateIndex + 1] || this.waypoints[this.waypoints.length - 1];
+    if (pos.distanceTo(gatePos) < 1.5 && this.gateIndex < this.gates.length) {
+      this.gateIndex += 1;
+      if (this.gateIndex >= this.gates.length) this.state = 'COMPLETE';
+    }
+  }
+
+  _desiredOrientationFromThrust(thrustVec, yaw) {
+    const zBody = thrustVec.lengthSq() > 1e-6 ? thrustVec.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    const xC = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    const yBody = zBody.clone().cross(xC).normalize();
+    if (yBody.lengthSq() < 1e-6) return new THREE.Quaternion();
+    const xBody = yBody.clone().cross(zBody).normalize();
+    const m = new THREE.Matrix4();
+    m.makeBasis(xBody, yBody, zBody);
+    const q = new THREE.Quaternion();
+    q.setFromRotationMatrix(m);
+    return q;
+  }
+
+  _computeMotorCommands(target) {
+    const kp = 4.5;
+    const kd = 3.0;
+    const kR = 4.0;
+    const kOmega = 0.18;
+    const params = this.drone.params;
+
+    const posErr = target.position.clone().sub(this.drone.state.position);
+    const velErr = target.velocity.clone().sub(this.drone.state.velocity);
+    const desiredAcc = target.acceleration
+      .clone()
+      .add(posErr.multiplyScalar(kp))
+      .add(velErr.multiplyScalar(kd));
+
+    const thrustVector = desiredAcc.clone().add(new THREE.Vector3(0, 9.81, 0)).multiplyScalar(params.mass);
+    const thrustMag = clamp(thrustVector.length(), 0, params.mass * 30);
+
+    const desiredOrientation = this._desiredOrientationFromThrust(thrustVector, target.yaw);
+    const qError = desiredOrientation.clone().multiply(this.drone.state.orientation.clone().invert());
+    const axis = new THREE.Vector3(qError.x, qError.y, qError.z);
+    const angle = 2 * Math.atan2(axis.length(), qError.w);
+    const attError = axis.length() > 1e-6 ? axis.normalize().multiplyScalar(angle) : new THREE.Vector3();
+
+    const torque = attError.multiplyScalar(kR).add(this.drone.state.angularVelocity.clone().multiplyScalar(-kOmega));
+
+    const kYaw = params.kM / Math.max(params.kF, 1e-9);
+    const L = params.armLength;
+    const m0 = 0.25 * thrustMag - torque.y / (2 * L) + torque.z / (4 * kYaw);
+    const m1 = 0.25 * thrustMag + torque.x / (2 * L) - torque.z / (4 * kYaw);
+    const m2 = 0.25 * thrustMag + torque.y / (2 * L) + torque.z / (4 * kYaw);
+    const m3 = 0.25 * thrustMag - torque.x / (2 * L) - torque.z / (4 * kYaw);
+
+    const thrusts = [m0, m1, m2, m3].map((m) => clamp(m, 0, thrustMag));
+    const rpms = thrusts.map((t) => Math.sqrt(Math.max(t, 0) / Math.max(params.kF, 1e-9)));
+
+    const hoverRPM = Math.sqrt((params.mass * 9.81) / (4 * params.kF));
+    return rpms.map((r) => clamp(r, 0, params.rpmMax) || hoverRPM * 0.9);
+  }
+
+  _render() {
+    this.camera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.2, 0)));
+    this.droneMesh.position.copy(this.drone.state.position);
+    this.droneMesh.quaternion.copy(this.drone.state.orientation);
+
+    const points = this.trailGeometry.getAttribute('position');
+    points.setXYZ(0, this.drone.state.position.x, this.drone.state.position.y, this.drone.state.position.z);
+    points.setXYZ(1, this.drone.state.position.x, this.drone.state.position.y, this.drone.state.position.z);
+    points.needsUpdate = true;
+    this.renderer.render(this.scene, this.camera);
+  }
+}
