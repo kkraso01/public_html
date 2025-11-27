@@ -24,6 +24,7 @@ export class CaveSim {
     this.lastFrame = null;
     this.running = false;
     this._frameReq = null;
+    this.simTime = 0;
 
     this._initScene();
     this._initWorld();
@@ -132,6 +133,7 @@ export class CaveSim {
   start() {
     if (this.running) return;
     this.running = true;
+    this.simTime = 0;
     this.lastFrame = performance.now();
     this._frameReq = requestAnimationFrame((t) => this._loop(t));
   }
@@ -147,6 +149,7 @@ export class CaveSim {
   resume() {
     if (this.running) return;
     this.running = true;
+    this.simTime = this.simTime || 0;
     this.lastFrame = performance.now();
     this._frameReq = requestAnimationFrame((t) => this._loop(t));
   }
@@ -176,20 +179,34 @@ export class CaveSim {
   }
 
   _step(dt) {
+    this.simTime += dt;
     this.drone.syncFromAmmoBody();
-    const desired = {
-      position: new THREE.Vector3(0, 1.3, 0),
-      velocity: new THREE.Vector3(),
-      acceleration: new THREE.Vector3(),
-      yaw: 0,
-    };
-    const control = this.controller.computeControl(this.drone.getState(), desired);
-    this.drone.applyControlToBody(control);
 
-    if (this.world) this.world.stepSimulation(dt, 1, dt);
+    const patrolPos = new THREE.Vector3(
+      Math.sin(this.simTime * 0.4) * 2.5,
+      1.25 + Math.sin(this.simTime * 0.8) * 0.1,
+      Math.cos(this.simTime * 0.35) * 2.5,
+    );
+    const patrolVel = new THREE.Vector3(
+      Math.cos(this.simTime * 0.4) * 2.5 * 0.4,
+      Math.cos(this.simTime * 0.8) * 0.08,
+      -Math.sin(this.simTime * 0.35) * 2.5 * 0.35,
+    );
+
+    const hits = this.ai.scanAndUpdate({ position: this.drone.state.position, quaternion: this.drone.state.quaternion });
+    const avoidance = this._avoidanceFromHits(hits);
+
+    const desired = {
+      position: patrolPos.add(avoidance.positionOffset),
+      velocity: patrolVel,
+      acceleration: avoidance.accel,
+      yaw: Math.atan2(patrolVel.x, patrolVel.z),
+    };
+
+    const control = this.controller.computeControl(this.drone.getState(), desired);
+    this.drone.step(control, dt);
+
     this.obstacles.syncFromPhysics();
-    this.drone.syncFromAmmoBody();
-    this.ai.scanAndUpdate({ position: this.drone.state.position, quaternion: this.drone.state.quaternion });
   }
 
   _render() {
@@ -202,5 +219,17 @@ export class CaveSim {
   spawnObstacle(type = OBSTACLE_TYPES.boulder) {
     const drop = this.drone.state.position.clone().add(new THREE.Vector3(0, 0.5, -1));
     this.obstacles.spawn(type, drop);
+  }
+
+  _avoidanceFromHits(hits) {
+    const repel = new THREE.Vector3();
+    for (const h of hits || []) {
+      const proximity = Math.max(0, 1 - h.distance / (this.ai.lidar?.maxRange || 10));
+      if (proximity > 0.25) repel.add(h.direction.clone().multiplyScalar(-proximity * 2.5));
+    }
+    return {
+      positionOffset: repel.clampLength(0, 1.0),
+      accel: repel.multiplyScalar(4).clampLength(0, 5),
+    };
   }
 }

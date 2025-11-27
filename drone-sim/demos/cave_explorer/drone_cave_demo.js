@@ -489,6 +489,7 @@ class DroneCaveDemo {
     this.planner = new FrontierPlanner(this.grid);
     this.showLidar = true;
     this.useFPV = false;
+    this.lastHits = [];
   }
 
   restart() {
@@ -497,8 +498,22 @@ class DroneCaveDemo {
     this.drone.reset({ position: new THREE.Vector3(0, 0.4, 2) });
     this.localizer.reset({ position: new THREE.Vector3(0, 0.4, 2), quaternion: new THREE.Quaternion() });
     this.grid = new OccupancyGrid(0.3, 90);
+    this._seedFreeSpace(this.drone.getState().position, 1.8);
     this.traj = null;
     this.trajTime = 0;
+  }
+
+  _seedFreeSpace(center, radius = 1.2) {
+    const steps = Math.ceil(radius / this.grid.resolution);
+    for (let dx = -steps; dx <= steps; dx++) {
+      for (let dy = -steps; dy <= steps; dy++) {
+        const wx = center.x + dx * this.grid.resolution;
+        const wy = center.z + dy * this.grid.resolution;
+        const cell = this.grid.indexFromWorld(new THREE.Vector3(wx, 0, wy));
+        const dist = Math.hypot(dx * this.grid.resolution, dy * this.grid.resolution);
+        if (dist <= radius) this.grid.updateCell(cell.x, cell.y, -0.8);
+      }
+    }
   }
 
   pause(user = false) {
@@ -550,8 +565,8 @@ class DroneCaveDemo {
     const state = this.drone.getState();
     this.localizer.update(state, dt);
 
-    const hits = this.lidar.scan(this.localizer.estimatedPose);
-    this._updateGridFromScan(hits, this.localizer.estimatedPose);
+    this.lastHits = this.lidar.scan(this.localizer.estimatedPose);
+    this._updateGridFromScan(this.lastHits, this.localizer.estimatedPose);
 
     const { coverage } = this.grid.occupancy();
     if (coverage > 0.6 && this.mode !== 'RETURN') {
@@ -564,7 +579,7 @@ class DroneCaveDemo {
     }
 
     if (!this.traj || this.trajTime > this.traj.totalTime) {
-      const frontier = this._pickFrontier(state.position);
+      const frontier = this._pickFrontier(this.localizer.estimatedPose.position);
       if (frontier) {
         const targetWorld = new THREE.Vector3(
           frontier.x * this.grid.resolution + this.grid.origin.x,
@@ -581,6 +596,9 @@ class DroneCaveDemo {
 
     if (this.traj) {
       const desired = this.traj.sample(this.trajTime);
+      const avoidance = this._computeAvoidance();
+      desired.acceleration.add(avoidance);
+      desired.yaw = Math.atan2(desired.velocity.x, desired.velocity.z);
       const control = this.controller.computeControl(state, desired);
       this.drone.step(control, dt);
       this.trajTime += dt;
@@ -619,6 +637,17 @@ class DroneCaveDemo {
     }
   }
 
+  _computeAvoidance() {
+    const avoidance = new THREE.Vector3();
+    for (const h of this.lastHits) {
+      const proximity = Math.max(0, 1 - h.distance / this.lidar.maxRange);
+      if (proximity > 0.35) {
+        avoidance.add(h.direction.clone().multiplyScalar(-proximity * 4));
+      }
+    }
+    return avoidance.clampLength(0, 6);
+  }
+
   _render() {
     const state = this.drone.getState();
     this.droneGroup.position.copy(state.position);
@@ -647,7 +676,7 @@ class DroneCaveDemo {
     if (this.lidarLines) {
       this.scene.remove(this.lidarLines);
     }
-    const hits = this.lidar.scan(this.localizer.estimatedPose);
+    const hits = this.lastHits || [];
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(hits.length * 6);
     hits.forEach((h, i) => {

@@ -33,15 +33,19 @@ export class GeometricController {
     // Desired acceleration from outer loop
     const accCmd = desired.acceleration
       .clone()
-      .add(new THREE.Vector3(
-        this.params.kpPos.x * ePos.x + this.params.kdPos.x * eVel.x,
-        this.params.kpPos.y * ePos.y + this.params.kdPos.y * eVel.y,
-        this.params.kpPos.z * ePos.z + this.params.kdPos.z * eVel.z,
-      ))
+      .add(
+        new THREE.Vector3(
+          this.params.kpPos.x * ePos.x + this.params.kdPos.x * eVel.x,
+          this.params.kpPos.y * ePos.y + this.params.kdPos.y * eVel.y,
+          this.params.kpPos.z * ePos.z + this.params.kdPos.z * eVel.z,
+        ),
+      )
       .add(new THREE.Vector3(0, 9.81, 0)); // gravity compensation
 
+    const accMag = accCmd.length();
+    const zbDes = accMag > 1e-4 ? accCmd.clone().multiplyScalar(1 / accMag) : new THREE.Vector3(0, 1, 0);
+
     // Desired heading and body axes
-    const zbDes = accCmd.clone().normalize();
     const yaw = desired.yaw || 0;
     const xc = new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw));
     const ybDes = zbDes.clone().cross(xc).normalize();
@@ -75,7 +79,7 @@ export class GeometricController {
     const basisY = new THREE.Vector3();
     const basisZ = new THREE.Vector3();
     R.extractBasis(basisX, basisY, basisZ);
-    const thrust = clamp(accCmd.dot(basisZ) * this.params.mass, 0, this.params.maxThrust);
+    const thrust = clamp(accMag * this.params.mass, 0, this.params.maxThrust);
 
     return { thrust, torque };
   }
