@@ -89,12 +89,12 @@ class StationaryHoverDemo {
   _initDrone() {
     this.drone = new DronePhysicsEngine({ floorHeight: 0.0, ceilingHeight: 5.0, minRPM: 3000, maxRPM: 25000 });
     this.drone.reset({
-      position: new THREE.Vector3(0, 0.6, 0),
+      position: new THREE.Vector3(0, 0.2, 0),
       velocity: new THREE.Vector3(0, 0, 0),
       orientation: new THREE.Quaternion().set(0, 0, 0, 1),
       angularVelocity: new THREE.Vector3(0, 0, 0),
     });
-    this.drone.state.position.set(0, 0.6, 0);
+    this.drone.state.position.set(0, 0.2, 0);
     this.drone.state.velocity.set(0, 0, 0);
     this.drone.state.orientation.set(0, 0, 0, 1);
     this.drone.state.quaternion.set(0, 0, 0, 1);
@@ -208,12 +208,12 @@ class StationaryHoverDemo {
 
   restart() {
     this.drone.reset({
-      position: new THREE.Vector3(0, 0.6, 0),
+      position: new THREE.Vector3(0, 0.2, 0),
       velocity: new THREE.Vector3(0, 0, 0),
       orientation: new THREE.Quaternion().set(0, 0, 0, 1),
       angularVelocity: new THREE.Vector3(0, 0, 0),
     });
-    this.drone.state.position.set(0, 0.6, 0);
+    this.drone.state.position.set(0, 0.2, 0);
     this.drone.state.velocity.set(0, 0, 0);
     this.drone.state.orientation.set(0, 0, 0, 1);
     this.drone.state.quaternion.set(0, 0, 0, 1);

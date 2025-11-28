@@ -37,9 +37,9 @@ class FractionalIntegrator {
 export class StationaryController {
   constructor(params = {}) {
     this.params = Object.assign({
-      kp: 4.0,
-      ki: 1.4,
-      kd: 2.2,
+      kp: 3.0,
+      ki: 0.5,
+      kd: 2.0,
       yaw: 0,
       fractionalAlpha: 0.8,
       dt: 1 / 240,
@@ -133,32 +133,18 @@ export class StationaryController {
     thrustVector.y = Math.max(thrustVector.y, 0);
 
     const desiredOrientation = this._desiredOrientationFromThrust(thrustVector, params.yaw);
-    const kp_att = state.kp_att || (state.params?.kp_att ?? DronePhysicsEngine?.prototype?.params?.kp_att ?? 6.0);
-    const kd_att = state.kd_att || (state.params?.kd_att ?? DronePhysicsEngine?.prototype?.params?.kd_att ?? 2.0);
-    const currentQuat = state.orientationQuat || state.orientation;
-    const qError = desiredOrientation.clone().multiply(currentQuat.clone().invert());
-    const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
-    const torque = errorAxis.multiplyScalar(kp_att).add(state.angularVelocity.clone().multiplyScalar(-kd_att));
 
     const paramsPhys = state.params || target.params || DronePhysicsEngine?.prototype?.params || {};
     const kF = paramsPhys.kF || 1e-3;
-    const kM = paramsPhys.kM || kF * 0.02;
-    const L = paramsPhys.armLength || 0.046;
-    const kYaw = kM / Math.max(kF, 1e-9);
 
     const thrustMag = clamp(thrustVector.length(), 0, (paramsPhys.mass || mass) * 25);
-    const m0 = 0.25 * thrustMag - torque.y / (2 * L) + torque.z / (4 * kYaw);
-    const m1 = 0.25 * thrustMag + torque.x / (2 * L) - torque.z / (4 * kYaw);
-    const m2 = 0.25 * thrustMag + torque.y / (2 * L) + torque.z / (4 * kYaw);
-    const m3 = 0.25 * thrustMag - torque.x / (2 * L) - torque.z / (4 * kYaw);
-    const thrusts = [m0, m1, m2, m3].map((m) => clamp(m, 0, thrustMag));
-    const rpms = thrusts.map((t) => Math.sqrt(Math.max(t, 0) / Math.max(kF, 1e-9)));
-    const commands = rpms.map((r) => {
-      const minRPM = paramsPhys.minRPM || 0;
-      const maxRPM = paramsPhys.maxRPM || paramsPhys.rpmMax || 25000;
-      const clamped = clamp(r, minRPM, maxRPM);
-      return clamp((clamped - minRPM) / (maxRPM - minRPM), 0, 1);
-    });
+    const perMotorThrust = thrustMag * 0.25;
+    const rpm = Math.sqrt(Math.max(perMotorThrust, 0) / Math.max(kF, 1e-9));
+    const minRPM = paramsPhys.minRPM || 0;
+    const maxRPM = paramsPhys.maxRPM || paramsPhys.rpmMax || 25000;
+    const clampedRpm = clamp(rpm, minRPM, maxRPM);
+    const command = clamp((clampedRpm - minRPM) / (maxRPM - minRPM), 0, 1);
+    const commands = [command, command, command, command];
 
     return { commands, desiredOrientation };
   }
