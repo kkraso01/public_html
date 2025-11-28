@@ -16,6 +16,10 @@ export class StationaryController {
     this.eth.updatePositionGains({ kp, ki, kd });
   }
 
+  updateAttitudeGains({ kR, kOmega }) {
+    this.eth.updateAttitudeGains({ kR, kOmega });
+  }
+
   toggleFOPID() {
     // Legacy control panel hook; no-op for cascaded controller
     this.useFOPID = false;

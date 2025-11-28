@@ -1,4 +1,4 @@
-// Cascaded ETH-style quadrotor controller (position PID + attitude PD + allocation)
+// Cascaded ETH-style quadrotor controller (position PID + geometric attitude + allocation)
 export class EthController {
   constructor(params) {
     this.params = params;
@@ -12,15 +12,21 @@ export class EthController {
     this.omegaMax = motor.omegaMax || 1;
     this.maxThrustPerMotor = params.maxThrustPerMotor || this.kF * this.omegaMax * this.omegaMax;
 
-    // Gains (ETH-style cascaded control)
-    // Position loop gains (outer loop)
-    this.Kp = new THREE.Vector3(4.0, 6.0, 4.0);
-    this.Kd = new THREE.Vector3(3.0, 4.5, 3.0);
-    this.Ki = new THREE.Vector3(0.5, 0.8, 0.5);
-    
-    // Attitude loop gains (inner loop) - must be aggressive enough to track orientation
-    this.KR = new THREE.Vector3(8.0, 8.0, 4.0);      // Attitude P: strong response to orientation error
-    this.Komega = new THREE.Vector3(0.5, 0.5, 0.3);  // Attitude D: damping on angular velocity
+    // Diagonal inertia used by the geometric attitude controller
+    this.inertia = new THREE.Vector3(params.inertia?.Jxx || 0.01, params.inertia?.Jyy || 0.01, params.inertia?.Jzz || 0.02);
+
+    // Gains (ETH Zürich-inspired cascaded control tuned for the demo mass/inertia)
+    // Position loop gains (outer loop) – higher Z gains to counter gravity and drag
+    this.Kp = new THREE.Vector3(6.0, 6.0, 8.0);
+    this.Kd = new THREE.Vector3(4.0, 4.0, 5.0);
+    this.Ki = new THREE.Vector3(0.12, 0.12, 0.12);
+
+    // Attitude loop gains (inner loop) for SE(3) geometric controller
+    this.KR = new THREE.Vector3(9.0, 9.0, 5.0);
+    this.Komega = new THREE.Vector3(0.4, 0.4, 0.3);
+
+    // Integral clamp to avoid windup; tuned to stay within actuator limits
+    this.integralLimit = new THREE.Vector3(0.6, 0.6, 0.8);
 
     this.maxAcc = 20.0;
     this.reset();
@@ -31,9 +37,43 @@ export class EthController {
   }
 
   updatePositionGains({ kp, ki, kd }) {
-    if (kp) this.Kp.set(kp, kp, kp);
-    if (ki) this.Ki.set(ki, ki, ki);
-    if (kd) this.Kd.set(kd, kd, kd);
+    // Accept scalar (legacy sliders) or per-axis objects/vectors
+    const assignVec = (target, value) => {
+      if (value instanceof THREE.Vector3) {
+        target.copy(value);
+      } else if (typeof value === 'number') {
+        target.set(value, value, value);
+      } else if (value && typeof value === 'object') {
+        target.set(
+          value.x ?? target.x,
+          value.y ?? target.y,
+          value.z ?? target.z,
+        );
+      }
+    };
+
+    assignVec(this.Kp, kp);
+    assignVec(this.Ki, ki);
+    assignVec(this.Kd, kd);
+  }
+
+  updateAttitudeGains({ kR, kOmega }) {
+    const assignVec = (target, value) => {
+      if (value instanceof THREE.Vector3) {
+        target.copy(value);
+      } else if (typeof value === 'number') {
+        target.set(value, value, value);
+      } else if (value && typeof value === 'object') {
+        target.set(
+          value.x ?? target.x,
+          value.y ?? target.y,
+          value.z ?? target.z,
+        );
+      }
+    };
+
+    assignVec(this.KR, kR);
+    assignVec(this.Komega, kOmega);
   }
 
   computeControl(state, target, dt) {
@@ -49,7 +89,11 @@ export class EthController {
     const velError = v_ref.clone().sub(v);
 
     this.posIntegral.add(posError.clone().multiplyScalar(dt));
-    this.posIntegral.clampLength(-1.5, 1.5);
+    this.posIntegral.set(
+      THREE.MathUtils.clamp(this.posIntegral.x, -this.integralLimit.x, this.integralLimit.x),
+      THREE.MathUtils.clamp(this.posIntegral.y, -this.integralLimit.y, this.integralLimit.y),
+      THREE.MathUtils.clamp(this.posIntegral.z, -this.integralLimit.z, this.integralLimit.z),
+    );
 
     // Acceleration command: gravity compensation is now in +Z (up) direction
     const a_cmd = new THREE.Vector3(
@@ -88,47 +132,61 @@ export class EthController {
     let thrust_des = this.mass * a_cmd.dot(z_b_des);
     thrust_des = Math.max(0, Math.min(thrust_des, 4 * this.maxThrustPerMotor));
 
-    // Attitude PD
+    // SE(3) geometric attitude controller
     const q = state.orientationQuat.clone();
-    const q_err = q.clone().conjugate().multiply(q_des.clone());
-    if (q_err.w < 0) {
-      q_err.x *= -1;
-      q_err.y *= -1;
-      q_err.z *= -1;
-      q_err.w *= -1;
-    }
-    const e_R = new THREE.Vector3(2 * q_err.x, 2 * q_err.y, 2 * q_err.z);
+    const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
+    const R_des = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q_des));
+
+    const R_T = R.clone().transpose();
+    const R_des_T = R_des.clone().transpose();
+
+    const term1 = new THREE.Matrix3().multiplyMatrices(R_des_T, R);
+    const term2 = new THREE.Matrix3().multiplyMatrices(R_T, R_des);
+    const skewElements = term1.elements.map((v, i) => v - term2.elements[i]);
+    const skew = new THREE.Matrix3().fromArray(skewElements);
+
+    // vee operator for a skew-symmetric matrix stored in column-major order
+    const vee = (M) => new THREE.Vector3(M.elements[7], M.elements[2], M.elements[3]);
+    const e_R = vee(skew).multiplyScalar(0.5);
 
     const omega = state.angularVelocity.clone();
-    const e_omega = omega.clone();
+    const omega_des = new THREE.Vector3(); // hover
+    const omega_des_body = omega_des
+      .clone()
+      .applyMatrix3(new THREE.Matrix3().multiplyMatrices(R_T, R_des));
+    const e_omega = omega.clone().sub(omega_des_body);
+
+    const Iomega = new THREE.Vector3(
+      this.inertia.x * omega.x,
+      this.inertia.y * omega.y,
+      this.inertia.z * omega.z,
+    );
+    const coriolis = omega.clone().cross(Iomega);
 
     const tau_cmd = new THREE.Vector3(
-      -this.KR.x * e_R.x - this.Komega.x * e_omega.x,
-      -this.KR.y * e_R.y - this.Komega.y * e_omega.y,
-      -this.KR.z * e_R.z - this.Komega.z * e_omega.z,
+      -this.KR.x * e_R.x - this.Komega.x * e_omega.x + coriolis.x,
+      -this.KR.y * e_R.y - this.Komega.y * e_omega.y + coriolis.y,
+      -this.KR.z * e_R.z - this.Komega.z * e_omega.z + coriolis.z,
     );
 
-    // ETH Zürich control allocation (X-configuration)
+    // ETH Zürich control allocation (X-configuration) matching physics engine
     // Motor layout: 0=FL(CW), 1=FR(CCW), 2=BR(CW), 3=BL(CCW)
-    // Forward model: τ_x = L*kF*(ω1²-ω3²), τ_y = L*kF*(ω2²-ω0²), τ_z = kM*(-ω0²+ω1²-ω2²+ω3²)
-    // With T_i = kF*ω_i², we have: τ_x = L*(T1-T3), τ_y = L*(T2-T0), τ_z = (kM/kF)*(-T0+T1-T2+T3)
+    // Forward model: τ_x = L*(T1-T3), τ_y = L*(T2-T0), τ_z = (kM/kF)*(-T0+T1-T2+T3)
     const L = this.L;
     const kF = this.kF;
     const kM = this.kM;
+    const yawToThrust = kM / kF; // maps thrust imbalance to yaw torque as used in physics engine
 
     const solveThrusts = (yawTerm) => {
-      // ETH Zürich mixer (from spec):
-      // T0 = 0.25*T - 0.5*τ_y/L - 0.5*τ_z/kM   (Front-Left, CW)
-      // T1 = 0.25*T + 0.5*τ_x/L + 0.5*τ_z/kM   (Front-Right, CCW)
-      // T2 = 0.25*T + 0.5*τ_y/L - 0.5*τ_z/kM   (Back-Right, CW)
-      // T3 = 0.25*T - 0.5*τ_x/L + 0.5*τ_z/kM   (Back-Left, CCW)
-      // Note: ETH spec assumes τ_z relates to motor thrusts directly via kM, not kM/kF
-      
-      const T0 = 0.25 * thrust_des - 0.5 * tau_cmd.y / L - 0.5 * yawTerm / kM;
-      const T1 = 0.25 * thrust_des + 0.5 * tau_cmd.x / L + 0.5 * yawTerm / kM;
-      const T2 = 0.25 * thrust_des + 0.5 * tau_cmd.y / L - 0.5 * yawTerm / kM;
-      const T3 = 0.25 * thrust_des - 0.5 * tau_cmd.x / L + 0.5 * yawTerm / kM;
-      
+      // Mixer solved so that plugging the resulting T_i back into the physics
+      // equations reproduces tau_cmd exactly (including yaw torque scaling).
+      const yawAlloc = yawTerm / yawToThrust;
+
+      const T0 = 0.25 * thrust_des - 0.5 * tau_cmd.y / L - 0.25 * yawAlloc; // Front-Left (CW)
+      const T1 = 0.25 * thrust_des + 0.5 * tau_cmd.x / L + 0.25 * yawAlloc; // Front-Right (CCW)
+      const T2 = 0.25 * thrust_des + 0.5 * tau_cmd.y / L - 0.25 * yawAlloc; // Back-Right (CW)
+      const T3 = 0.25 * thrust_des - 0.5 * tau_cmd.x / L + 0.25 * yawAlloc; // Back-Left (CCW)
+
       return [T0, T1, T2, T3];
     };
 

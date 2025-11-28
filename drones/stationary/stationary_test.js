@@ -59,14 +59,18 @@ class StationaryHoverDemo {
     this.droneInitialOrientation = new THREE.Quaternion().set(0, 0, 0, 1);
 
     this.controller = new StationaryController(this.params);
-    // Use moderate gains for stable hover with good tracking
-    this.controller.updateGains({ 
-      kp: this.controller.eth.Kp.x * 0.5,  // 50% - enough authority to climb
-      ki: this.controller.eth.Ki.x * 0.2,  // Keep integral low to avoid windup
-      kd: this.controller.eth.Kd.x * 0.5   // 50% damping
+    // Initialize with tuned ETH Zürich gains (per-axis) for stable hover
+    this.controller.updateGains({
+      kp: { x: 6.0, y: 6.0, z: 8.0 },
+      kd: { x: 4.0, y: 4.0, z: 5.0 },
+      ki: { x: 0.12, y: 0.12, z: 0.12 },
     });
-    // Allow reasonable acceleration for climbing
-    this.controller.eth.maxAcc = 10.0;
+    this.controller.updateAttitudeGains({
+      kR: { x: 9.0, y: 9.0, z: 5.0 },
+      kOmega: { x: 0.4, y: 0.4, z: 0.3 },
+    });
+    // Limit climb aggressiveness to reduce vertical oscillations
+    this.controller.eth.maxAcc = 15.0;
 
     this._initScene();
     this._initDrone();
@@ -373,9 +377,9 @@ class StationaryHoverDemo {
     this.overlay.appendChild(targetContainer);
 
     const sliderDefs = [
-      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: this.controller.eth.Kp.x * 0.3 },
-      { key: 'ki', label: 'Ki (pos)', min: 0, max: 6, step: 0.05, value: this.controller.eth.Ki.x * 0.3 },
-      { key: 'kd', label: 'Kd (pos)', min: 0, max: 8, step: 0.05, value: this.controller.eth.Kd.x * 0.3 },
+      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: this.controller.eth.Kp.x, onInput: (v) => this.controller.updateGains({ kp: v }) },
+      { key: 'ki', label: 'Ki (pos)', min: 0, max: 2, step: 0.02, value: this.controller.eth.Ki.x, onInput: (v) => this.controller.updateGains({ ki: v }) },
+      { key: 'kd', label: 'Kd (pos)', min: 0, max: 10, step: 0.05, value: this.controller.eth.Kd.x, onInput: (v) => this.controller.updateGains({ kd: v }) },
     ];
 
     sliderDefs.forEach((def) => {
@@ -394,7 +398,43 @@ class StationaryHoverDemo {
       input.addEventListener('input', () => {
         const val = parseFloat(input.value);
         label.textContent = `${def.label}: ${val.toFixed(2)}`;
-        this.controller.updateGains({ [def.key]: val });
+        (def.onInput || (() => {}))(val);
+      });
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+      this.overlay.appendChild(wrapper);
+      this.controls[def.key] = input;
+    });
+
+    const attitudeLabel = document.createElement('div');
+    attitudeLabel.textContent = 'Attitude (inner loop) gains';
+    attitudeLabel.style.cssText = 'color:#94a3b8; font-weight:600; font-size:12px; margin-top:6px;';
+    this.overlay.appendChild(attitudeLabel);
+
+    const attitudeSliderDefs = [
+      { key: 'kRxy', label: 'KR roll/pitch', min: 0, max: 14, step: 0.1, value: this.controller.eth.KR.x, onInput: (v) => this.controller.updateAttitudeGains({ kR: { x: v, y: v } }) },
+      { key: 'kRz', label: 'KR yaw', min: 0, max: 10, step: 0.1, value: this.controller.eth.KR.z, onInput: (v) => this.controller.updateAttitudeGains({ kR: { z: v } }) },
+      { key: 'kOxy', label: 'Kω roll/pitch', min: 0, max: 2, step: 0.02, value: this.controller.eth.Komega.x, onInput: (v) => this.controller.updateAttitudeGains({ kOmega: { x: v, y: v } }) },
+      { key: 'kOz', label: 'Kω yaw', min: 0, max: 2, step: 0.02, value: this.controller.eth.Komega.z, onInput: (v) => this.controller.updateAttitudeGains({ kOmega: { z: v } }) },
+    ];
+
+    attitudeSliderDefs.forEach((def) => {
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex; flex-direction:column; gap:4px; background:rgba(14,165,233,0.08); border:1px solid rgba(14,165,233,0.3); border-radius:6px; padding:8px;';
+      const label = document.createElement('label');
+      label.textContent = `${def.label}: ${def.value.toFixed(2)}`;
+      label.style.cssText = 'font-size:12px; color:#cbd5e1; display:flex; justify-content:space-between;';
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = def.min;
+      input.max = def.max;
+      input.step = def.step;
+      input.value = def.value;
+      input.className = 'pid-slider';
+      input.addEventListener('input', () => {
+        const val = parseFloat(input.value);
+        label.textContent = `${def.label}: ${val.toFixed(2)}`;
+        (def.onInput || (() => {}))(val);
       });
       wrapper.appendChild(label);
       wrapper.appendChild(input);
