@@ -25,7 +25,6 @@ export class EthController {
 
   reset() {
     this.posIntegral = new THREE.Vector3();
-    this.prevOmega = null;
   }
 
   updatePositionGains({ kp, ki, kd }) {
@@ -98,64 +97,48 @@ export class EthController {
       -this.KR.z * e_R.z - this.Komega.z * e_omega.z,
     );
 
-    // INDI-like correction
-    if (this.prevOmega) {
-      const omega_dot_meas = omega.clone().sub(this.prevOmega).divideScalar(Math.max(dt, 1e-4));
-      const omega_dot_des = new THREE.Vector3(
-        tau_cmd.x / this.params.inertia.Jxx,
-        tau_cmd.y / this.params.inertia.Jyy,
-        tau_cmd.z / this.params.inertia.Jzz,
-      );
-      const corr = new THREE.Vector3(
-        this.params.inertia.Jxx * (omega_dot_des.x - omega_dot_meas.x),
-        this.params.inertia.Jyy * (omega_dot_des.y - omega_dot_meas.y),
-        this.params.inertia.Jzz * (omega_dot_des.z - omega_dot_meas.z),
-      );
-      tau_cmd.add(corr);
-    }
-    this.prevOmega = omega.clone();
-
-    // Control allocation (PLUS configuration)
-    // Physics mapping: tau_x = L*(T0-T2), tau_y = L*(T1-T3), tau_z = (kM/kF)*(T0-T1+T2-T3)
-    // Inverse allocation for thrusts:
-    const L = this.L;
+    // Control allocation (X configuration)
+    // Rotor indexing matches physics engine: 0=front-left, 1=front-right, 2=back-left, 3=back-right
+    const lever = this.L / Math.SQRT2;
+    const yawScale = this.kF / this.kM; // = 1 / (kM / kF)
     const kF = this.kF;
-    const kM = this.kM;
-    // Mapping derived from tau_x = L*(T_right - T_left),
-    // tau_y = L*(T_back - T_front), tau_z = (kM/kF)*(T_front - T_right + T_back - T_left)
-    const yawFactor = kF / kM;
 
-    let T1 = 0.25 * (thrust_des - tau_cmd.y / L - tau_cmd.z * yawFactor); // front
-    let T2 = 0.25 * (thrust_des + tau_cmd.x / L + tau_cmd.z * yawFactor); // right
-    let T3 = 0.25 * (thrust_des + tau_cmd.y / L - tau_cmd.z * yawFactor); // back
-    let T4 = 0.25 * (thrust_des - tau_cmd.x / L + tau_cmd.z * yawFactor); // left
+    const solveThrusts = (yawTerm) => {
+      const A = tau_cmd.x / lever; // roll contribution
+      const B = tau_cmd.y / lever; // pitch contribution
+      const C = yawTerm * yawScale; // yaw torque mapped to thrust difference
 
+      const T0 = (thrust_des + A - B + C) * 0.25; // front-left
+      const T1 = (thrust_des - A - B - C) * 0.25; // front-right
+      const T2 = (thrust_des + A + B - C) * 0.25; // back-left
+      const T3 = (thrust_des - A + B + C) * 0.25; // back-right
+      return [T0, T1, T2, T3];
+    };
+
+    let [T0, T1, T2, T3] = solveThrusts(tau_cmd.z);
+
+    T0 = Math.max(T0, 0);
     T1 = Math.max(T1, 0);
     T2 = Math.max(T2, 0);
     T3 = Math.max(T3, 0);
-    T4 = Math.max(T4, 0);
 
     const T_max = this.maxThrustPerMotor;
-    const anyOverMax = () => T1 > T_max || T2 > T_max || T3 > T_max || T4 > T_max;
+    const anyOverMax = () => T0 > T_max || T1 > T_max || T2 > T_max || T3 > T_max;
 
     if (anyOverMax()) {
-      tau_cmd.z = 0; // drop yaw first
-      T1 = 0.25 * (thrust_des - tau_cmd.y / L);
-      T2 = 0.25 * (thrust_des + tau_cmd.x / L);
-      T3 = 0.25 * (thrust_des + tau_cmd.y / L);
-      T4 = 0.25 * (thrust_des - tau_cmd.x / L);
+      [T0, T1, T2, T3] = solveThrusts(0); // drop yaw first
 
+      T0 = Math.min(Math.max(T0, 0), T_max);
       T1 = Math.min(Math.max(T1, 0), T_max);
       T2 = Math.min(Math.max(T2, 0), T_max);
       T3 = Math.min(Math.max(T3, 0), T_max);
-      T4 = Math.min(Math.max(T4, 0), T_max);
 
       if (anyOverMax()) {
-        const scale = T_max / Math.max(T1, T2, T3, T4);
+        const scale = T_max / Math.max(T0, T1, T2, T3);
+        T0 *= scale;
         T1 *= scale;
         T2 *= scale;
         T3 *= scale;
-        T4 *= scale;
       }
     }
 
@@ -166,7 +149,7 @@ export class EthController {
       return Math.min(Math.max(u, 0), 1);
     };
 
-    const motorCommands = [thrustToCmd(T1), thrustToCmd(T2), thrustToCmd(T3), thrustToCmd(T4)];
+    const motorCommands = [thrustToCmd(T0), thrustToCmd(T1), thrustToCmd(T2), thrustToCmd(T3)];
 
     return {
       motorCommands,

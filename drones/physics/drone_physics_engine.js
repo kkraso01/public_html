@@ -86,17 +86,19 @@ export class DronePhysicsEngine {
     const omegaRotors = this.motorModel.getSpeeds();
     this.state.motorSpeeds = omegaRotors.slice();
 
-    // 2) Compute thrust and torques from rotor speeds (PLUS configuration)
+    // 2) Compute thrust and torques from rotor speeds (X configuration)
     const { thrustCoeff: kF, torqueCoeff: kM, armLength: L } = this.params;
     const omegaSq = omegaRotors.map((w) => w * w);
     const thrustTotal = kF * (omegaSq[0] + omegaSq[1] + omegaSq[2] + omegaSq[3]);
     const F_B = new THREE.Vector3(0, 0, thrustTotal); // thrust along body +Z
 
-    // Rotor indexing (PLUS configuration):
-    // 0: front, 1: right, 2: back, 3: left
-    const tau_x = L * kF * (omegaSq[1] - omegaSq[3]);
-    const tau_y = L * kF * (omegaSq[2] - omegaSq[0]);
-    const tau_z = kM * (omegaSq[0] - omegaSq[1] + omegaSq[2] - omegaSq[3]);
+    // Rotor indexing (X configuration):
+    // 0: front-left, 1: front-right, 2: back-left, 3: back-right
+    // Roll/pitch leverage scaled by L / sqrt(2) for diagonal arms
+    const lever = L / Math.SQRT2;
+    const tau_x = lever * kF * (omegaSq[0] - omegaSq[1] + omegaSq[2] - omegaSq[3]);
+    const tau_y = lever * kF * (-omegaSq[0] - omegaSq[1] + omegaSq[2] + omegaSq[3]);
+    const tau_z = kM * (omegaSq[0] - omegaSq[1] - omegaSq[2] + omegaSq[3]);
     const tau_B = new THREE.Vector3(tau_x, tau_y, tau_z);
 
     // 3) Aerodynamic drag (world frame)
