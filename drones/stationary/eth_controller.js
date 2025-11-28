@@ -116,14 +116,17 @@ export class EthController {
     this.prevOmega = omega.clone();
 
     // Control allocation (PLUS configuration)
+    // Physics mapping: tau_x = L*(T0-T2), tau_y = L*(T1-T3), tau_z = (kM/kF)*(T0-T1+T2-T3)
+    // Inverse allocation for thrusts:
     const L = this.L;
     const kF = this.kF;
     const kM = this.kM;
+    const yawFactor = kF / kM;
 
-    let T1 = 0.25 * (thrust_des - tau_cmd.y / L - tau_cmd.z / kM);
-    let T2 = 0.25 * (thrust_des + tau_cmd.x / L + tau_cmd.z / kM);
-    let T3 = 0.25 * (thrust_des + tau_cmd.y / L - tau_cmd.z / kM);
-    let T4 = 0.25 * (thrust_des - tau_cmd.x / L + tau_cmd.z / kM);
+    let T1 = 0.25 * (thrust_des + tau_cmd.x / L + tau_cmd.z * yawFactor);
+    let T2 = 0.25 * (thrust_des + tau_cmd.y / L - tau_cmd.z * yawFactor);
+    let T3 = 0.25 * (thrust_des - tau_cmd.x / L + tau_cmd.z * yawFactor);
+    let T4 = 0.25 * (thrust_des - tau_cmd.y / L - tau_cmd.z * yawFactor);
 
     T1 = Math.max(T1, 0);
     T2 = Math.max(T2, 0);
@@ -135,10 +138,10 @@ export class EthController {
 
     if (anyOverMax()) {
       tau_cmd.z = 0; // drop yaw first
-      T1 = 0.25 * (thrust_des - tau_cmd.y / L);
-      T2 = 0.25 * (thrust_des + tau_cmd.x / L);
-      T3 = 0.25 * (thrust_des + tau_cmd.y / L);
-      T4 = 0.25 * (thrust_des - tau_cmd.x / L);
+      T1 = 0.25 * (thrust_des + tau_cmd.x / L);
+      T2 = 0.25 * (thrust_des - tau_cmd.y / L);
+      T3 = 0.25 * (thrust_des - tau_cmd.x / L);
+      T4 = 0.25 * (thrust_des + tau_cmd.y / L);
 
       T1 = Math.min(Math.max(T1, 0), T_max);
       T2 = Math.min(Math.max(T2, 0), T_max);
