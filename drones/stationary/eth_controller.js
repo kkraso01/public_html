@@ -81,7 +81,12 @@ export class EthController {
     // Attitude PD
     const q = state.orientationQuat.clone();
     const q_err = q.clone().conjugate().multiply(q_des.clone());
-    if (q_err.w < 0) q_err.multiplyScalar(-1);
+    if (q_err.w < 0) {
+      q_err.x *= -1;
+      q_err.y *= -1;
+      q_err.z *= -1;
+      q_err.w *= -1;
+    }
     const e_R = new THREE.Vector3(2 * q_err.x, 2 * q_err.y, 2 * q_err.z);
 
     const omega = state.angularVelocity.clone();
