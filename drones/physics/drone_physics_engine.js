@@ -92,8 +92,10 @@ export class DronePhysicsEngine {
     const thrustTotal = kF * (omegaSq[0] + omegaSq[1] + omegaSq[2] + omegaSq[3]);
     const F_B = new THREE.Vector3(0, 0, thrustTotal); // thrust along body +Z
 
-    const tau_x = L * kF * (omegaSq[0] - omegaSq[2]);
-    const tau_y = L * kF * (omegaSq[1] - omegaSq[3]);
+    // Rotor indexing (PLUS configuration):
+    // 0: front, 1: right, 2: back, 3: left
+    const tau_x = L * kF * (omegaSq[1] - omegaSq[3]);
+    const tau_y = L * kF * (omegaSq[2] - omegaSq[0]);
     const tau_z = kM * (omegaSq[0] - omegaSq[1] + omegaSq[2] - omegaSq[3]);
     const tau_B = new THREE.Vector3(tau_x, tau_y, tau_z);
 

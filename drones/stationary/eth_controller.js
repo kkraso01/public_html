@@ -121,12 +121,14 @@ export class EthController {
     const L = this.L;
     const kF = this.kF;
     const kM = this.kM;
+    // Mapping derived from tau_x = L*(T_right - T_left),
+    // tau_y = L*(T_back - T_front), tau_z = (kM/kF)*(T_front - T_right + T_back - T_left)
     const yawFactor = kF / kM;
 
-    let T1 = 0.25 * (thrust_des + tau_cmd.x / L + tau_cmd.z * yawFactor);
-    let T2 = 0.25 * (thrust_des + tau_cmd.y / L - tau_cmd.z * yawFactor);
-    let T3 = 0.25 * (thrust_des - tau_cmd.x / L + tau_cmd.z * yawFactor);
-    let T4 = 0.25 * (thrust_des - tau_cmd.y / L - tau_cmd.z * yawFactor);
+    let T1 = 0.25 * (thrust_des - tau_cmd.y / L - tau_cmd.z * yawFactor); // front
+    let T2 = 0.25 * (thrust_des + tau_cmd.x / L + tau_cmd.z * yawFactor); // right
+    let T3 = 0.25 * (thrust_des + tau_cmd.y / L - tau_cmd.z * yawFactor); // back
+    let T4 = 0.25 * (thrust_des - tau_cmd.x / L + tau_cmd.z * yawFactor); // left
 
     T1 = Math.max(T1, 0);
     T2 = Math.max(T2, 0);
@@ -138,10 +140,10 @@ export class EthController {
 
     if (anyOverMax()) {
       tau_cmd.z = 0; // drop yaw first
-      T1 = 0.25 * (thrust_des + tau_cmd.x / L);
-      T2 = 0.25 * (thrust_des - tau_cmd.y / L);
-      T3 = 0.25 * (thrust_des - tau_cmd.x / L);
-      T4 = 0.25 * (thrust_des + tau_cmd.y / L);
+      T1 = 0.25 * (thrust_des - tau_cmd.y / L);
+      T2 = 0.25 * (thrust_des + tau_cmd.x / L);
+      T3 = 0.25 * (thrust_des + tau_cmd.y / L);
+      T4 = 0.25 * (thrust_des - tau_cmd.x / L);
 
       T1 = Math.min(Math.max(T1, 0), T_max);
       T2 = Math.min(Math.max(T2, 0), T_max);
