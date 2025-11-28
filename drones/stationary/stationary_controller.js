@@ -22,9 +22,9 @@ export class StationaryController {
   }
 
   compute(state, dt) {
-    // Fixed hover target slightly above the origin
+    // Fixed hover target slightly above the origin (+Z is up)
     const target = {
-      position: new THREE.Vector3(0, 0.6, 0),
+      position: new THREE.Vector3(0, 0, 0.6),
       velocity: new THREE.Vector3(0, 0, 0),
       acceleration: new THREE.Vector3(0, 0, 0),
       yaw: 0,

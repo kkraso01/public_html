@@ -20,6 +20,21 @@ export function initStationaryHoverDemo(container, options = {}) {
   };
 }
 
+/**
+ * Stationary Hover Demo with ETH Cascaded Controller
+ * 
+ * X-FRAME MOTOR CONFIGURATION:
+ * ----------------------------
+ * Motor 0 (Red):    Front-Left  at (+X, -Z)
+ * Motor 1 (Green):  Front-Right at (+X, +Z)
+ * Motor 2 (Blue):   Back-Left   at (-X, -Z)
+ * Motor 3 (Yellow): Back-Right  at (-X, +Z)
+ * 
+ * Control allocation:
+ *   - Roll  (tau_x): M0 vs M2 (left vs right diagonal)
+ *   - Pitch (tau_y): M1 vs M3 (front-right vs back-right diagonal)
+ *   - Yaw   (tau_z): M0-M1+M2-M3 (counter-rotating pairs)
+ */
 class StationaryHoverDemo {
   constructor(container, options) {
     this.container = container;
@@ -40,10 +55,18 @@ class StationaryHoverDemo {
       yaw: 0,
     };
 
-    this.droneInitialPosition = new THREE.Vector3(0, 0.6, 0);
+    this.droneInitialPosition = new THREE.Vector3(0, 0, 0.6);  // Hover at z=0.6 (+Z is up)
     this.droneInitialOrientation = new THREE.Quaternion().set(0, 0, 0, 1);
 
     this.controller = new StationaryController(this.params);
+    // Use moderate gains for stable hover with good tracking
+    this.controller.updateGains({ 
+      kp: this.controller.eth.Kp.x * 0.5,  // 50% - enough authority to climb
+      ki: this.controller.eth.Ki.x * 0.2,  // Keep integral low to avoid windup
+      kd: this.controller.eth.Kd.x * 0.5   // 50% damping
+    });
+    // Allow reasonable acceleration for climbing
+    this.controller.eth.maxAcc = 10.0;
 
     this._initScene();
     this._initDrone();
@@ -58,9 +81,9 @@ class StationaryHoverDemo {
 
     const aspect = this.options.width / this.options.height;
     this.camera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
-    this.camera.position.set(2, 2, 2);
-    this.camera.lookAt(0, 0.6, 0);
-    this.camera.up.set(0, 1, 0);
+    this.camera.position.set(2, -2, 2);  // Adjust for +Z up convention
+    this.camera.lookAt(0, 0, 0.6);
+    this.camera.up.set(0, 0, 1);  // +Z is up
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.options.width, this.options.height);
@@ -79,11 +102,13 @@ class StationaryHoverDemo {
       new THREE.PlaneGeometry(50, 50),
       new THREE.MeshStandardMaterial({ color: 0x20252b }),
     );
-    floor.rotation.x = -Math.PI / 2;
+    // No rotation needed - plane is already in XY plane, which is horizontal when +Z is up
     floor.receiveShadow = true;
     this.scene.add(floor);
 
+    // GridHelper creates grid in XZ plane by default, rotate it to XY plane for +Z up
     const grid = new THREE.GridHelper(10, 20, 0x475569, 0x1f2937);
+    grid.rotation.x = Math.PI / 2;
     this.scene.add(grid);
   }
 
@@ -144,18 +169,20 @@ class StationaryHoverDemo {
     });
 
     // Create body with different materials for top and bottom
-    const bodyGeometry = new THREE.BoxGeometry(0.28, 0.08, 0.28);
+    // With +Z up: dimensions are (X, Y, Z) = (length, width, height)
+    const bodyGeometry = new THREE.BoxGeometry(0.28, 0.28, 0.08);
     const topMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.35, roughness: 0.45 });
     const bottomMat = new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.35, roughness: 0.45 });
     const sideMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.35, roughness: 0.45 });
     
-    // BoxGeometry face order: right, left, top, bottom, front, back
+    // BoxGeometry face order: right(+X), left(-X), top(+Z), bottom(-Z), front(+Y), back(-Y)
     const bodyMaterials = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
     const body = new THREE.Mesh(bodyGeometry, bodyMaterials);
     body.castShadow = true;
     body.receiveShadow = true;
     const armMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.25, roughness: 0.6 });
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.12), armMat);
+    // Arms along X axis with thin Z profile: (length=X, width=Y, height=Z)
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), armMat);
     arm.castShadow = true;
     arm.receiveShadow = true;
 
@@ -163,27 +190,59 @@ class StationaryHoverDemo {
     this.droneMesh.add(body);
     this.droneMesh.add(arm);
 
+    // ====================================================================
+    // MOTOR CONFIGURATION: X-frame quadcopter (ETH Zürich / Crazyflie)
+    // ====================================================================
+    // Coordinate system: X=forward, Y=left, Z=up (ENU convention)
+    // 
+    // Physics engine torques (drone_physics_engine.js):
+    //   τ_x = L * kF * (ω²[1] - ω²[3])  → Roll  (right motors push left)
+    //   τ_y = L * kF * (ω²[2] - ω²[0])  → Pitch (front motors down tilts back)
+    //   τ_z = kM * (-ω²[0] + ω²[1] - ω²[2] + ω²[3]) → Yaw (CW negative, CCW positive)
+    //
+    // Motor layout (top view, looking down -Z axis):
+    //        Front (+X)
+    //    M0 ←─── M1
+    //     ╲     ╱
+    //  (-Y)╲   ╱(+Y)
+    //       ╲ ╱
+    //       ╱ ╲
+    //  (-Y)╱   ╲(+Y)
+    //     ╱     ╲
+    //    M3 ───→ M2
+    //        Back (-X)
+    //
+    // Motor 0 (Red):    Front-Left  at (+X, -Y, +Z) → CW
+    // Motor 1 (Green):  Front-Right at (+X, +Y, +Z) → CCW
+    // Motor 2 (Blue):   Back-Right  at (-X, +Y, +Z) → CW
+    // Motor 3 (Yellow): Back-Left   at (-X, -Y, +Z) → CCW
+    // ====================================================================
+    // ETH Zürich / Crazyflie motor layout (X-configuration)
+    // Body frame: X forward, Y left, Z up (ENU convention)
     const rotorGeo = new THREE.RingGeometry(0.09, 0.14, 16);
-    const rotorMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x0ea5e9, emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
+    const rotorColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00]; // Red, Green, Blue, Yellow
     const rotorPositions = [
-      new THREE.Vector3(0.4, 0.06, 0.4),
-      new THREE.Vector3(-0.4, 0.06, 0.4),
-      new THREE.Vector3(-0.4, 0.06, -0.4),
-      new THREE.Vector3(0.4, 0.06, -0.4),
+      new THREE.Vector3(0.28, 0.28, 0.06),   // Motor 0 - Front-Left (CW) - Red: +X (front), +Y (left)
+      new THREE.Vector3(0.28, -0.28, 0.06),  // Motor 1 - Front-Right (CCW) - Green: +X (front), -Y (right)
+      new THREE.Vector3(-0.28, -0.28, 0.06), // Motor 2 - Back-Right (CW) - Blue: -X (back), -Y (right)
+      new THREE.Vector3(-0.28, 0.28, 0.06),  // Motor 3 - Back-Left (CCW) - Yellow: -X (back), +Y (left)
     ];
-    rotorPositions.forEach((p) => {
-      // Top blade (facing up)
+    rotorPositions.forEach((p, i) => {
+      const rotorMat = new THREE.MeshStandardMaterial({ color: rotorColors[i], emissive: rotorColors[i], emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
+      
+      // Top blade (visible from above, +Z direction)
+      // RingGeometry lies in XY plane by default (no rotation needed for +Z up)
       const rTop = new THREE.Mesh(rotorGeo, rotorMat);
-      rTop.rotation.x = Math.PI / 2;
       rTop.position.copy(p);
+      rTop.position.z += 0.01; // Slight offset above rotor hub
       rTop.castShadow = true;
       rTop.receiveShadow = true;
       this.droneMesh.add(rTop);
       
-      // Bottom blade (facing down)
+      // Bottom blade (visible from below, -Z direction)
       const rBottom = new THREE.Mesh(rotorGeo, rotorMat);
-      rBottom.rotation.x = -Math.PI / 2;
       rBottom.position.copy(p);
+      rBottom.position.z -= 0.01; // Slight offset below rotor hub
       rBottom.castShadow = true;
       rBottom.receiveShadow = true;
       this.droneMesh.add(rBottom);
@@ -314,9 +373,9 @@ class StationaryHoverDemo {
     this.overlay.appendChild(targetContainer);
 
     const sliderDefs = [
-      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: this.controller.eth.Kp.x * 0.5 },
-      { key: 'ki', label: 'Ki (pos)', min: 0, max: 6, step: 0.05, value: this.controller.eth.Ki.x * 0.5 },
-      { key: 'kd', label: 'Kd (pos)', min: 0, max: 8, step: 0.05, value: this.controller.eth.Kd.x * 0.5 },
+      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: this.controller.eth.Kp.x * 0.3 },
+      { key: 'ki', label: 'Ki (pos)', min: 0, max: 6, step: 0.05, value: this.controller.eth.Ki.x * 0.3 },
+      { key: 'kd', label: 'Kd (pos)', min: 0, max: 8, step: 0.05, value: this.controller.eth.Kd.x * 0.3 },
     ];
 
     sliderDefs.forEach((def) => {
@@ -350,7 +409,13 @@ class StationaryHoverDemo {
       <div id="hudAlt">Altitude: 0.00 m</div>
       <div id="hudError">Position error: (0,0,0)</div>
       <div id="hudVel">Velocity: (0,0,0)</div>
-      <div id="hudMotors">Motors: (0,0,0,0)</div>
+      <div id="hudMotors" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <span>Motors:</span>
+        <span>M0=<span id="motor0" style="color:#ff0000; font-weight:bold;">0</span></span>
+        <span>M1=<span id="motor1" style="color:#00ff00; font-weight:bold;">0</span></span>
+        <span>M2=<span id="motor2" style="color:#0000ff; font-weight:bold;">0</span></span>
+        <span>M3=<span id="motor3" style="color:#ffff00; font-weight:bold;">0</span></span>
+      </div>
     `;
     this.overlay.appendChild(this.hud);
 
@@ -451,19 +516,48 @@ class StationaryHoverDemo {
     const motorCommands = result.motorCommands;
     this.lastMotorCommands = motorCommands;
     
+    // Store intermediate values for debugging
+    this.lastControlResult = result;
+    
     // Calculate position error and velocity for logging
     const posError = this.target.position.clone().sub(state.position);
     const vel = state.velocity;
     
     // Log every 10 steps to avoid spam
+    // Motor colors: M0=Red(FL), M1=Green(FR), M2=Blue(BL), M3=Yellow(BR)
     if (!this.logCounter) this.logCounter = 0;
     this.logCounter++;
     if (this.logCounter >= 10) {
-      const pwm1 = Math.round(motorCommands[0] * 65535);
-      const pwm2 = Math.round(motorCommands[1] * 65535);
-      const pwm3 = Math.round(motorCommands[2] * 65535);
-      const pwm4 = Math.round(motorCommands[3] * 65535);
-      console.log(`[${this.simTime.toFixed(3)}s] Pos: (${state.position.x.toFixed(2)}, ${state.position.y.toFixed(2)}, ${state.position.z.toFixed(2)}) | Error: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)}, ${posError.z.toFixed(2)}) | Vel: (${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)}) | Motors: (${pwm1}, ${pwm2}, ${pwm3}, ${pwm4})`);
+      const pwm0 = Math.round(motorCommands[0] * 65535); // Front-Left (Red)
+      const pwm1 = Math.round(motorCommands[1] * 65535); // Front-Right (Green)
+      const pwm2 = Math.round(motorCommands[2] * 65535); // Back-Left (Blue)
+      const pwm3 = Math.round(motorCommands[3] * 65535); // Back-Right (Yellow)
+      
+      // Extract Euler angles for debugging
+      const euler = new THREE.Euler().setFromQuaternion(state.orientationQuat, 'XYZ');
+      const roll = (euler.x * 180 / Math.PI).toFixed(1);
+      const pitch = (euler.y * 180 / Math.PI).toFixed(1);
+      const yaw = (euler.z * 180 / Math.PI).toFixed(1);
+      
+      // Get desired orientation
+      let desRoll = 0, desPitch = 0;
+      if (this.lastControlResult && this.lastControlResult.desiredOrientation) {
+        const desEuler = new THREE.Euler().setFromQuaternion(this.lastControlResult.desiredOrientation, 'XYZ');
+        desRoll = (desEuler.x * 180 / Math.PI).toFixed(1);
+        desPitch = (desEuler.y * 180 / Math.PI).toFixed(1);
+      }
+      
+      console.log(
+        `[${this.simTime.toFixed(3)}s] Pos: (${state.position.x.toFixed(2)}, ${state.position.y.toFixed(2)}, ${state.position.z.toFixed(2)}) | ` +
+        `Error: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)}, ${posError.z.toFixed(2)}) | ` +
+        `Vel: (${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)}) | ` +
+        `Actual RPY: (${roll}°, ${pitch}°, ${yaw}°) | Desired RP: (${desRoll}°, ${desPitch}°) | Motors: ` +
+        `M0=%c${pwm0}%c, M1=%c${pwm1}%c, M2=%c${pwm2}%c, M3=%c${pwm3}%c`,
+        'color: #ff0000; font-weight: bold', 'color: inherit',
+        'color: #00ff00; font-weight: bold', 'color: inherit',
+        'color: #0000ff; font-weight: bold', 'color: inherit',
+        'color: #ffff00; font-weight: bold', 'color: inherit'
+      );
       this.logCounter = 0;
     }
     
@@ -491,11 +585,14 @@ class StationaryHoverDemo {
     
     // Display last motor commands if available (convert 0-1 to 0-65535 for PWM equivalent)
     if (this.lastMotorCommands) {
-      const pwm1 = Math.round(this.lastMotorCommands[0] * 65535);
-      const pwm2 = Math.round(this.lastMotorCommands[1] * 65535);
-      const pwm3 = Math.round(this.lastMotorCommands[2] * 65535);
-      const pwm4 = Math.round(this.lastMotorCommands[3] * 65535);
-      this.hud.querySelector('#hudMotors').textContent = `Motors: (${pwm1}, ${pwm2}, ${pwm3}, ${pwm4})`;
+      const pwm0 = Math.round(this.lastMotorCommands[0] * 65535);
+      const pwm1 = Math.round(this.lastMotorCommands[1] * 65535);
+      const pwm2 = Math.round(this.lastMotorCommands[2] * 65535);
+      const pwm3 = Math.round(this.lastMotorCommands[3] * 65535);
+      this.hud.querySelector('#motor0').textContent = pwm0;
+      this.hud.querySelector('#motor1').textContent = pwm1;
+      this.hud.querySelector('#motor2').textContent = pwm2;
+      this.hud.querySelector('#motor3').textContent = pwm3;
     }
   }
 }

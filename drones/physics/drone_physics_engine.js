@@ -92,13 +92,18 @@ export class DronePhysicsEngine {
     const thrustTotal = kF * (omegaSq[0] + omegaSq[1] + omegaSq[2] + omegaSq[3]);
     const F_B = new THREE.Vector3(0, 0, thrustTotal); // thrust along body +Z
 
-    // Rotor indexing (X configuration):
-    // 0: front-left, 1: front-right, 2: back-left, 3: back-right
-    // Roll/pitch leverage scaled by L / sqrt(2) for diagonal arms
-    const lever = L / Math.SQRT2;
-    const tau_x = lever * kF * (omegaSq[0] - omegaSq[1] + omegaSq[2] - omegaSq[3]);
-    const tau_y = lever * kF * (-omegaSq[0] - omegaSq[1] + omegaSq[2] + omegaSq[3]);
-    const tau_z = kM * (omegaSq[0] - omegaSq[1] - omegaSq[2] + omegaSq[3]);
+    // ETH Zürich / Crazyflie X-configuration:
+    // Motor 0: Front-Left (CW),  Motor 1: Front-Right (CCW)
+    // Motor 2: Back-Right (CW),  Motor 3: Back-Left (CCW)
+    // Body frame: X forward, Y left, Z up
+    
+    // ETH torque equations (from Crazyflie firmware):
+    // τ_x (roll):  L * kF * (ω1² - ω3²)        [right motors push left → negative roll]
+    // τ_y (pitch): L * kF * (ω2² - ω0²)        [front motors down tilts back → negative pitch]  
+    // τ_z (yaw):   kM * (-ω0² + ω1² - ω2² + ω3²)  [CW negative, CCW positive]
+    const tau_x = L * kF * (omegaSq[1] - omegaSq[3]);
+    const tau_y = L * kF * (omegaSq[2] - omegaSq[0]);
+    const tau_z = kM * (-omegaSq[0] + omegaSq[1] - omegaSq[2] + omegaSq[3]);
     const tau_B = new THREE.Vector3(tau_x, tau_y, tau_z);
 
     // 3) Aerodynamic drag (world frame)
@@ -112,7 +117,7 @@ export class DronePhysicsEngine {
     // 4) Translational dynamics
     const R_WB = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.state.q_WB));
     const F_W_thrust = F_B.clone().applyMatrix3(R_WB);
-    const F_gravity = new THREE.Vector3(0, -this.params.mass * this.params.gravity, 0);
+    const F_gravity = new THREE.Vector3(0, 0, -this.params.mass * this.params.gravity);  // Gravity in -Z (down)
 
     const F_net = F_W_thrust.clone().add(F_D).add(F_gravity);
     const v_dot = F_net.clone().multiplyScalar(1 / this.params.mass);
