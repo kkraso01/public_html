@@ -22,13 +22,14 @@ export class EthController {
     this.Ki = new THREE.Vector3(0.12, 0.12, 0.12);
 
     // Attitude loop gains (inner loop) for SE(3) geometric controller
-    this.KR = new THREE.Vector3(9.0, 9.0, 5.0);
-    this.Komega = new THREE.Vector3(0.4, 0.4, 0.3);
+    this.KR = new THREE.Vector3(1.0, 1.0, 5.0);
+    this.Komega = new THREE.Vector3(0.2, 0.2, 0.3);
 
     // Integral clamp to avoid windup; tuned to stay within actuator limits
     this.integralLimit = new THREE.Vector3(0.6, 0.6, 0.8);
 
     this.maxAcc = 20.0;
+    this.maxTiltAngle = 60 * Math.PI / 180; // 60 degrees for aggressive racing flight
     this.reset();
   }
 
@@ -106,6 +107,15 @@ export class EthController {
       a_cmd.multiplyScalar(this.maxAcc / a_cmd.length());
     }
 
+    // Limit maximum tilt angle by constraining horizontal acceleration
+    const horizontalAcc = Math.sqrt(a_cmd.x * a_cmd.x + a_cmd.y * a_cmd.y);
+    const maxHorizontalAcc = this.gravity * Math.tan(this.maxTiltAngle);
+    if (horizontalAcc > maxHorizontalAcc) {
+      const scale = maxHorizontalAcc / horizontalAcc;
+      a_cmd.x *= scale;
+      a_cmd.y *= scale;
+    }
+
     // Differential flatness mapping to desired orientation
     // Physics uses body +Z as thrust direction, world +Z is up
     const z_b_des = a_cmd.lengthSq() > 1e-9 ? a_cmd.clone().normalize() : new THREE.Vector3(0, 0, 1);
@@ -164,9 +174,9 @@ export class EthController {
     const coriolis = omega.clone().cross(Iomega);
 
     const tau_cmd = new THREE.Vector3(
-      -this.KR.x * e_R.x - this.Komega.x * e_omega.x + coriolis.x,
-      -this.KR.y * e_R.y - this.Komega.y * e_omega.y + coriolis.y,
-      -this.KR.z * e_R.z - this.Komega.z * e_omega.z + coriolis.z,
+      this.KR.x * e_R.x - this.Komega.x * e_omega.x + coriolis.x,
+      this.KR.y * e_R.y - this.Komega.y * e_omega.y + coriolis.y,
+      this.KR.z * e_R.z - this.Komega.z * e_omega.z + coriolis.z,
     );
 
     // ETH Zürich control allocation (X-configuration) matching physics engine

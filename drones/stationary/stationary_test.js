@@ -50,7 +50,7 @@ class StationaryHoverDemo {
     this.params = CRAZYFLIE_PARAMS;
 
     this.target = {
-      position: new THREE.Vector3(0, 0.6, 0),
+      position: new THREE.Vector3(0, 0, 0.6),
       velocity: new THREE.Vector3(0, 0, 0),
       yaw: 0,
     };
@@ -61,13 +61,13 @@ class StationaryHoverDemo {
     this.controller = new StationaryController(this.params);
     // Initialize with tuned ETH Zürich gains (per-axis) for stable hover
     this.controller.updateGains({
-      kp: { x: 6.0, y: 6.0, z: 8.0 },
-      kd: { x: 4.0, y: 4.0, z: 5.0 },
-      ki: { x: 0.12, y: 0.12, z: 0.12 },
+      kp: { x: 4.0, y: 4.0, z: 8.0 },
+      kd: { x: 3.0, y: 3.0, z: 5.0 },
+      ki: { x: 0.08, y: 0.08, z: 0.12 },
     });
     this.controller.updateAttitudeGains({
-      kR: { x: 9.0, y: 9.0, z: 5.0 },
-      kOmega: { x: 0.4, y: 0.4, z: 0.3 },
+      kR: { x: 1.0, y: 1.0, z: 5.0 },
+      kOmega: { x: 0.2, y: 0.2, z: 0.3 },
     });
     // Limit climb aggressiveness to reduce vertical oscillations
     this.controller.eth.maxAcc = 15.0;
@@ -124,9 +124,43 @@ class StationaryHoverDemo {
       rotation: { x: 0, y: 0 },
     };
 
+    // Raycaster for clicking on the ground plane
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // XY plane at z=0
+
+    // Target marker (visual indicator of where drone is going)
+    const markerGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.02, 16);
+    const markerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 });
+    this.targetMarker = new THREE.Mesh(markerGeometry, markerMaterial);
+    this.targetMarker.rotation.x = Math.PI / 2; // Rotate to lie flat on XY plane
+    this.targetMarker.position.set(0, 0, 0.6);
+    this.targetMarker.visible = true;
+    this.scene.add(this.targetMarker);
+
     this.renderer.domElement.addEventListener('mousedown', (e) => {
-      this.cameraControls.isDragging = true;
-      this.cameraControls.previousMousePosition = { x: e.clientX, y: e.clientY };
+      // Right click or Ctrl+Click for camera rotation
+      if (e.button === 2 || e.ctrlKey) {
+        this.cameraControls.isDragging = true;
+        this.cameraControls.previousMousePosition = { x: e.clientX, y: e.clientY };
+        e.preventDefault();
+      } else if (e.button === 0) {
+        // Left click to set target position
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersectPoint = new THREE.Vector3();
+        this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
+
+        if (intersectPoint) {
+          // Set target to clicked position, maintain current altitude
+          this.target.position.set(intersectPoint.x, intersectPoint.y, this.target.position.z);
+          this.targetMarker.position.set(intersectPoint.x, intersectPoint.y, this.target.position.z);
+          console.log(`New target: (${intersectPoint.x.toFixed(2)}, ${intersectPoint.y.toFixed(2)}, ${this.target.position.z.toFixed(2)})`);
+        }
+      }
     });
 
     this.renderer.domElement.addEventListener('mousemove', (e) => {
@@ -160,6 +194,11 @@ class StationaryHoverDemo {
 
     this.renderer.domElement.addEventListener('mouseleave', () => {
       this.cameraControls.isDragging = false;
+    });
+
+    // Prevent context menu on right click
+    this.renderer.domElement.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
     });
   }
 
@@ -412,9 +451,9 @@ class StationaryHoverDemo {
     this.overlay.appendChild(attitudeLabel);
 
     const attitudeSliderDefs = [
-      { key: 'kRxy', label: 'KR roll/pitch', min: 0, max: 14, step: 0.1, value: this.controller.eth.KR.x, onInput: (v) => this.controller.updateAttitudeGains({ kR: { x: v, y: v } }) },
+      { key: 'kRxy', label: 'KR roll/pitch', min: 0, max: 8.0, step: 0.1, value: this.controller.eth.KR.x, onInput: (v) => this.controller.updateAttitudeGains({ kR: { x: v, y: v } }) },
       { key: 'kRz', label: 'KR yaw', min: 0, max: 10, step: 0.1, value: this.controller.eth.KR.z, onInput: (v) => this.controller.updateAttitudeGains({ kR: { z: v } }) },
-      { key: 'kOxy', label: 'Kω roll/pitch', min: 0, max: 2, step: 0.02, value: this.controller.eth.Komega.x, onInput: (v) => this.controller.updateAttitudeGains({ kOmega: { x: v, y: v } }) },
+      { key: 'kOxy', label: 'Kω roll/pitch', min: 0, max: 1.0, step: 0.01, value: this.controller.eth.Komega.x, onInput: (v) => this.controller.updateAttitudeGains({ kOmega: { x: v, y: v } }) },
       { key: 'kOz', label: 'Kω yaw', min: 0, max: 2, step: 0.02, value: this.controller.eth.Komega.z, onInput: (v) => this.controller.updateAttitudeGains({ kOmega: { z: v } }) },
     ];
 
@@ -477,7 +516,7 @@ class StationaryHoverDemo {
       orientation: this.droneInitialOrientation.clone(),
       angularVelocity: new THREE.Vector3(0, 0, 0),
     });
-    this.target.position.set(0, 0.6, 0);
+    this.target.position.set(0, 0, 0.6);
     this.target.velocity.set(0, 0, 0);
     this.simTime = 0;
   }
@@ -610,6 +649,14 @@ class StationaryHoverDemo {
     this.droneMesh.position.copy(state.position);
     this.droneMesh.quaternion.copy(state.orientationQuat);
 
+    // Third-person camera follow (if not dragging)
+    if (!this.cameraControls.isDragging) {
+      const dronePos = state.position;
+      const offset = new THREE.Vector3(-2, -2, 1.5); // Behind and above the drone
+      this.camera.position.copy(dronePos).add(offset);
+      this.camera.lookAt(dronePos);
+    }
+
     this._updateHUD(state);
     this.renderer.render(this.scene, this.camera);
   }
@@ -619,7 +666,7 @@ class StationaryHoverDemo {
     const err = this.target.position.clone().sub(state.position);
     const vel = state.velocity;
     this.hud.querySelector('#hudMode').textContent = 'Mode: ETH cascaded';
-    this.hud.querySelector('#hudAlt').textContent = `Altitude: ${state.position.y.toFixed(2)} m`;
+    this.hud.querySelector('#hudAlt').textContent = `Altitude: ${state.position.z.toFixed(2)} m`;
     this.hud.querySelector('#hudError').textContent = `Position error: (${err.x.toFixed(2)}, ${err.y.toFixed(2)}, ${err.z.toFixed(2)})`;
     this.hud.querySelector('#hudVel').textContent = `Velocity: (${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)})`;
     
