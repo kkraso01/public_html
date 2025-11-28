@@ -1,9 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
+import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
 import { StationaryController } from './stationary_controller.js';
-
-function clamp(x, min, max) {
-  return Math.min(Math.max(x, min), max);
-}
 
 export function initStationaryHoverDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
@@ -34,16 +31,15 @@ class StationaryHoverDemo {
     this.accumulator = 0;
     this._frameReq = null;
 
+    this.params = CRAZYFLIE_PARAMS;
+
     this.target = {
       position: new THREE.Vector3(0, 0.6, 0),
       velocity: new THREE.Vector3(0, 0, 0),
       yaw: 0,
-      mass: 1.05,
     };
 
-    this.controller = new StationaryController({ dt: 1 / this.physicsRate });
-    this.controller.targetAltitude = 0.6;
-    this.controller.targetPosition = this.target.position.clone();
+    this.controller = new StationaryController(this.params);
 
     this._initScene();
     this._initDrone();
@@ -87,19 +83,13 @@ class StationaryHoverDemo {
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine({ floorHeight: 0.0, ceilingHeight: 5.0, minRPM: 3000, maxRPM: 25000 });
+    this.drone = new DronePhysicsEngine(this.params);
     this.drone.reset({
       position: new THREE.Vector3(0, 0.2, 0),
       velocity: new THREE.Vector3(0, 0, 0),
       orientation: new THREE.Quaternion().set(0, 0, 0, 1),
       angularVelocity: new THREE.Vector3(0, 0, 0),
     });
-    this.drone.state.position.set(0, 0.2, 0);
-    this.drone.state.velocity.set(0, 0, 0);
-    this.drone.state.orientation.set(0, 0, 0, 1);
-    this.drone.state.quaternion.set(0, 0, 0, 1);
-    this.drone.state.angularVelocity.set(0, 0, 0);
-    this.controller.targetPosition = this.target.position.clone();
 
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(0.28, 0.08, 0.28),
@@ -143,15 +133,15 @@ class StationaryHoverDemo {
       'position:absolute; top:8px; left:8px; background:rgba(12,17,28,0.85); color:#e5e7eb; padding:12px; font-family:"Fira Code", monospace; border:1px solid rgba(34,211,238,0.45); border-radius:10px; z-index:5; max-width:320px; display:grid; gap:8px;';
 
     const title = document.createElement('div');
-    title.textContent = 'Stationary Hover PID/FOPID';
+    title.textContent = 'Stationary Hover – ETH Cascaded Controller';
     title.style.cssText = 'color:#22d3ee; font-weight:700; font-size:13px; grid-column:1/-1;';
     this.overlay.appendChild(title);
 
     this.controls = {};
     const sliderDefs = [
-      { key: 'kp', label: 'Kp', min: 0, max: 10, step: 0.1, value: this.controller.params.kp },
-      { key: 'ki', label: 'Ki', min: 0, max: 4, step: 0.05, value: this.controller.params.ki },
-      { key: 'kd', label: 'Kd', min: 0, max: 6, step: 0.05, value: this.controller.params.kd },
+      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: this.controller.eth.Kp.x },
+      { key: 'ki', label: 'Ki (pos)', min: 0, max: 6, step: 0.05, value: this.controller.eth.Ki.x },
+      { key: 'kd', label: 'Kd (pos)', min: 0, max: 8, step: 0.05, value: this.controller.eth.Kd.x },
     ];
 
     sliderDefs.forEach((def) => {
@@ -178,28 +168,13 @@ class StationaryHoverDemo {
       this.controls[def.key] = input;
     });
 
-    const fopidRow = document.createElement('div');
-    fopidRow.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; color:#cbd5e1;';
-    const fopidCheckbox = document.createElement('input');
-    fopidCheckbox.type = 'checkbox';
-    fopidCheckbox.checked = true;
-    const fopidLabel = document.createElement('span');
-    fopidLabel.textContent = 'Use FOPID integral';
-    fopidCheckbox.addEventListener('change', () => {
-      this.controller.toggleFOPID(fopidCheckbox.checked);
-    });
-    fopidRow.appendChild(fopidCheckbox);
-    fopidRow.appendChild(fopidLabel);
-    this.overlay.appendChild(fopidRow);
-
     this.hud = document.createElement('div');
     this.hud.style.cssText = 'display:grid; grid-template-columns:1fr; gap:4px; font-size:12px; color:#cbd5f5;';
     this.hud.innerHTML = `
-      <div id="hudMode">Mode: FOPID</div>
+      <div id="hudMode">Mode: ETH cascaded</div>
       <div id="hudAlt">Altitude: 0.00 m</div>
       <div id="hudError">Position error: (0,0,0)</div>
       <div id="hudVel">Velocity: (0,0,0)</div>
-      <div id="hudInt">Fractional int: 0.00 ms</div>
     `;
     this.overlay.appendChild(this.hud);
 
@@ -213,15 +188,8 @@ class StationaryHoverDemo {
       orientation: new THREE.Quaternion().set(0, 0, 0, 1),
       angularVelocity: new THREE.Vector3(0, 0, 0),
     });
-    this.drone.state.position.set(0, 0.2, 0);
-    this.drone.state.velocity.set(0, 0, 0);
-    this.drone.state.orientation.set(0, 0, 0, 1);
-    this.drone.state.quaternion.set(0, 0, 0, 1);
-    this.drone.state.angularVelocity.set(0, 0, 0);
-    this.controller.targetAltitude = 0.6;
     this.target.position.set(0, 0.6, 0);
     this.target.velocity.set(0, 0, 0);
-    this.controller.targetPosition = this.target.position.clone();
     this.simTime = 0;
   }
 
@@ -284,29 +252,28 @@ class StationaryHoverDemo {
 
   _stepPhysics(dt) {
     this.simTime += dt;
-    const { commands, desiredOrientation } = this.controller.compute(this.drone.state, this.target, dt);
-    this.drone.desiredOrientationQuat.copy(desiredOrientation);
-    this.drone.applyMotorCommands(commands[0], commands[1], commands[2], commands[3]);
+    const state = this.drone.getState();
+    const { motorCommands } = this.controller.compute(state, dt);
+    this.drone.applyMotorCommands(motorCommands[0], motorCommands[1], motorCommands[2], motorCommands[3]);
     this.drone.step(dt);
   }
 
   _render() {
-    this.droneMesh.position.copy(this.drone.state.position);
-    this.droneMesh.quaternion.copy(this.drone.state.quaternion);
+    const state = this.drone.getState();
+    this.droneMesh.position.copy(state.position);
+    this.droneMesh.quaternion.copy(state.orientationQuat);
 
-    this._updateHUD();
+    this._updateHUD(state);
     this.renderer.render(this.scene, this.camera);
   }
 
-  _updateHUD() {
+  _updateHUD(state) {
     if (!this.hud) return;
-    const st = this.drone.state;
-    const err = this.target.position.clone().sub(st.position);
-    const vel = st.velocity;
-    this.hud.querySelector('#hudMode').textContent = `Mode: ${this.controller.useFOPID ? 'FOPID' : 'PID'}`;
-    this.hud.querySelector('#hudAlt').textContent = `Altitude: ${st.position.y.toFixed(2)} m`;
+    const err = this.target.position.clone().sub(state.position);
+    const vel = state.velocity;
+    this.hud.querySelector('#hudMode').textContent = 'Mode: ETH cascaded';
+    this.hud.querySelector('#hudAlt').textContent = `Altitude: ${state.position.y.toFixed(2)} m`;
     this.hud.querySelector('#hudError').textContent = `Position error: (${err.x.toFixed(2)}, ${err.y.toFixed(2)}, ${err.z.toFixed(2)})`;
     this.hud.querySelector('#hudVel').textContent = `Velocity: (${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)})`;
-    this.hud.querySelector('#hudInt').textContent = `Fractional int: ${this.controller.lastIntegrationMs.toFixed(2)} ms`;
   }
 }

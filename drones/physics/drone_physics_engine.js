@@ -1,211 +1,164 @@
 import { MotorModel } from './motor_model.js';
 import { CRAZYFLIE_PARAMS } from './params_crazyflie.js';
 
-const GRAVITY = new THREE.Vector3(0, -9.81, 0);
+function clamp01(u) {
+  return Math.min(Math.max(u, 0), 1);
+}
 
-function quatMultiply(q, r) {
-  return new THREE.Quaternion(
-    q.w * r.x + q.x * r.w + q.y * r.z - q.z * r.y,
-    q.w * r.y - q.x * r.z + q.y * r.w + q.z * r.x,
-    q.w * r.z + q.x * r.y - q.y * r.x + q.z * r.w,
-    q.w * r.w - q.x * r.x - q.y * r.y - q.z * r.z,
-  );
+// Helper for quaternion integration: q_dot = 0.5 * q * omega_quat
+function quatDerivative(q, omega) {
+  const omegaQuat = new THREE.Quaternion(omega.x, omega.y, omega.z, 0);
+  const qDot = q.clone().multiply(omegaQuat);
+  qDot.x *= 0.5;
+  qDot.y *= 0.5;
+  qDot.z *= 0.5;
+  qDot.w *= 0.5;
+  return qDot;
 }
 
 export class DronePhysicsEngine {
   constructor(params = {}) {
-    this.params = Object.assign(
-      {
-        floorHeight: 0.0,
-        ceilingHeight: 5.0,
-        minRPM: 3000,
-        idleRPM: 3000,
-        maxRPM: 25000,
-        kp_att: 8.0,
-        kd_att: 2.5,
-        motorForceScale: 1.1,
-      },
-      CRAZYFLIE_PARAMS,
-      params,
+    this.params = Object.assign({}, CRAZYFLIE_PARAMS, params);
+
+    // Inertia matrices (diagonal for this simplified model)
+    this.I = new THREE.Matrix3().set(
+      this.params.inertia.Jxx,
+      0,
+      0,
+      0,
+      this.params.inertia.Jyy,
+      0,
+      0,
+      0,
+      this.params.inertia.Jzz,
+    );
+    this.I_inv = new THREE.Matrix3().set(
+      1 / this.params.inertia.Jxx,
+      0,
+      0,
+      0,
+      1 / this.params.inertia.Jyy,
+      0,
+      0,
+      0,
+      1 / this.params.inertia.Jzz,
     );
 
-    this.params.maxRPM = this.params.maxRPM || this.params.rpmMax || 25000;
+    this.motorModel = new MotorModel(this.params.motor);
+    this.motorCmd = [0, 0, 0, 0];
 
-    // retune kF so that a 0.5 command (hover) produces approximately mass * g thrust
-    const yawRatio = this.params.kM / Math.max(this.params.kF, 1e-9);
-    const hoverRPM = (this.params.minRPM || 0) + 0.5 * (this.params.maxRPM - (this.params.minRPM || 0));
-    const perMotorHover = (this.params.mass * 9.81) / 4;
-    const tunedKF = perMotorHover / (hoverRPM * hoverRPM);
-    this.params.kF = tunedKF;
-    this.params.kM = tunedKF * yawRatio;
-    this.params.hoverRPM = hoverRPM;
-    this.params.hoverCommand = (hoverRPM - (this.params.idleRPM || 0)) / (this.params.maxRPM - (this.params.idleRPM || 0));
-
-    this.motor = new MotorModel({ rpmMax: this.params.maxRPM, timeConstant: this.params.motorTimeConstant });
-    const baseOrientation = new THREE.Quaternion();
     this.state = {
-      position: new THREE.Vector3(),
-      velocity: new THREE.Vector3(),
-      orientation: baseOrientation,
-      quaternion: baseOrientation,
-      orientationQuat: baseOrientation,
-      angularVelocity: new THREE.Vector3(),
-      motorRPM: [0, 0, 0, 0],
-      totalThrust: 0,
+      p_W: new THREE.Vector3(),
+      v_W: new THREE.Vector3(),
+      q_WB: new THREE.Quaternion(),
+      omega_B: new THREE.Vector3(),
+      motorSpeeds: [0, 0, 0, 0],
     };
-    this.desiredOrientationQuat = new THREE.Quaternion();
-    this.time = 0;
+
     this.reset();
   }
 
-  reset(state = {}) {
-    const startPos = state.position || new THREE.Vector3();
-    startPos.y = Math.max(startPos.y, (this.params.floorHeight || 0) + 0.2);
-    this.state.position.copy(startPos);
-    this.state.velocity.copy(state.velocity || new THREE.Vector3());
-    const q = (state.orientation || state.orientationQuat || state.quaternion || new THREE.Quaternion()).clone();
-    this.state.orientation.copy(q);
-    this.state.quaternion.copy(q);
-    this.state.orientationQuat.copy(q);
-    this.state.angularVelocity.copy(state.angularVelocity || new THREE.Vector3());
-    this.motor.omegas = [0, 0, 0, 0];
-    this.motor.commands = [0, 0, 0, 0];
-    this.state.motorRPM = [0, 0, 0, 0];
-    this.state.totalThrust = 0;
-    this.desiredOrientationQuat.identity();
-    this.time = 0;
+  reset(initialState = {}) {
+    this.state.p_W.copy(initialState.position || new THREE.Vector3());
+    this.state.v_W.copy(initialState.velocity || new THREE.Vector3());
+    this.state.q_WB.copy(initialState.orientationQuat || initialState.orientation || new THREE.Quaternion());
+    this.state.omega_B.copy(initialState.angularVelocity || new THREE.Vector3());
+    this.state.motorSpeeds = [0, 0, 0, 0];
+    this.motorModel.reset();
+    this.motorCmd = [0, 0, 0, 0];
   }
 
-  applyMotorCommands(u1, u2, u3, u4) {
-    const commands = [u1, u2, u3, u4].map((command) => {
-      const rpmCommand = THREE.MathUtils.clamp(command, 0, 1);
-      const idle = this.params.idleRPM || 0;
-      let rpm = idle + rpmCommand * (this.params.maxRPM - idle);
-      rpm = Math.max(this.params.minRPM, Math.min(rpm, this.params.maxRPM));
-      return rpm;
-    });
-    this.motor.setCommands(commands[0], commands[1], commands[2], commands[3]);
+  setDesiredOrientation() {
+    // kept for API compatibility; torque is supplied by external controllers
   }
 
-  getState() {
-    return {
-      position: this.state.position.clone(),
-      velocity: this.state.velocity.clone(),
-      orientation: this.state.orientation.clone(),
-      orientationQuat: this.state.orientationQuat.clone(),
-      angularVelocity: this.state.angularVelocity.clone(),
-      motorRPM: this.motor.omegas.slice(),
-      totalThrust: this.state.totalThrust,
-    };
+  applyMotorCommands(u0 = 0, u1 = 0, u2 = 0, u3 = 0) {
+    const { omegaMin, omegaMax } = this.params.motor;
+    const span = omegaMax - omegaMin;
+    this.motorCmd = [u0, u1, u2, u3].map((u) => omegaMin + clamp01(u) * span);
   }
 
   step(dt) {
     if (dt <= 0) return;
-    this.time += dt;
-    const omegas = this.motor.step(dt); // rpm
-    this.state.motorRPM = omegas.slice();
-    const thrusts = omegas.map((w) => this.params.kF * w * w * (this.params.motorForceScale || 1));
-    const totalThrust = thrusts.reduce((a, b) => a + b, 0);
-    
-    const rotationMatrix = new THREE.Matrix3().setFromMatrix4(
-      new THREE.Matrix4().makeRotationFromQuaternion(this.state.orientation),
+
+    // 1) Update motor speeds with first-order lag
+    this.motorModel.step(dt, this.motorCmd);
+    const omegaRotors = this.motorModel.getSpeeds();
+    this.state.motorSpeeds = omegaRotors.slice();
+
+    // 2) Compute thrust and torques from rotor speeds (PLUS configuration)
+    const { thrustCoeff: kF, torqueCoeff: kM, armLength: L } = this.params;
+    const omegaSq = omegaRotors.map((w) => w * w);
+    const thrustTotal = kF * (omegaSq[0] + omegaSq[1] + omegaSq[2] + omegaSq[3]);
+    const F_B = new THREE.Vector3(0, 0, thrustTotal); // thrust along body +Z
+
+    const tau_x = L * kF * (omegaSq[0] - omegaSq[2]);
+    const tau_y = L * kF * (omegaSq[1] - omegaSq[3]);
+    const tau_z = kM * (omegaSq[0] - omegaSq[1] + omegaSq[2] - omegaSq[3]);
+    const tau_B = new THREE.Vector3(tau_x, tau_y, tau_z);
+
+    // 3) Aerodynamic drag (world frame)
+    const { dragLinear } = this.params;
+    const F_D = new THREE.Vector3(
+      -dragLinear.x * this.state.v_W.x,
+      -dragLinear.y * this.state.v_W.y,
+      -dragLinear.z * this.state.v_W.z,
     );
-    const hover = this.params.mass * 9.81;
-    const baseThrust = Math.max(0.95 * hover, totalThrust);
-    const thrustWorld = new THREE.Vector3(0, 0, baseThrust).applyMatrix3(rotationMatrix);
 
-    if (this.state.position.y < 0.25) {
-      const h = Math.max(this.state.position.y, 0.01);
-      const groundEffect = 0.2 / (h * h);
-      thrustWorld.y += groundEffect;
-      this.state.totalThrust = baseThrust + groundEffect;
-    } else {
-      this.state.totalThrust = baseThrust;
-    }
+    // 4) Translational dynamics
+    const R_WB = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.state.q_WB));
+    const F_W_thrust = F_B.clone().applyMatrix3(R_WB);
+    const F_gravity = new THREE.Vector3(0, -this.params.mass * this.params.gravity, 0);
 
-    const drag = this.state.velocity.clone().multiplyScalar(-this.params.dragLinear);
-    const acc = thrustWorld.clone().multiplyScalar(1 / this.params.mass).add(GRAVITY).add(drag);
+    const F_net = F_W_thrust.clone().add(F_D).add(F_gravity);
+    const v_dot = F_net.clone().multiplyScalar(1 / this.params.mass);
+    this.state.v_W.add(v_dot.multiplyScalar(dt));
+    this.state.p_W.add(this.state.v_W.clone().multiplyScalar(dt));
 
-    this.state.velocity.add(acc.multiplyScalar(dt));
-    this.state.position.add(this.state.velocity.clone().multiplyScalar(dt));
-
-    if (this.time > 0.3) {
-      if (this.state.position.y < this.params.floorHeight) {
-        this.state.position.y = this.params.floorHeight;
-        if (this.state.velocity.y < 0) this.state.velocity.y = 0;
-      }
-
-      if (this.state.position.y < 0.05) {
-        this.state.position.y = 0.05;
-        this.state.velocity.y = Math.max(0, this.state.velocity.y);
-      }
-    }
-    if (this.state.position.y > this.params.ceilingHeight) {
-      this.state.position.y = this.params.ceilingHeight;
-      if (this.state.velocity.y > 0) this.state.velocity.y = 0;
-    }
-
-    const worldMinX = -20;
-    const worldMaxX = 20;
-    const worldMinZ = -20;
-    const worldMaxZ = 20;
-
-    this.state.position.x = Math.max(worldMinX, Math.min(worldMaxX, this.state.position.x));
-    this.state.position.z = Math.max(worldMinZ, Math.min(worldMaxZ, this.state.position.z));
-
-    const tau = this._torqueFromThrusts(thrusts);
-    const desiredQuat = this.desiredOrientationQuat || new THREE.Quaternion();
-    const currentQuat = this.state.orientationQuat || this.state.orientation;
-    const qError = desiredQuat.clone().multiply(currentQuat.clone().invert());
-    if (qError.w < 0) {
-      qError.x *= -1;
-      qError.y *= -1;
-      qError.z *= -1;
-      qError.w *= -1;
-    }
-    const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
-    const attTorque = errorAxis
-      .multiplyScalar(this.params.kp_att)
-      .add(this.state.angularVelocity.clone().multiplyScalar(-this.params.kd_att));
-    const torque = tau.add(attTorque);
-    const inertia = this.params.inertia;
-    const inertiaVec = new THREE.Vector3(
-      inertia.x * this.state.angularVelocity.x,
-      inertia.y * this.state.angularVelocity.y,
-      inertia.z * this.state.angularVelocity.z,
+    // 5) Rotational dynamics
+    const omega_B = this.state.omega_B.clone();
+    const Iomega = new THREE.Vector3(
+      this.params.inertia.Jxx * omega_B.x,
+      this.params.inertia.Jyy * omega_B.y,
+      this.params.inertia.Jzz * omega_B.z,
     );
-    const omegaCrossIomega = this.state.angularVelocity.clone().cross(inertiaVec);
+    const omegaCrossIomega = omega_B.clone().cross(Iomega);
+
+    const I_inv_vec = new THREE.Vector3(
+      1 / this.params.inertia.Jxx,
+      1 / this.params.inertia.Jyy,
+      1 / this.params.inertia.Jzz,
+    );
     const omegaDot = new THREE.Vector3(
-      (torque.x - omegaCrossIomega.x) / inertia.x,
-      (torque.y - omegaCrossIomega.y) / inertia.y,
-      (torque.z - omegaCrossIomega.z) / inertia.z,
+      tau_B.x - omegaCrossIomega.x,
+      tau_B.y - omegaCrossIomega.y,
+      tau_B.z - omegaCrossIomega.z,
     );
+    omegaDot.x *= I_inv_vec.x;
+    omegaDot.y *= I_inv_vec.y;
+    omegaDot.z *= I_inv_vec.z;
 
-    this.state.angularVelocity.add(omegaDot.multiplyScalar(dt));
-    const qDot = quatMultiply(
-      this.state.orientation,
-      new THREE.Quaternion(
-        0.5 * this.state.angularVelocity.x,
-        0.5 * this.state.angularVelocity.y,
-        0.5 * this.state.angularVelocity.z,
-        0,
-      ),
-    );
-    this.state.orientation.x += qDot.x * dt;
-    this.state.orientation.y += qDot.y * dt;
-    this.state.orientation.z += qDot.z * dt;
-    this.state.orientation.w += qDot.w * dt;
-    this.state.orientation.normalize();
-    this.state.quaternion.copy(this.state.orientation);
-    this.state.orientationQuat.copy(this.state.orientation);
+    this.state.omega_B.add(omegaDot.multiplyScalar(dt));
+
+    // Quaternion integration
+    const qDot = quatDerivative(this.state.q_WB, this.state.omega_B);
+    this.state.q_WB.x += qDot.x * dt;
+    this.state.q_WB.y += qDot.y * dt;
+    this.state.q_WB.z += qDot.z * dt;
+    this.state.q_WB.w += qDot.w * dt;
+    this.state.q_WB.normalize();
   }
 
-  _torqueFromThrusts(thrusts) {
-    const L = this.params.armLength;
-    const yawDir = [1, -1, 1, -1];
-    const roll = (thrusts[1] - thrusts[3]) * L;
-    const pitch = (thrusts[2] - thrusts[0]) * L;
-    const yaw = thrusts.reduce((sum, t, i) => sum + yawDir[i] * t, 0) * (this.params.kM / Math.max(this.params.kF, 1e-9));
-    return new THREE.Vector3(roll, pitch, yaw);
+  getState() {
+    const orientationQuat = this.state.q_WB.clone();
+    return {
+      position: this.state.p_W.clone(),
+      velocity: this.state.v_W.clone(),
+      orientationQuat,
+      orientation: orientationQuat.clone(), // alias for existing demos
+      quaternion: orientationQuat.clone(),
+      angularVelocity: this.state.omega_B.clone(),
+      motorSpeeds: this.state.motorSpeeds.slice(),
+    };
   }
 }
