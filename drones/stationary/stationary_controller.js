@@ -1,153 +1,35 @@
-import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
-
-function clamp(x, min, max) {
-  return Math.min(Math.max(x, min), max);
-}
-
-function binomial(a, k) {
-  if (k === 0) return 1;
-  let coeff = 1;
-  for (let i = 0; i < k; i++) {
-    coeff *= (a - i) / (i + 1);
-  }
-  return coeff;
-}
-
-class FractionalIntegrator {
-  constructor(alpha, dt) {
-    this.alpha = alpha; // fractional order 0 < α < 1
-    this.dt = dt;
-    this.history = [];
-  }
-
-  update(error) {
-    this.history.unshift(error);
-    let sum = 0;
-    const a = this.alpha;
-
-    for (let k = 0; k < this.history.length; k++) {
-      const coeff = Math.pow(-1, k) * binomial(a, k);
-      sum += coeff * this.history[k];
-      if (k > 120) break; // performance safeguard
-    }
-    return sum * Math.pow(this.dt, -a);
-  }
-}
+import { EthController } from './eth_controller.js';
 
 export class StationaryController {
   constructor(params = {}) {
-    this.params = Object.assign({
-      kp: 3.0,
-      ki: 0.5,
-      kd: 2.0,
-      yaw: 0,
-      fractionalAlpha: 0.8,
-      dt: 1 / 240,
-    }, params);
+    this.params = params;
+    this.eth = new EthController(params);
+    this.useFOPID = false; // kept for HUD compatibility
+    this.lastIntegrationMs = 0; // placeholder for legacy HUD
+  }
 
-    this.integral = new THREE.Vector3();
-    this.integrators = {
-      x: new FractionalIntegrator(this.params.fractionalAlpha, this.params.dt),
-      y: new FractionalIntegrator(this.params.fractionalAlpha, this.params.dt),
-      z: new FractionalIntegrator(this.params.fractionalAlpha, this.params.dt),
-    };
-    this.useFOPID = true;
-    this.fractionalDisabled = false;
-    this.lastIntegrationMs = 0;
+  reset() {
+    this.eth.reset();
   }
 
   updateGains({ kp, ki, kd }) {
-    if (typeof kp === 'number') this.params.kp = kp;
-    if (typeof ki === 'number') this.params.ki = ki;
-    if (typeof kd === 'number') this.params.kd = kd;
+    this.eth.updatePositionGains({ kp, ki, kd });
   }
 
-  toggleFOPID(enabled) {
-    this.useFOPID = enabled && !this.fractionalDisabled;
+  toggleFOPID() {
+    // Legacy control panel hook; no-op for cascaded controller
+    this.useFOPID = false;
   }
 
-  _desiredOrientationFromThrust(thrustVec, yaw) {
-    const zBody = thrustVec.lengthSq() > 1e-6 ? thrustVec.clone().normalize() : new THREE.Vector3(0, 1, 0);
-    const xC = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-    const yBody = zBody.clone().cross(xC).normalize();
-    if (yBody.lengthSq() < 1e-6) return new THREE.Quaternion();
-    const xBody = yBody.clone().cross(zBody).normalize();
-    const m = new THREE.Matrix4();
-    m.makeBasis(xBody, yBody, zBody);
-    const q = new THREE.Quaternion();
-    q.setFromRotationMatrix(m);
-    return q;
-  }
+  compute(state, dt) {
+    // Fixed hover target slightly above the origin
+    const target = {
+      position: new THREE.Vector3(0, 0.6, 0),
+      velocity: new THREE.Vector3(0, 0, 0),
+      acceleration: new THREE.Vector3(0, 0, 0),
+      yaw: 0,
+    };
 
-  _fractionalIntegral(error) {
-    const start = performance.now();
-    const integral = new THREE.Vector3(
-      this.integrators.x.update(error.x),
-      this.integrators.y.update(error.y),
-      this.integrators.z.update(error.z),
-    );
-    this.lastIntegrationMs = performance.now() - start;
-    if (this.lastIntegrationMs > 4) {
-      this.fractionalDisabled = true;
-      this.useFOPID = false;
-      console.warn('[FOPID] Disabled: browser too slow, using classical PID.');
-    }
-    return integral;
-  }
-
-  _classicalIntegral(error, dt) {
-    this.integral.add(error.clone().multiplyScalar(dt));
-    this.integral.clampLength(-1.5, 1.5);
-    return this.integral.clone();
-  }
-
-  compute(state, target, dt) {
-    const params = this.params;
-    const posErr = target.position.clone().sub(state.position);
-    const velErr = target.velocity ? target.velocity.clone().sub(state.velocity) : state.velocity.clone().multiplyScalar(-1);
-
-    let integral;
-    if (this.useFOPID && !this.fractionalDisabled) {
-      const fractional = this._fractionalIntegral(posErr);
-      const fractionalTerm = fractional.x + fractional.y + fractional.z;
-      if (!Number.isFinite(fractionalTerm)) {
-        this.useFOPID = false; // fall back to PID
-        this.fractionalDisabled = true;
-        integral = this._classicalIntegral(posErr, dt);
-      } else {
-        integral = fractional;
-      }
-    } else {
-      integral = this._classicalIntegral(posErr, dt);
-    }
-
-    const desiredAcc = new THREE.Vector3(
-      params.kp * posErr.x + params.ki * integral.x + params.kd * velErr.x,
-      params.kp * posErr.y + params.ki * integral.y + params.kd * velErr.y,
-      params.kp * posErr.z + params.ki * integral.z + params.kd * velErr.z,
-    );
-    desiredAcc.clampLength(0, 6.5);
-
-    const mass = target.mass || 1.05;
-    const thrustVector = desiredAcc.add(new THREE.Vector3(0, 9.81, 0)).multiplyScalar(mass);
-    thrustVector.y = Math.max(thrustVector.y, 0);
-
-    const desiredOrientation = this._desiredOrientationFromThrust(thrustVector, params.yaw);
-
-    const paramsPhys = state.params || target.params || DronePhysicsEngine?.prototype?.params || {};
-    const kF = paramsPhys.kF || 1e-3;
-
-    const thrustMag = clamp(thrustVector.length(), 0, (paramsPhys.mass || mass) * 25);
-    const perMotorThrust = thrustMag * 0.25;
-    const rpm = Math.sqrt(Math.max(perMotorThrust, 0) / Math.max(kF, 1e-9));
-    const minRPM = paramsPhys.minRPM || 0;
-    const maxRPM = paramsPhys.maxRPM || paramsPhys.rpmMax || 25000;
-    const clampedRpm = clamp(rpm, minRPM, maxRPM);
-    const command = clamp((clampedRpm - minRPM) / (maxRPM - minRPM), 0, 1);
-    const commands = [command, command, command, command];
-
-    return { commands, desiredOrientation };
+    return this.eth.computeControl(state, target, dt);
   }
 }
-
-export { FractionalIntegrator, binomial };
