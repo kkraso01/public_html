@@ -1,4 +1,4 @@
-import { initDroneRaceDemo } from '../../drones/race/drone_race_demo.js';
+// Drone Race Demo is independently managed by RaceUIController in drone_race_demo.js
 import { initDroneCaveDemo } from '../../drones/cave/drone_cave_demo.js';
 import { initObstacleDropDemo } from '../../drones/obstacles/obstacle_sim.js';
 
@@ -95,14 +95,8 @@ function setupDemo(containerId, demoFactory, controlsId, toggleBtnId, restartBtn
 }
 
 export function setupDroneShowcase() {
-  // Setup Drone Race Demo
-  setupDemo(
-    'drone-race-demo',
-    (container, opts) => initDroneRaceDemo(container, opts),
-    'drone-race-controls',
-    'drone-race-toggle',
-    'drone-race-restart'
-  );
+  // Drone Race Demo is now independently managed by RaceUIController in drone_race_demo.js
+  // It handles its own control injection and binding.
 
   // Setup Cave Explorer Demo
   setupDemo(

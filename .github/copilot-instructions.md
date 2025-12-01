@@ -29,6 +29,31 @@ This repo is a static portfolio site (HTML + Vanilla JS + Canvas). Keep changes 
 - Colors: prefer HSL for dynamic hues (e.g., `hsla(${hue}, 100%, 70%, 0.8)`).
 - Modularity: scripts are self-contained; avoid global pollution beyond `window.SystemPlugins`.
 
+## Coordinate Systems & Physics Conventions
+- **+Z UP Convention (CRITICAL)**: All drone code uses **+Z UP** (world Z-axis points upward)
+  - Position: `(x, y, z)` where z is altitude
+  - Velocity and acceleration: same axes
+  - **Gravity vector**: `new THREE.Vector3(0, 0, -mass * gravity)` — acts downward in -Z direction
+  - Gravity compensation in controllers: `a_cmd.z += gravity` (adds upward acceleration to counteract)
+  - Yaw (heading) rotates in X-Y plane (ground plane)
+  
+- **Motor Allocation (Crazyflie 2.x X-Configuration)**:
+  - Motor layout: 0=Front-Left(CW), 1=Front-Right(CCW), 2=Back-Right(CW), 3=Back-Left(CCW)
+  - Body frame: X forward, Y left, Z up (thrust direction)
+  - X-configuration arm projection: L/√2 in both x and y directions
+  - Torque equations (correct for X-config):
+    - Roll:  `τ_x = (L/√2) * kF * ((ω₀² + ω₃²) - (ω₁² + ω₂²))`  [left motors vs right motors]
+    - Pitch: `τ_y = (L/√2) * kF * ((ω₀² + ω₁²) - (ω₂² + ω₃²))`  [front motors vs back motors]
+    - Yaw:   `τ_z = kM * (-ω₀² + ω₁² - ω₂² + ω₃²)`  [CW negative, CCW positive]
+  - See `drone_physics_engine.js` for reference implementation
+  - Controllers and motor allocation matrices must match this convention
+
+- **All drone simulations must use these conventions**:
+  - drone race (`drones/race/`)
+  - stationary controller (`drones/stationary/`)
+  - physics engine (`drones/physics/`)
+  - Three.js scenes render with +Z up (camera position, track gates, initial conditions)
+
 ## Extensibility (Plugin API)
 - Register nodes: `window.SystemPlugins.registerNode('llm-gpt4', {type:'llm', model:'GPT-4', capacity:1000});`
 - Test modes: `window.SystemPlugins.setMode('performance');` or `simulateLoad(80);`
@@ -50,7 +75,9 @@ This repo is a static portfolio site (HTML + Vanilla JS + Canvas). Keep changes 
 
 ## What *Not* to Do
 - Avoid heavy tooling or frameworks without maintainer approval.
-- Don’t assume server-side; keep static and lightweight.
+- Don't assume server-side; keep static and lightweight.
+- **DO NOT create summary markdown documents** after making changes unless explicitly requested.
+- Do not announce which tools you're using (e.g., don't say "I'll use multi_replace_string_in_file").
 
 If unclear (e.g., adding Three.js or CI), ask for guidance.
 

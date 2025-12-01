@@ -5,10 +5,15 @@ function clamp01(u) {
   return Math.min(Math.max(u, 0), 1);
 }
 
-// Helper for quaternion integration: q_dot = 0.5 * q * omega_quat
+// Correct quaternion derivative for q_WB (body → world) with ω in body frame:
+// q̇ = 0.5 * (q ⊗ ω_quat)
+// Note: multiply on the RIGHT, not left, when ω is expressed in body frame
 function quatDerivative(q, omega) {
   const omegaQuat = new THREE.Quaternion(omega.x, omega.y, omega.z, 0);
+  
+  // Correct order: q first, then ω_quat (body-frame angular velocity)
   const qDot = q.clone().multiply(omegaQuat);
+  
   qDot.x *= 0.5;
   qDot.y *= 0.5;
   qDot.z *= 0.5;
@@ -45,7 +50,6 @@ export class DronePhysicsEngine {
     );
 
     this.motorModel = new MotorModel(this.params.motor);
-    this.motorCmd = [0, 0, 0, 0];
 
     this.state = {
       p_W: new THREE.Vector3(),
@@ -66,6 +70,13 @@ export class DronePhysicsEngine {
     this.state.motorSpeeds = [0, 0, 0, 0];
     this.motorModel.reset();
     this.motorCmd = [0, 0, 0, 0];
+    
+    // Add compatibility aliases for direct state access (non-copying references)
+    this.state.position = this.state.p_W;
+    this.state.velocity = this.state.v_W;
+    this.state.orientation = this.state.q_WB;
+    this.state.orientationQuat = this.state.q_WB;
+    this.state.angularVelocity = this.state.omega_B;
   }
 
   setDesiredOrientation() {
@@ -86,24 +97,34 @@ export class DronePhysicsEngine {
     const omegaRotors = this.motorModel.getSpeeds();
     this.state.motorSpeeds = omegaRotors.slice();
 
-    // 2) Compute thrust and torques from rotor speeds (X configuration)
-    const { thrustCoeff: kF, torqueCoeff: kM, armLength: L } = this.params;
-    const omegaSq = omegaRotors.map((w) => w * w);
-    const thrustTotal = kF * (omegaSq[0] + omegaSq[1] + omegaSq[2] + omegaSq[3]);
-    const F_B = new THREE.Vector3(0, 0, thrustTotal); // thrust along body +Z
+    // 2) Compute thrust and torques from rotor speeds (TRUE Crazyflie X configuration)
+    //
+    // Motor layout (matching real Crazyflie 2.x):
+    //   0: Front-Left  (CW)
+    //   1: Front-Right (CCW)
+    //   2: Back-Right  (CW)
+    //   3: Back-Left   (CCW)
+    //
+    // Body frame: x forward, y left, z up
 
-    // ETH Zürich / Crazyflie X-configuration:
-    // Motor 0: Front-Left (CW),  Motor 1: Front-Right (CCW)
-    // Motor 2: Back-Right (CW),  Motor 3: Back-Left (CCW)
-    // Body frame: X forward, Y left, Z up
-    
-    // ETH torque equations (from Crazyflie firmware):
-    // τ_x (roll):  L * kF * (ω1² - ω3²)        [right motors push left → negative roll]
-    // τ_y (pitch): L * kF * (ω2² - ω0²)        [front motors down tilts back → negative pitch]  
-    // τ_z (yaw):   kM * (-ω0² + ω1² - ω2² + ω3²)  [CW negative, CCW positive]
-    const tau_x = L * kF * (omegaSq[1] - omegaSq[3]);
-    const tau_y = L * kF * (omegaSq[2] - omegaSq[0]);
+    const { thrustCoeff: kF, torqueCoeff: kM, armLength: L } = this.params;
+    const omegaSq = omegaRotors.map(w => w * w);
+
+    // Total thrust
+    const thrustTotal = kF * (omegaSq[0] + omegaSq[1] + omegaSq[2] + omegaSq[3]);
+    const F_B = new THREE.Vector3(0, 0, thrustTotal);
+
+    // Correct Crazyflie X-configuration torque model with √2 arm projections
+    // X-config arms project at 45° → effective moment arm = L/√2
+    // Roll torque: left motors (0,3) vs right motors (1,2)
+    const tau_x = (L / Math.sqrt(2)) * kF * ((omegaSq[0] + omegaSq[3]) - (omegaSq[1] + omegaSq[2]));
+
+    // Pitch torque: front motors (0,1) vs back motors (2,3)
+    const tau_y = (L / Math.sqrt(2)) * kF * ((omegaSq[0] + omegaSq[1]) - (omegaSq[2] + omegaSq[3]));
+
+    // Yaw torque: CW = negative, CCW = positive
     const tau_z = kM * (-omegaSq[0] + omegaSq[1] - omegaSq[2] + omegaSq[3]);
+
     const tau_B = new THREE.Vector3(tau_x, tau_y, tau_z);
 
     // 3) Aerodynamic drag (world frame)
@@ -115,8 +136,10 @@ export class DronePhysicsEngine {
     );
 
     // 4) Translational dynamics
-    const R_WB = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.state.q_WB));
-    const F_W_thrust = F_B.clone().applyMatrix3(R_WB);
+    // Rotation matrix from body frame to world frame (NO transpose!)
+    // q_WB rotates body vectors into world frame
+    const R_BW = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.state.q_WB));
+    const F_W_thrust = F_B.clone().applyMatrix3(R_BW);
     const F_gravity = new THREE.Vector3(0, 0, -this.params.mass * this.params.gravity);  // Gravity in -Z (down)
 
     const F_net = F_W_thrust.clone().add(F_D).add(F_gravity);
@@ -131,21 +154,13 @@ export class DronePhysicsEngine {
       this.params.inertia.Jyy * omega_B.y,
       this.params.inertia.Jzz * omega_B.z,
     );
-    const omegaCrossIomega = omega_B.clone().cross(Iomega);
+    const coriolis = omega_B.clone().cross(Iomega);
 
-    const I_inv_vec = new THREE.Vector3(
-      1 / this.params.inertia.Jxx,
-      1 / this.params.inertia.Jyy,
-      1 / this.params.inertia.Jzz,
-    );
     const omegaDot = new THREE.Vector3(
-      tau_B.x - omegaCrossIomega.x,
-      tau_B.y - omegaCrossIomega.y,
-      tau_B.z - omegaCrossIomega.z,
+      (tau_B.x - coriolis.x) / this.params.inertia.Jxx,
+      (tau_B.y - coriolis.y) / this.params.inertia.Jyy,
+      (tau_B.z - coriolis.z) / this.params.inertia.Jzz
     );
-    omegaDot.x *= I_inv_vec.x;
-    omegaDot.y *= I_inv_vec.y;
-    omegaDot.z *= I_inv_vec.z;
 
     this.state.omega_B.add(omegaDot.multiplyScalar(dt));
 

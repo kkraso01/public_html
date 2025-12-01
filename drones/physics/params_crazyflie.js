@@ -1,29 +1,28 @@
-// Physical parameters for a medium-size quadrotor inspired by ETH Zurich demos.
-// Values are kept reasonable for a browser demo while remaining physically consistent.
+// Physical parameters for Crazyflie 2.x quadrotor (real hardware specifications)
 export const CRAZYFLIE_PARAMS = {
   // Vehicle properties
-  mass: 1.05, // kg
-  armLength: 0.16, // meters (distance from center to each rotor)
-  inertia: { Jxx: 0.015, Jyy: 0.015, Jzz: 0.03 }, // diagonal inertia matrix components (kg*m^2)
+  mass: 0.032, // kg (32 grams)
+  armLength: 0.046, // m (46 mm center to rotor)
+  inertia: { Jxx: 2.4e-5, Jyy: 2.4e-5, Jzz: 3.5e-5 }, // kg·m² (measured values)
 
-  // Aerodynamic/thrust coefficients
-  thrustCoeff: 1.1e-6, // kF: thrust = kF * omega^2 (N)
-  torqueCoeff: 2.0e-7, // kM: reaction torque = kM * omega^2 (N*m)
+  // Aerodynamic/thrust coefficients (Crazyflie 2.x with 7mm coreless motors)
+  thrustCoeff: 3.2e-8, // kF: thrust = kF * omega^2 (N)
+  torqueCoeff: 7.5e-10, // kM: reaction torque = kM * omega^2 (N·m)
 
   // Linear drag in the world frame (simple proportional model)
-  dragLinear: { x: 0.15, y: 0.25, z: 0.15 },
+  dragLinear: { x: 0.1, y: 0.1, z: 0.2 },
 
-  // Motor model
+  // Motor model (Crazyflie brushed coreless motors)
   motor: {
-    omegaMin: 200, // rad/s (idle)
-    omegaMax: 2400, // rad/s (approximately 23k RPM)
-    tauMotor: 0.03, // first-order time constant (s)
+    omegaMin: 300, // rad/s (idle)
+    omegaMax: 2500, // rad/s (~24k RPM max)
+    tauMotor: 0.015, // first-order time constant (s)
   },
 
   // Environment
-  gravity: 9.81, // m/s^2
+  gravity: 9.81, // m/s²
 };
 
-// Convenience derived limits used by controllers/allocators.
+// Convenience derived limits used by controllers/allocators
 CRAZYFLIE_PARAMS.maxThrustPerMotor =
-  CRAZYFLIE_PARAMS.thrustCoeff * CRAZYFLIE_PARAMS.motor.omegaMax * CRAZYFLIE_PARAMS.motor.omegaMax;
+  CRAZYFLIE_PARAMS.thrustCoeff * CRAZYFLIE_PARAMS.motor.omegaMax ** 2;

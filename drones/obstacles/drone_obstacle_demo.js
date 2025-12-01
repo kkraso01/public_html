@@ -1,4 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
+import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
+import { StationaryController } from '../stationary/stationary_controller.js';
 import { ObstacleManager } from './obstacle_manager.js';
 import { DraggableControls } from './draggable_controls.js';
 
@@ -79,27 +81,65 @@ class ObstacleDropDemo {
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
+    this.params = CRAZYFLIE_PARAMS;
+    this.drone = new DronePhysicsEngine(this.params);
     this.drone.reset({ position: new THREE.Vector3(0, 1.2, 0) });
 
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(0.25, 0.07, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.2, roughness: 0.5 }),
-    );
-    const rings = new THREE.Mesh(
-      new THREE.RingGeometry(0.08, 0.12, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),
-    );
-    rings.rotation.x = Math.PI / 2;
-    this.droneMesh = new THREE.Group();
-    this.droneMesh.add(body);
-    [-0.18, 0.18].forEach((x) => {
-      [-0.18, 0.18].forEach((z) => {
-        const r = rings.clone();
-        r.position.set(x, 0.05, z);
-        this.droneMesh.add(r);
-      });
+    // Initialize ETH controller
+    this.controller = new StationaryController(this.params);
+    this.controller.updateGains({
+      kp: { x: 4.0, y: 4.0, z: 8.0 },
+      kd: { x: 3.0, y: 3.0, z: 5.0 },
+      ki: { x: 0.08, y: 0.08, z: 0.12 },
     });
+    this.controller.updateAttitudeGains({
+      kR: { x: 1.0, y: 1.0, z: 5.0 },
+      kOmega: { x: 0.2, y: 0.2, z: 0.3 },
+    });
+    this.controller.eth.maxAcc = 15.0;
+    this.controller.eth.maxTiltAngle = 60 * Math.PI / 180;
+
+    // Create body matching stationary demo
+    const bodyGeometry = new THREE.BoxGeometry(0.28, 0.28, 0.08);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.35, roughness: 0.45 });
+    const bottomMat = new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.35, roughness: 0.45 });
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.35, roughness: 0.45 });
+    const bodyMaterials = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterials);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.25, roughness: 0.6 });
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), armMat);
+    arm.castShadow = true;
+    arm.receiveShadow = true;
+
+    this.droneMesh = new THREE.Group();
+    this.droneMesh.add(body, arm);
+
+    // Add colored motor rotors
+    const rotorGeo = new THREE.RingGeometry(0.09, 0.14, 16);
+    const rotorColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00];
+    const rotorPositions = [
+      new THREE.Vector3(0.28, 0.28, 0.06),
+      new THREE.Vector3(0.28, -0.28, 0.06),
+      new THREE.Vector3(-0.28, -0.28, 0.06),
+      new THREE.Vector3(-0.28, 0.28, 0.06),
+    ];
+    rotorPositions.forEach((p, i) => {
+      const rotorMat = new THREE.MeshStandardMaterial({ color: rotorColors[i], emissive: rotorColors[i], emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
+      const rTop = new THREE.Mesh(rotorGeo, rotorMat);
+      rTop.position.copy(p);
+      rTop.position.z += 0.01;
+      rTop.castShadow = true;
+      this.droneMesh.add(rTop);
+      const rBottom = new THREE.Mesh(rotorGeo, rotorMat);
+      rBottom.position.copy(p);
+      rBottom.position.z -= 0.01;
+      rBottom.castShadow = true;
+      this.droneMesh.add(rBottom);
+    });
+
     this.scene.add(this.droneMesh);
   }
 
@@ -225,12 +265,34 @@ class ObstacleDropDemo {
 
   _stepPhysics(dt) {
     this.simTime += dt;
-    const commands = this._computeMotorCommands();
-    this.drone.applyMotorCommands(commands[0], commands[1], commands[2], commands[3]);
+    
+    // Use ETH controller with obstacle avoidance
+    const state = this.drone.getState();
+    const target = new THREE.Vector3(0, 1.2, 0);
+    
+    const nearest = this._nearestObstacle();
+    let avoidance = new THREE.Vector3();
+    if (nearest) {
+      const diff = state.position.clone().sub(nearest.mesh.position);
+      const dist = Math.max(diff.length(), 0.01);
+      const push = Math.max(0, 1.2 - dist);
+      avoidance = diff.normalize().multiplyScalar(push * 2.0);
+    }
+    
+    const targetObj = {
+      position: target,
+      velocity: new THREE.Vector3(0, 0, 0),
+      acceleration: avoidance, // Use avoidance as feedforward
+      yaw: 0,
+    };
+    
+    const result = this.controller.eth.computeControl(state, targetObj, dt);
+    this.drone.applyMotorCommands(result.motorCommands[0], result.motorCommands[1], result.motorCommands[2], result.motorCommands[3]);
     this.drone.step(dt);
 
-    if (this.manager.collide(this.drone.state.position)) {
-      this.drone.state.velocity.multiplyScalar(-0.3);
+    const postState = this.drone.getState();
+    if (this.manager.collide(postState.position)) {
+      this.drone.state.v_W.multiplyScalar(-0.3);
     }
   }
 

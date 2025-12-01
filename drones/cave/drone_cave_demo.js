@@ -1,4 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
+import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
+import { StationaryController } from '../stationary/stationary_controller.js';
 import { CaveSim } from './cave_sim.js';
 import { Lidar } from './lidar.js';
 import { OccupancyGrid, updateGridFromLidar, chooseFrontierTarget, planPath } from './mapping.js';
@@ -106,39 +108,65 @@ class DroneCaveDemo {
   }
 
   _initDrone() {
-    this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
+    this.params = CRAZYFLIE_PARAMS;
+    this.drone = new DronePhysicsEngine(this.params);
     this.drone.reset({ position: new THREE.Vector3(0, 1.4, 4) });
 
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.32, 1.05, 12, 18),
-      new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.3, roughness: 0.4 }),
-    );
-    body.castShadow = true;
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.45, 0.06, 10, 32),
-      new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0284c7, roughness: 0.35 }),
-    );
-    ring.rotation.x = Math.PI / 2;
-    const arms = new THREE.Mesh(
-      new THREE.BoxGeometry(2.0, 0.12, 0.14),
-      new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9 }),
-    );
-    arms.castShadow = true;
-    const props = new THREE.Mesh(
-      new THREE.RingGeometry(0.18, 0.28, 18),
-      new THREE.MeshBasicMaterial({ color: 0xe0f2fe }),
-    );
-    props.rotation.x = Math.PI / 2;
-    this.droneMesh = new THREE.Group();
-    this.droneMesh.add(body, ring, arms);
-    [-1, 1].forEach((x) => {
-      [-1, 1].forEach((z) => {
-        const p = props.clone();
-        p.position.set(x * 1.0, 0.6, z * 1.0);
-        this.droneMesh.add(p);
-      });
+    // Initialize ETH controller
+    this.controller = new StationaryController(this.params);
+    this.controller.updateGains({
+      kp: { x: 4.0, y: 4.0, z: 8.0 },
+      kd: { x: 3.0, y: 3.0, z: 5.0 },
+      ki: { x: 0.08, y: 0.08, z: 0.12 },
     });
-    this.droneMesh.position.y = 0.8;
+    this.controller.updateAttitudeGains({
+      kR: { x: 1.0, y: 1.0, z: 5.0 },
+      kOmega: { x: 0.2, y: 0.2, z: 0.3 },
+    });
+    this.controller.eth.maxAcc = 15.0;
+    this.controller.eth.maxTiltAngle = 60 * Math.PI / 180;
+
+    // Create body matching stationary demo
+    const bodyGeometry = new THREE.BoxGeometry(0.28, 0.28, 0.08);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.35, roughness: 0.45 });
+    const bottomMat = new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.35, roughness: 0.45 });
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.35, roughness: 0.45 });
+    const bodyMaterials = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterials);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.25, roughness: 0.6 });
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), armMat);
+    arm.castShadow = true;
+    arm.receiveShadow = true;
+
+    this.droneMesh = new THREE.Group();
+    this.droneMesh.add(body, arm);
+
+    // Add colored motor rotors
+    const rotorGeo = new THREE.RingGeometry(0.09, 0.14, 16);
+    const rotorColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00];
+    const rotorPositions = [
+      new THREE.Vector3(0.28, 0.28, 0.06),
+      new THREE.Vector3(0.28, -0.28, 0.06),
+      new THREE.Vector3(-0.28, -0.28, 0.06),
+      new THREE.Vector3(-0.28, 0.28, 0.06),
+    ];
+    rotorPositions.forEach((p, i) => {
+      const rotorMat = new THREE.MeshStandardMaterial({ color: rotorColors[i], emissive: rotorColors[i], emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
+      const rTop = new THREE.Mesh(rotorGeo, rotorMat);
+      rTop.position.copy(p);
+      rTop.position.z += 0.01;
+      rTop.castShadow = true;
+      this.droneMesh.add(rTop);
+      const rBottom = new THREE.Mesh(rotorGeo, rotorMat);
+      rBottom.position.copy(p);
+      rBottom.position.z -= 0.01;
+      rBottom.castShadow = true;
+      this.droneMesh.add(rBottom);
+    });
+
     this.scene.add(this.droneMesh);
   }
 
@@ -289,13 +317,28 @@ class DroneCaveDemo {
       }
     }
 
-    const commands = this._computeMotorCommands();
-    this.drone.applyMotorCommands(commands[0], commands[1], commands[2], commands[3]);
+    // Use ETH controller
+    const state = this.drone.getState();
+    const targetPos = this.target.clone();
+    targetPos.y = Math.max(1.4, this.target.y || 1.4);
+    const avoidance = this._avoidanceFromHits();
+    
+    const targetObj = {
+      position: targetPos,
+      velocity: new THREE.Vector3(0, 0, 0),
+      acceleration: avoidance, // Use avoidance as feedforward
+      yaw: Math.atan2(targetPos.x - state.position.x, targetPos.z - state.position.z),
+    };
+    
+    const result = this.controller.eth.computeControl(state, targetObj, dt);
+    this.drone.applyMotorCommands(result.motorCommands[0], result.motorCommands[1], result.motorCommands[2], result.motorCommands[3]);
     this.drone.step(dt);
 
-    if (this.cave.collide(this.drone.state.position)) {
-      this.drone.state.velocity.multiplyScalar(-0.2);
-      this.drone.state.position.add(new THREE.Vector3(0, 0.05, 0));
+    const postState = this.drone.getState();
+    if (this.cave.collide(postState.position)) {
+      // Apply collision response by modifying internal state
+      this.drone.state.v_W.multiplyScalar(-0.2);
+      this.drone.state.p_W.add(new THREE.Vector3(0, 0.05, 0));
     }
 
     this.overlay.querySelector('#caveState').textContent = `Exploring → (${this.target.x.toFixed(1)}, ${this.target.z.toFixed(1)})`;

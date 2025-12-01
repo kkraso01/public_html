@@ -59,18 +59,16 @@ class StationaryHoverDemo {
     this.droneInitialOrientation = new THREE.Quaternion().set(0, 0, 0, 1);
 
     this.controller = new StationaryController(this.params);
-    // Initialize with tuned ETH Zürich gains (per-axis) for stable hover
+    // ETH Zürich cascaded gains - aggressive enough to produce tilt
     this.controller.updateGains({
-      kp: { x: 4.0, y: 4.0, z: 8.0 },
-      kd: { x: 3.0, y: 3.0, z: 5.0 },
-      ki: { x: 0.08, y: 0.08, z: 0.12 },
+      kp: { x: 2.5, y: 2.5, z: 3.5 },  // Strong P gains to command lateral acceleration
+      kd: { x: 3.5, y: 3.5, z: 2.5 },  // Strong damping for stability
+      ki: { x: 0.10, y: 0.10, z: 0.15 },
     });
     this.controller.updateAttitudeGains({
       kR: { x: 1.0, y: 1.0, z: 5.0 },
       kOmega: { x: 0.2, y: 0.2, z: 0.3 },
     });
-    // Limit climb aggressiveness to reduce vertical oscillations
-    this.controller.eth.maxAcc = 15.0;
 
     this._initScene();
     this._initDrone();
@@ -156,9 +154,13 @@ class StationaryHoverDemo {
 
         if (intersectPoint) {
           // Set target to clicked position, maintain current altitude
-          this.target.position.set(intersectPoint.x, intersectPoint.y, this.target.position.z);
-          this.targetMarker.position.set(intersectPoint.x, intersectPoint.y, this.target.position.z);
-          console.log(`New target: (${intersectPoint.x.toFixed(2)}, ${intersectPoint.y.toFixed(2)}, ${this.target.position.z.toFixed(2)})`);
+          // NOTE: Swap X and Y because Three.js camera view doesn't match physics frame:
+          // Physics: X=forward, Y=left, Z=up
+          // Three.js screen->world with this camera: X=left/right, Y=forward/back, Z=up
+          // So: Three.js X → Physics Y, Three.js Y → Physics X
+          this.target.position.set(intersectPoint.y, intersectPoint.x, this.target.position.z);
+          this.targetMarker.position.set(intersectPoint.y, intersectPoint.x, this.target.position.z);
+          console.log(`New target: (${intersectPoint.y.toFixed(2)}, ${intersectPoint.x.toFixed(2)}, ${this.target.position.z.toFixed(2)})`);
         }
       }
     });
@@ -264,13 +266,13 @@ class StationaryHoverDemo {
     // Body frame: X forward, Y left, Z up (ENU convention)
     const rotorGeo = new THREE.RingGeometry(0.09, 0.14, 16);
     const rotorColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00]; // Red, Green, Blue, Yellow
-    const rotorPositions = [
+    this.motorPositions = [
       new THREE.Vector3(0.28, 0.28, 0.06),   // Motor 0 - Front-Left (CW) - Red: +X (front), +Y (left)
       new THREE.Vector3(0.28, -0.28, 0.06),  // Motor 1 - Front-Right (CCW) - Green: +X (front), -Y (right)
       new THREE.Vector3(-0.28, -0.28, 0.06), // Motor 2 - Back-Right (CW) - Blue: -X (back), -Y (right)
       new THREE.Vector3(-0.28, 0.28, 0.06),  // Motor 3 - Back-Left (CCW) - Yellow: -X (back), +Y (left)
     ];
-    rotorPositions.forEach((p, i) => {
+    this.motorPositions.forEach((p, i) => {
       const rotorMat = new THREE.MeshStandardMaterial({ color: rotorColors[i], emissive: rotorColors[i], emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
       
       // Top blade (visible from above, +Z direction)
@@ -290,6 +292,38 @@ class StationaryHoverDemo {
       rBottom.receiveShadow = true;
       this.droneMesh.add(rBottom);
     });
+
+    // Add individual motor thrust arrows (one per rotor)
+    // Colors match motor colors: M0=Red, M1=Green, M2=Blue, M3=Yellow
+    // Arrows point DOWN (body -Z) to show airflow direction
+    this.motorThrustArrows = this.motorPositions.map((pos, i) => {
+      const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00]; // R, G, B, Y
+      const arrow = new THREE.ArrowHelper(
+        new THREE.Vector3(0, 0, -1), // airflow direction (body -Z, downward)
+        pos.clone(), // position at motor location
+        0.3, // initial length
+        colors[i],
+        0.06, // headLength
+        0.04  // headWidth
+      );
+      this.droneMesh.add(arrow);
+      return arrow;
+    });
+
+    // Add desired thrust direction arrow (green, at drone center)
+    this.thrustDesiredArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, 0),
+      0.5,
+      0x00ff00, // bright green
+      0.1,
+      0.08
+    );
+    this.thrustDesiredArrow.line.material.opacity = 0.6;
+    this.thrustDesiredArrow.line.material.transparent = true;
+    this.thrustDesiredArrow.cone.material.opacity = 0.6;
+    this.thrustDesiredArrow.cone.material.transparent = true;
+    this.droneMesh.add(this.thrustDesiredArrow);
 
     this.scene.add(this.droneMesh);
   }
@@ -591,7 +625,9 @@ class StationaryHoverDemo {
       yaw: this.target.yaw,
     };
     
-    const result = this.controller.eth.computeControl(state, target, dt);
+    // Use StationaryController.compute() which wraps ETH controller and adds diagnostics
+    // Pass the target so it actually tries to reach the clicked position
+    const result = this.controller.compute(state, dt, this.target);
     const motorCommands = result.motorCommands;
     this.lastMotorCommands = motorCommands;
     
@@ -612,25 +648,28 @@ class StationaryHoverDemo {
       const pwm2 = Math.round(motorCommands[2] * 65535); // Back-Left (Blue)
       const pwm3 = Math.round(motorCommands[3] * 65535); // Back-Right (Yellow)
       
-      // Extract Euler angles for debugging
-      const euler = new THREE.Euler().setFromQuaternion(state.orientationQuat, 'XYZ');
-      const roll = (euler.x * 180 / Math.PI).toFixed(1);
-      const pitch = (euler.y * 180 / Math.PI).toFixed(1);
-      const yaw = (euler.z * 180 / Math.PI).toFixed(1);
+      // SE(3) diagnostics - thrust direction vectors (not Euler angles!)
+      // Extract actual thrust direction (body z-axis in world frame)
+      const R_actual = new THREE.Matrix3().setFromMatrix4(
+        new THREE.Matrix4().makeRotationFromQuaternion(state.orientationQuat)
+      );
+      const b3_actual = new THREE.Vector3(0, 0, 1).applyMatrix3(R_actual);
       
-      // Get desired orientation
-      let desRoll = 0, desPitch = 0;
-      if (this.lastControlResult && this.lastControlResult.desiredOrientation) {
-        const desEuler = new THREE.Euler().setFromQuaternion(this.lastControlResult.desiredOrientation, 'XYZ');
-        desRoll = (desEuler.x * 180 / Math.PI).toFixed(1);
-        desPitch = (desEuler.y * 180 / Math.PI).toFixed(1);
+      // Get desired thrust direction and attitude error
+      let b3_desired = new THREE.Vector3(0, 0, 1);
+      let thrustErrorDeg = 0;
+      if (this.lastControlResult && this.lastControlResult.diagnostics) {
+        b3_desired = this.lastControlResult.diagnostics.thrustDirection_desired;
+        thrustErrorDeg = this.lastControlResult.diagnostics.thrustErrorDeg;
       }
       
       console.log(
         `[${this.simTime.toFixed(3)}s] Pos: (${state.position.x.toFixed(2)}, ${state.position.y.toFixed(2)}, ${state.position.z.toFixed(2)}) | ` +
-        `Error: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)}, ${posError.z.toFixed(2)}) | ` +
+        `PosErr: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)}, ${posError.z.toFixed(2)}) | ` +
         `Vel: (${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)}) | ` +
-        `Actual RPY: (${roll}°, ${pitch}°, ${yaw}°) | Desired RP: (${desRoll}°, ${desPitch}°) | Motors: ` +
+        `b3_actual: (${b3_actual.x.toFixed(2)}, ${b3_actual.y.toFixed(2)}, ${b3_actual.z.toFixed(2)}) | ` +
+        `b3_desired: (${b3_desired.x.toFixed(2)}, ${b3_desired.y.toFixed(2)}, ${b3_desired.z.toFixed(2)}) | ` +
+        `ThrustErr: ${thrustErrorDeg.toFixed(1)}° | Motors: ` +
         `M0=%c${pwm0}%c, M1=%c${pwm1}%c, M2=%c${pwm2}%c, M3=%c${pwm3}%c`,
         'color: #ff0000; font-weight: bold', 'color: inherit',
         'color: #00ff00; font-weight: bold', 'color: inherit',
@@ -648,6 +687,32 @@ class StationaryHoverDemo {
     const state = this.drone.getState();
     this.droneMesh.position.copy(state.position);
     this.droneMesh.quaternion.copy(state.orientationQuat);
+
+    // Update thrust arrows
+    if (this.lastControlResult && this.lastControlResult.diagnostics) {
+      const b3_desired = this.lastControlResult.diagnostics.thrustDirection_desired;
+      
+      // Update desired thrust direction arrow (in body frame)
+      this.thrustDesiredArrow.setDirection(b3_desired.clone().applyQuaternion(state.orientationQuat.clone().invert()));
+      this.thrustDesiredArrow.setLength(0.5, 0.1, 0.08);
+    }
+
+    // Update individual motor thrust arrows based on motor commands
+    if (this.lastMotorCommands) {
+      this.lastMotorCommands.forEach((cmd, i) => {
+        // Scale arrow length by motor command: 0-1 maps to 0.05-0.6 length
+        // Minimum length for visibility even at low throttle
+        const minLength = 0.05;
+        const maxLength = 0.6;
+        const length = minLength + cmd * (maxLength - minLength);
+        
+        this.motorThrustArrows[i].setLength(
+          length,
+          Math.max(0.04, length * 0.15), // headLength scales with thrust
+          Math.max(0.03, length * 0.12)  // headWidth scales with thrust
+        );
+      });
+    }
 
     // Third-person camera follow (if not dragging)
     if (!this.cameraControls.isDragging) {
