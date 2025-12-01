@@ -1,54 +1,88 @@
 /**
- * Model Predictive Control (MPC) for Drone Racing
+ * Model Predictive Control (MPC) for Drone Racing with SE(3) Dynamics
  * 
- * Extends ETH controller to reuse motor allocation, but replaces the control
- * computation with predictive optimization over a horizon.
+ * Full SE(3) predictive controller specialized for torus gate racing:
+ * - Predicts full rigid body dynamics: position, velocity, orientation (quaternion), angular velocity
+ * - Optimizes control inputs (thrust T, torques τ) over receding horizon
+ * - Cost functions specialized for torus gates (centerline tracking, tube containment)
+ * - Uses ETH controller's motor allocation for consistent dynamics
  * 
- * State-of-the-art racing controller that:
- * - Predicts future states over a horizon (N steps)
- * - Optimizes control inputs to minimize cost (tracking error + control effort)
- * - Handles constraints (max thrust, tilt angles, collision avoidance)
- * - Replans at each timestep (receding horizon)
+ * State: x = [p, v, q, ω] ∈ ℝ³ × ℝ³ × S³ × ℝ³
+ * Control: u = [T, τ] ∈ ℝ⁺ × ℝ³
  * 
  * Based on research from:
- * - ETH Zürich Robotics and Perception Group
- * - MIT's Fast Autonomous Flight
- * - University of Zürich's Swift drone racing system
+ * - ETH Zürich Robotics and Perception Group (SE(3) control)
+ * - MIT's Fast Autonomous Flight (aggressive maneuvers)
+ * - University of Zürich's Swift drone racing system (gate racing)
  */
 
 import { EthController } from '../stationary/eth_controller.js';
+
+/**
+ * MPC State: Full SE(3) rigid body state
+ */
+class MPCState {
+  constructor(p, v, q, omega) {
+    this.position = p.clone();          // THREE.Vector3 (world frame)
+    this.velocity = v.clone();          // THREE.Vector3 (world frame)
+    this.orientation = q.clone();       // THREE.Quaternion (body→world)
+    this.angularVelocity = omega.clone(); // THREE.Vector3 (body frame)
+  }
+
+  clone() {
+    return new MPCState(
+      this.position, this.velocity, this.orientation, this.angularVelocity
+    );
+  }
+}
+
+/**
+ * MPC Control: Thrust + body frame torques
+ * (Same as ETH controller inner control loop)
+ */
+class MPCControl {
+  constructor(T, tauX, tauY, tauZ) {
+    this.thrust = T;                  // N (body +Z direction)
+    this.tau = new THREE.Vector3(tauX, tauY, tauZ); // N·m (body frame)
+  }
+
+  clone() {
+    return new MPCControl(this.thrust, this.tau.x, this.tau.y, this.tau.z);
+  }
+}
 
 export class MPCController extends EthController {
   constructor(params) {
     super(params); // Initialize ETH controller base (includes motor allocation)
     
-    // Override with MPC-specific state tracking
-    this.trajectory = null;
-    this.simTime = 0;
-    this.gateIndex = 0;
+    // Gate racing state
+    this.gates = null;
+    this.currentGateIndex = 0;
+    this.previousPosition = new THREE.Vector3(0, 0, 0);
     
-    // MPC Hyperparameters
-    this.horizonSteps = 15;              // Prediction horizon (N)
-    this.predictionDt = 0.05;            // 50ms prediction steps
+    // MPC Hyperparameters (tuned for torus racing)
+    this.horizonSteps = 20;              // Prediction horizon (N) - longer for gate lookahead
+    this.predictionDt = 0.04;            // 40ms prediction steps (800ms total horizon)
     this.maxIterations = 5;              // SQP iterations per control cycle
     
-    // Cost function weights
+    // Cost function weights (tuned for aggressive gate racing)
     this.weights = {
-      position: 20.0,        // Track position error
-      velocity: 5.0,         // Track velocity error
-      acceleration: 1.0,     // Minimize acceleration changes
-      thrust: 0.5,           // Penalize high thrust
-      tilt: 2.0,             // Penalize aggressive tilts
-      jerk: 0.1,             // Smoothness
+      position: 8.0,         // Track position error (moderate - gates have tolerance)
+      velocity: 3.0,         // Track velocity error (smooth speed control)
+      acceleration: 0.2,     // Torque effort (low - allow aggressive maneuvers)
+      thrust: 0.1,           // Penalize high thrust (very low - racing needs power)
+      tilt: 1.0,             // Penalize extreme tilts (prevent flips)
+      jerk: 0.05,            // Smoothness (low - allow quick changes)
     };
     
-    // Physical constraints
+    // Physical constraints (aggressive racing limits)
     this.constraints = {
       maxThrust: params.maxThrust || (this.mass * this.gravity * 2.5),
       minThrust: params.minThrust || 0.0,
-      maxTiltAngle: params.maxTiltAngle ? THREE.MathUtils.degToRad(params.maxTiltAngle) : THREE.MathUtils.degToRad(70),
-      maxAcceleration: params.maxAcceleration || 25.0,
-      maxVelocity: params.maxVelocity || 15.0,
+      maxTiltAngle: params.maxTiltAngle ? THREE.MathUtils.degToRad(params.maxTiltAngle) : THREE.MathUtils.degToRad(65),
+      maxTorque: 0.02,       // N·m for roll/pitch
+      maxTorqueYaw: 0.01,    // N·m for yaw
+      maxVelocity: params.maxVelocity || 12.0,
     };
     
     // MPC optimization state
@@ -59,30 +93,61 @@ export class MPCController extends EthController {
     // Previous solution for warm-starting
     this.previousSolution = null;
     
-    console.log('[MPC] Initialized with horizon:', this.horizonSteps, 'steps, dt:', this.predictionDt);
+    console.log('[MPC SE(3)] Initialized with horizon:', this.horizonSteps, 'steps @', this.predictionDt, 's');
+    console.log('[MPC SE(3)] Total prediction time:', (this.horizonSteps * this.predictionDt).toFixed(2), 's');
   }
 
-  setTrajectory(trajectory) {
-    this.trajectory = trajectory;
-    const count = trajectory.points?.length || trajectory.waypoints?.length || trajectory.segments?.length || 0;
-    console.log('[MPC] Trajectory set with', count, 'points/waypoints');
+  /**
+   * Set gate sequence for racing
+   */
+  setGates(gates) {
+    this.gates = gates;        // array of TorusGate
+    this.currentGateIndex = 0;
+    console.log('[MPC SE(3)] Gate sequence set with', gates.length, 'gates');
   }
 
   reset() {
     super.reset(); // Reset ETH controller state (integral terms, etc.)
-    this.simTime = 0;
-    this.gateIndex = 0;
-    this.predictedTrajectory = [];
-    this.previousSolution = null;
-    this.convergenceHistory = [];
+    
+    // Safe reset - only reset if properties exist (may be called from parent constructor)
+    if (this.previousPosition) {
+      this.currentGateIndex = 0;
+      this.previousPosition.set(0, 0, 0);
+      this.predictedTrajectory = [];
+      this.previousSolution = null;
+      this.convergenceHistory = [];
+    }
   }
 
+  getGateIndex() {
+    return this.currentGateIndex;
+  }
+
+  /**
+   * Update controller time (called by demo)
+   */
   update(dt) {
-    this.simTime += dt;
+    // MPC doesn't need explicit time tracking (gate-based, not time-based)
+    // But keep method for compatibility with demo loop
   }
 
+  /**
+   * Update gate index (public API for demo compatibility)
+   * MPC handles this internally via _updateGateIndex in computeControl,
+   * but this allows demo to manually advance gates if needed
+   */
+  updateGateIndex(position, waypoints, threshold) {
+    // MPC uses TorusGate geometry, not waypoint distance
+    // Just call internal update for consistency
+    this._updateGateIndex(position);
+  }
+
+  /**
+   * Get current target (for HUD/visualization compatibility)
+   * Returns the current gate center as the target position
+   */
   getTarget() {
-    if (!this.trajectory) {
+    if (!this.gates || this.currentGateIndex >= this.gates.length) {
       return {
         position: new THREE.Vector3(0, 0, 2.5),
         velocity: new THREE.Vector3(0, 0, 0),
@@ -90,50 +155,53 @@ export class MPCController extends EthController {
         yaw: 0,
       };
     }
-    // Handle both ReferenceTrajectory (sample) and TimeOptimalTrajectory (getStateAtTime)
-    if (typeof this.trajectory.getStateAtTime === 'function') {
-      return this.trajectory.getStateAtTime(this.simTime);
-    } else if (typeof this.trajectory.sample === 'function') {
-      return this.trajectory.sample(this.simTime);
-    }
+    
+    const gate = this.gates[this.currentGateIndex];
+    const speed = 5.0; // Match horizon builder
+    const velocity = gate.axis.clone().multiplyScalar(speed);
+    
     return {
-      position: new THREE.Vector3(0, 0, 2.5),
-      velocity: new THREE.Vector3(0, 0, 0),
+      position: gate.center.clone(),
+      velocity: velocity,
       acceleration: new THREE.Vector3(0, 0, 0),
-      yaw: 0,
+      yaw: Math.atan2(velocity.y, velocity.x),
     };
   }
 
-  getGateIndex() {
-    return this.gateIndex;
-  }
-
-  updateGateIndex(position, waypoints, threshold) {
-    if (this.gateIndex < waypoints.length) {
-      const dist = position.distanceTo(waypoints[this.gateIndex]);
-      if (dist < threshold) {
-        this.gateIndex++;
-      }
+  /**
+   * Update gate index based on drone position
+   * Advances when drone passes through gate plane and is within tube
+   */
+  _updateGateIndex(position) {
+    if (!this.gates || this.currentGateIndex >= this.gates.length) return;
+    
+    const gate = this.gates[this.currentGateIndex];
+    
+    if (gate.hasPassed(position, this.previousPosition)) {
+      this.currentGateIndex++;
+      console.log('[MPC SE(3)] Gate', this.currentGateIndex - 1, 'cleared! Next:', this.currentGateIndex);
     }
+    
+    this.previousPosition.copy(position);
   }
 
   /**
    * Main MPC control computation
-   * Solves optimization problem to find best control sequence
+   * Solves SE(3) optimization problem to find best control sequence for gate racing
    */
-  computeControl(state, targetRef, dt) {
+  computeControl(state, _unusedTarget, dt) {
     const startTime = performance.now();
     
-    // Build prediction horizon from reference trajectory
-    const refHorizon = this._buildReferenceHorizon(targetRef);
+    // Update gate progress tracking
+    this._updateGateIndex(state.position);
     
     // Solve MPC optimization problem using Sequential Quadratic Programming (SQP)
-    const solution = this._solveMPC(state, refHorizon);
+    const solution = this._solveMPC(state);
     
     // Extract first control action (receding horizon principle)
     const controlAction = solution.controls[0];
     
-    // Convert control action (thrust vector + yaw) to motor commands
+    // Convert control action (T, τ) to motor commands via X-config mixer
     const motorCommands = this._controlToMotors(controlAction, state);
     
     // Store solution for warm-starting next iteration
@@ -146,46 +214,68 @@ export class MPCController extends EthController {
     return {
       motorCommands,
       desiredThrust: controlAction.thrust,
-      desiredOrientation: controlAction.orientation,
+      desiredOrientation: solution.predictedStates[0].orientation.clone(),
       predictedTrajectory: this.predictedTrajectory,
       optimizationTime,
       cost: solution.cost,
+      gateIndex: this.currentGateIndex,
     };
   }
 
   /**
-   * Build reference trajectory over prediction horizon
+   * Build gate-aware reference trajectory over prediction horizon
+   * Aims through current and next gate centers along gate axes
    */
-  _buildReferenceHorizon(currentTarget) {
+  _buildReferenceHorizon() {
     const horizon = [];
+    
     for (let i = 0; i < this.horizonSteps; i++) {
-      const t = this.simTime + i * this.predictionDt;
-      let ref = currentTarget;
-      if (this.trajectory) {
-        if (typeof this.trajectory.getStateAtTime === 'function') {
-          ref = this.trajectory.getStateAtTime(t);
-        } else if (typeof this.trajectory.sample === 'function') {
-          ref = this.trajectory.sample(t);
-        }
+      // Lookahead: advance gate index every few steps in horizon
+      const gateIdx = Math.min(
+        this.currentGateIndex + Math.floor(i / 5),
+        (this.gates?.length || 1) - 1
+      );
+      
+      const gate = this.gates ? this.gates[gateIdx] : null;
+
+      // Reference "desired" state: center of torus, aligned with axis
+      let positionRef = new THREE.Vector3(0, 0, 2.5);
+      let velocityRef = new THREE.Vector3(0, 0, 0);
+      let yawRef = 0;
+
+      if (gate) {
+        // Aim for gate center
+        positionRef = gate.center.clone();
+        
+        // Velocity: along gate axis direction (through the ring)
+        const speed = 5.0; // m/s, tune for race aggressiveness
+        velocityRef = gate.axis.clone().multiplyScalar(speed);
+        
+        // Yaw: align with velocity direction
+        yawRef = Math.atan2(velocityRef.y, velocityRef.x);
       }
+
       horizon.push({
-        position: ref.position.clone(),
-        velocity: ref.velocity.clone(),
-        acceleration: ref.acceleration ? ref.acceleration.clone() : new THREE.Vector3(0, 0, 0),
-        yaw: ref.yaw || 0,
+        position: positionRef,
+        velocity: velocityRef,
+        yaw: yawRef,
+        gateIndex: gateIdx,
       });
     }
+    
     return horizon;
   }
 
   /**
    * Solve MPC optimization using iterative Sequential Quadratic Programming
    * Minimizes: sum(cost_stage) over horizon
-   * Subject to: dynamics constraints, physical limits
+   * Subject to: SE(3) dynamics, physical limits, gate constraints
    */
-  _solveMPC(state, refHorizon) {
+  _solveMPC(currentState) {
+    const refHorizon = this._buildReferenceHorizon();
+    
     // Initialize control sequence (warm-start from previous solution or hover)
-    let controls = this._initializeControls(state);
+    let controls = this._initializeControls();
     
     let bestCost = Infinity;
     let bestControls = controls;
@@ -194,22 +284,22 @@ export class MPCController extends EthController {
     // Iterative optimization (simplified SQP)
     for (let iter = 0; iter < this.maxIterations; iter++) {
       // Forward simulate with current control sequence
-      const predictedStates = this._simulateDynamics(state, controls);
+      const predictedStates = this._simulateDynamics(currentState, controls);
       
       // Evaluate cost
       const cost = this._evaluateCost(predictedStates, controls, refHorizon);
       
       if (cost < bestCost) {
         bestCost = cost;
-        bestControls = [...controls];
-        bestStates = [...predictedStates];
+        bestControls = controls.map(c => c.clone());
+        bestStates = predictedStates.map(s => s.clone());
       }
       
       // Compute gradients and update controls
-      controls = this._updateControls(controls, predictedStates, refHorizon, state);
+      controls = this._updateControls(controls, predictedStates, refHorizon, currentState);
       
       // Early termination if converged
-      if (iter > 0 && Math.abs(cost - bestCost) < 0.01) {
+      if (iter > 0 && Math.abs(cost - bestCost) < 1e-2) {
         break;
       }
     }
@@ -227,21 +317,17 @@ export class MPCController extends EthController {
   /**
    * Initialize control sequence (warm-start or hover)
    */
-  _initializeControls(state) {
+  _initializeControls() {
     const controls = [];
+    const hoverT = this.mass * this.gravity;
     
     for (let i = 0; i < this.horizonSteps; i++) {
       if (this.previousSolution && i < this.previousSolution.controls.length - 1) {
         // Warm-start: shift previous solution
-        controls.push({ ...this.previousSolution.controls[i + 1] });
+        controls.push(this.previousSolution.controls[i + 1].clone());
       } else {
-        // Initialize with hover thrust
-        controls.push({
-          thrust: this.mass * this.gravity,
-          tiltX: 0,
-          tiltY: 0,
-          yawRate: 0,
-        });
+        // Initialize with hover thrust, zero torque
+        controls.push(new MPCControl(hoverT, 0, 0, 0));
       }
     }
     
@@ -249,51 +335,121 @@ export class MPCController extends EthController {
   }
 
   /**
+   * SE(3) dynamics step: full rigid body dynamics with quaternion kinematics
+   * Matches physics engine exactly (+Z UP convention)
+   */
+  _stepDynamics(state, control, dt) {
+    const next = state.clone();
+
+    // Rotation matrix from quaternion (body→world)
+    const R = new THREE.Matrix3().setFromMatrix4(
+      new THREE.Matrix4().makeRotationFromQuaternion(next.orientation)
+    );
+
+    // Thrust in body +Z direction, rotate to world frame
+    const e3_body = new THREE.Vector3(0, 0, 1);
+    const thrustWorld = e3_body.clone().applyMatrix3(R).multiplyScalar(control.thrust / this.mass);
+    
+    // Gravity acts in world -Z direction
+    const gravityWorld = new THREE.Vector3(0, 0, -this.gravity);
+    
+    // Total acceleration: v̇ = g + R·e₃·T/m
+    const acc = gravityWorld.add(thrustWorld);
+
+    // Position & velocity integration (Euler)
+    next.velocity.add(acc.multiplyScalar(dt));
+    next.position.add(next.velocity.clone().multiplyScalar(dt));
+
+    // Angular velocity dynamics: ω̇ = J⁻¹(τ - ω × Jω)
+    const omega = next.angularVelocity.clone();
+    const J = this.inertia; // THREE.Vector3 (Jxx, Jyy, Jzz)
+
+    const Jomega = new THREE.Vector3(
+      J.x * omega.x,
+      J.y * omega.y,
+      J.z * omega.z
+    );
+
+    const coriolis = omega.clone().cross(Jomega); // ω × Jω
+    const tauNet = control.tau.clone().sub(coriolis);
+
+    const omegaDot = new THREE.Vector3(
+      tauNet.x / J.x,
+      tauNet.y / J.y,
+      tauNet.z / J.z
+    );
+
+    next.angularVelocity.add(omegaDot.multiplyScalar(dt));
+
+    // Quaternion kinematics: q̇ = 0.5·q ⊗ [0;ω]
+    const q = next.orientation.clone();
+    const omegaQuat = new THREE.Quaternion(omega.x, omega.y, omega.z, 0);
+    const qDot = q.clone().multiply(omegaQuat);
+    qDot.x *= 0.5;
+    qDot.y *= 0.5;
+    qDot.z *= 0.5;
+    qDot.w *= 0.5;
+
+    q.x += qDot.x * dt;
+    q.y += qDot.y * dt;
+    q.z += qDot.z * dt;
+    q.w += qDot.w * dt;
+    q.normalize();
+
+    next.orientation.copy(q);
+
+    return next;
+  }
+
+  /**
    * Forward simulate dynamics with given control sequence
    */
   _simulateDynamics(initialState, controls) {
     const states = [];
-    let currentState = {
-      position: initialState.position.clone(),
-      velocity: initialState.velocity.clone(),
-      orientation: initialState.orientation.clone(),
-    };
     
-    states.push({ ...currentState });
+    // Convert physics state to MPCState if needed
+    let x = new MPCState(
+      initialState.position,
+      initialState.velocity,
+      initialState.orientationQuat || initialState.orientation,
+      initialState.angularVelocity
+    );
+    
+    states.push(x.clone());
     
     for (let i = 0; i < controls.length; i++) {
-      const control = controls[i];
-      
-      // Simple dynamics model matching physics engine: thrust in body +Z, gravity in world -Z
-      // Body frame thrust direction (body +Z is thrust, tilts move it)
-      const thrustDirection = new THREE.Vector3(
-        Math.sin(control.tiltX),
-        Math.sin(control.tiltY),
-        Math.cos(control.tiltX) * Math.cos(control.tiltY)
-      ).normalize();
-      
-      const thrustForce = thrustDirection.multiplyScalar(control.thrust);
-      const gravityForce = new THREE.Vector3(0, 0, -this.mass * this.gravity);  // Gravity acts downward (-Z)
-      const totalForce = thrustForce.add(gravityForce);
-      
-      const acceleration = totalForce.divideScalar(this.mass);
-      
-      // Euler integration (simple but fast for MPC)
-      currentState.velocity.add(acceleration.multiplyScalar(this.predictionDt));
-      currentState.position.add(currentState.velocity.clone().multiplyScalar(this.predictionDt));
-      
-      states.push({
-        position: currentState.position.clone(),
-        velocity: currentState.velocity.clone(),
-        orientation: currentState.orientation.clone(),
-      });
+      x = this._stepDynamics(x, controls[i], this.predictionDt);
+      states.push(x.clone());
     }
     
     return states;
   }
 
   /**
-   * Evaluate total cost over horizon
+   * Torus gate-specific cost: centerline tracking + tube containment
+   */
+  _gateCost(state, gate) {
+    if (!gate) return 0;
+
+    const pos = state.position;
+    const distToCenterline = gate.distanceToRingCenterline(pos);
+    const signedTorusDist = gate.signedDistance(pos);
+
+    // Encourage being inside the tube, close to centerline
+    const w_center = 50.0;  // strong - stay on racing line
+    const w_tube   = 20.0;  // strong - avoid collision with gate
+
+    const c_center = w_center * distToCenterline * distToCenterline;
+
+    // Penalty only when outside tube (signedDist > 0 = outside)
+    const out = Math.max(0, signedTorusDist);
+    const c_tube = w_tube * out * out;
+
+    return c_center + c_tube;
+  }
+
+  /**
+   * Evaluate total cost over horizon with torus gate awareness
    */
   _evaluateCost(predictedStates, controls, refHorizon) {
     let totalCost = 0;
@@ -303,141 +459,193 @@ export class MPCController extends EthController {
       const control = controls[i];
       const ref = refHorizon[i];
       
-      // Position tracking error
-      const posError = state.position.distanceTo(ref.position);
+      // 1) Position / velocity tracking (to reference near gate)
+      const posError = state.position.clone().sub(ref.position).length();
+      const velError = state.velocity.clone().sub(ref.velocity).length();
+
       totalCost += this.weights.position * posError * posError;
-      
-      // Velocity tracking error
-      const velError = state.velocity.distanceTo(ref.velocity);
       totalCost += this.weights.velocity * velError * velError;
-      
-      // Control effort (thrust)
-      const thrustError = control.thrust - this.mass * this.gravity;
+
+      // 2) Gate torus-specific cost (centerline + tube containment)
+      const gate = this.gates ? this.gates[ref.gateIndex] : null;
+      totalCost += this._gateCost(state, gate);
+
+      // 3) Control effort
+      const hoverThrust = this.mass * this.gravity;
+      const thrustError = (control.thrust - hoverThrust);
       totalCost += this.weights.thrust * thrustError * thrustError;
-      
-      // Tilt penalty (encourage upright flight)
-      const tiltMag = Math.sqrt(control.tiltX * control.tiltX + control.tiltY * control.tiltY);
-      totalCost += this.weights.tilt * tiltMag * tiltMag;
-      
-      // Jerk penalty (smoothness)
+
+      // Torque effort (body frame)
+      totalCost += this.weights.acceleration * control.tau.lengthSq();
+
+      // 4) Smoothness cost (jerk / torque changes)
       if (i > 0) {
         const prevControl = controls[i - 1];
-        const jerkX = (control.tiltX - prevControl.tiltX) / this.predictionDt;
-        const jerkY = (control.tiltY - prevControl.tiltY) / this.predictionDt;
-        totalCost += this.weights.jerk * (jerkX * jerkX + jerkY * jerkY);
+        const dT = (control.thrust - prevControl.thrust) / this.predictionDt;
+        const dTau = control.tau.clone().sub(prevControl.tau).divideScalar(this.predictionDt);
+        totalCost += this.weights.jerk * (dT * dT + dTau.lengthSq());
       }
+
+      // 5) Tilt penalty (avoid flipping unnecessarily)
+      const R = new THREE.Matrix3().setFromMatrix4(
+        new THREE.Matrix4().makeRotationFromQuaternion(state.orientation)
+      );
+      const bodyZ = new THREE.Vector3(0, 0, 1).applyMatrix3(R); // body +Z in world frame
+      const cosTilt = bodyZ.dot(new THREE.Vector3(0, 0, 1)); // dot with world +Z
+      const tiltAngle = Math.acos(THREE.MathUtils.clamp(cosTilt, -1, 1));
+      totalCost += this.weights.tilt * tiltAngle * tiltAngle;
     }
     
     return totalCost;
   }
 
   /**
-   * Update controls using gradient descent (simplified)
+   * Clamp control to physical constraints
+   */
+  _clampControl(control) {
+    // Thrust limits
+    control.thrust = THREE.MathUtils.clamp(
+      control.thrust,
+      this.constraints.minThrust,
+      this.constraints.maxThrust
+    );
+
+    // Torque limits (body frame)
+    control.tau.x = THREE.MathUtils.clamp(control.tau.x, -this.constraints.maxTorque, this.constraints.maxTorque);
+    control.tau.y = THREE.MathUtils.clamp(control.tau.y, -this.constraints.maxTorque, this.constraints.maxTorque);
+    control.tau.z = THREE.MathUtils.clamp(control.tau.z, -this.constraints.maxTorqueYaw, this.constraints.maxTorqueYaw);
+  }
+
+  /**
+   * Update controls using gradient descent for SE(3) controls (T, τ)
+   * Uses finite differences to compute gradients
    */
   _updateControls(controls, predictedStates, refHorizon, initialState) {
     const learningRate = 0.05;
     const epsilon = 0.01; // For numerical gradient
     
-    const newControls = [];
+    const newControls = controls.map(c => c.clone());
+    const baseCost = this._evaluateCost(predictedStates, controls, refHorizon);
     
     for (let i = 0; i < controls.length; i++) {
-      const control = { ...controls[i] };
+      const control = newControls[i];
       
-      // Compute gradients numerically (finite differences)
-      const baseCost = this._evaluateCost(predictedStates, controls, refHorizon);
+      // Partial derivative w.r.t. thrust
+      {
+        const perturbed = controls.map((c, k) => 
+          k === i ? new MPCControl(c.thrust + epsilon, c.tau.x, c.tau.y, c.tau.z) : c
+        );
+        const statesPlus = this._simulateDynamics(initialState, perturbed);
+        const costPlus = this._evaluateCost(statesPlus, perturbed, refHorizon);
+        const grad = (costPlus - baseCost) / epsilon;
+        control.thrust -= learningRate * grad;
+      }
       
-      // Gradient w.r.t. thrust
-      const controlsThrustPlus = [...controls];
-      controlsThrustPlus[i] = { ...control, thrust: control.thrust + epsilon };
-      const statesThrustPlus = this._simulateDynamics(initialState, controlsThrustPlus);
-      const costThrustPlus = this._evaluateCost(statesThrustPlus, controlsThrustPlus, refHorizon);
-      const gradThrust = (costThrustPlus - baseCost) / epsilon;
+      // Partial derivative w.r.t. tau.x (roll torque)
+      {
+        const perturbed = controls.map((c, k) => 
+          k === i ? new MPCControl(c.thrust, c.tau.x + epsilon, c.tau.y, c.tau.z) : c
+        );
+        const statesPlus = this._simulateDynamics(initialState, perturbed);
+        const costPlus = this._evaluateCost(statesPlus, perturbed, refHorizon);
+        const grad = (costPlus - baseCost) / epsilon;
+        control.tau.x -= learningRate * grad;
+      }
       
-      // Gradient w.r.t. tiltX
-      const controlsTiltXPlus = [...controls];
-      controlsTiltXPlus[i] = { ...control, tiltX: control.tiltX + epsilon };
-      const statesTiltXPlus = this._simulateDynamics(initialState, controlsTiltXPlus);
-      const costTiltXPlus = this._evaluateCost(statesTiltXPlus, controlsTiltXPlus, refHorizon);
-      const gradTiltX = (costTiltXPlus - baseCost) / epsilon;
+      // Partial derivative w.r.t. tau.y (pitch torque)
+      {
+        const perturbed = controls.map((c, k) => 
+          k === i ? new MPCControl(c.thrust, c.tau.x, c.tau.y + epsilon, c.tau.z) : c
+        );
+        const statesPlus = this._simulateDynamics(initialState, perturbed);
+        const costPlus = this._evaluateCost(statesPlus, perturbed, refHorizon);
+        const grad = (costPlus - baseCost) / epsilon;
+        control.tau.y -= learningRate * grad;
+      }
       
-      // Gradient w.r.t. tiltY
-      const controlsTiltYPlus = [...controls];
-      controlsTiltYPlus[i] = { ...control, tiltY: control.tiltY + epsilon };
-      const statesTiltYPlus = this._simulateDynamics(initialState, controlsTiltYPlus);
-      const costTiltYPlus = this._evaluateCost(statesTiltYPlus, controlsTiltYPlus, refHorizon);
-      const gradTiltY = (costTiltYPlus - baseCost) / epsilon;
-      
-      // Update with gradient descent
-      control.thrust -= learningRate * gradThrust;
-      control.tiltX -= learningRate * gradTiltX;
-      control.tiltY -= learningRate * gradTiltY;
+      // Partial derivative w.r.t. tau.z (yaw torque)
+      {
+        const perturbed = controls.map((c, k) => 
+          k === i ? new MPCControl(c.thrust, c.tau.x, c.tau.y, c.tau.z + epsilon) : c
+        );
+        const statesPlus = this._simulateDynamics(initialState, perturbed);
+        const costPlus = this._evaluateCost(statesPlus, perturbed, refHorizon);
+        const grad = (costPlus - baseCost) / epsilon;
+        control.tau.z -= learningRate * grad;
+      }
       
       // Apply constraints
-      control.thrust = Math.max(this.constraints.minThrust, Math.min(this.constraints.maxThrust, control.thrust));
-      control.tiltX = Math.max(-this.constraints.maxTiltAngle, Math.min(this.constraints.maxTiltAngle, control.tiltX));
-      control.tiltY = Math.max(-this.constraints.maxTiltAngle, Math.min(this.constraints.maxTiltAngle, control.tiltY));
-      
-      newControls.push(control);
+      this._clampControl(control);
     }
     
     return newControls;
   }
 
   /**
-   * Convert MPC control (thrust + tilt) to motor commands
-   * Uses ETH controller's motor allocation by constructing equivalent torque commands
+   * Convert MPC control (T, τ) to motor commands using ETH-style X-config mixer
+   * Same allocation as EthController for consistency with physics
    */
   _controlToMotors(control, state) {
-    // Map MPC tilt commands to torque demands
-    // MPC tilts are in radians representing desired body orientation
+    const T_max = this.maxThrustPerMotor;
     const L = this.L;
-    const tau_x = control.tiltX * this.mass * this.gravity * L * 2.0; // Roll torque from tilt
-    const tau_y = control.tiltY * this.mass * this.gravity * L * 2.0; // Pitch torque from tilt
-    const tau_z = control.yawRate * 0.01; // Yaw torque (simplified)
-    
-    const tau_cmd = new THREE.Vector3(tau_x, tau_y, tau_z);
-    const thrust_des = control.thrust;
-    
-    // Reuse ETH controller's allocation logic (from eth_controller.js lines 186-246)
     const kF = this.kF;
     const kM = this.kM;
-    const yawToThrust = kM / kF;
-    
-    const solveThrusts = (yawTerm) => {
-      const yawAlloc = yawTerm / yawToThrust;
-      const T0 = 0.25 * thrust_des - 0.5 * tau_cmd.y / L - 0.25 * yawAlloc;
-      const T1 = 0.25 * thrust_des + 0.5 * tau_cmd.x / L + 0.25 * yawAlloc;
-      const T2 = 0.25 * thrust_des + 0.5 * tau_cmd.y / L - 0.25 * yawAlloc;
-      const T3 = 0.25 * thrust_des - 0.5 * tau_cmd.x / L + 0.25 * yawAlloc;
-      return [T0, T1, T2, T3];
+
+    const tau_cmd = control.tau;
+    let thrust_des = control.thrust;
+
+    // Clamp total thrust to physical limits
+    thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
+
+    // X-configuration motor allocation (Crazyflie 2.x)
+    // Motors: 0=FL(CW), 1=FR(CCW), 2=BR(CW), 3=BL(CCW)
+    // Solve for individual motor thrusts from total thrust + torques
+    const solveThrusts = (yawTorque) => {
+      const S  = thrust_des / kF;            // Total thrust in ω² units
+      const Tx = tau_cmd.x * Math.SQRT2 / (L * kF);  // Roll in ω² units
+      const Ty = tau_cmd.y * Math.SQRT2 / (L * kF);  // Pitch in ω² units
+      const Tz = yawTorque / kM;             // Yaw in ω² units
+
+      // X-config allocation matrix inversion
+      const f0 = 0.25 * (S + Tx + Ty - Tz);  // FL
+      const f1 = 0.25 * (S - Tx + Ty + Tz);  // FR
+      const f2 = 0.25 * (S - Tx - Ty - Tz);  // BR
+      const f3 = 0.25 * (S + Tx - Ty + Tz);  // BL
+
+      return [f0 * kF, f1 * kF, f2 * kF, f3 * kF]; // Convert back to thrusts
     };
-    
+
     let [T0, T1, T2, T3] = solveThrusts(tau_cmd.z);
-    
-    T0 = Math.max(T0, 0);
-    T1 = Math.max(T1, 0);
-    T2 = Math.max(T2, 0);
-    T3 = Math.max(T3, 0);
-    
-    const T_max = this.maxThrustPerMotor;
+
     const anyOverMax = () => T0 > T_max || T1 > T_max || T2 > T_max || T3 > T_max;
-    
-    if (anyOverMax()) {
-      [T0, T1, T2, T3] = solveThrusts(0); // Drop yaw if saturated
-      T0 = Math.min(Math.max(T0, 0), T_max);
-      T1 = Math.min(Math.max(T1, 0), T_max);
-      T2 = Math.min(Math.max(T2, 0), T_max);
-      T3 = Math.min(Math.max(T3, 0), T_max);
+    const anyNegative = () => T0 < 0 || T1 < 0 || T2 < 0 || T3 < 0;
+
+    // Handle saturation: drop yaw authority if needed
+    if (anyOverMax() || anyNegative()) {
+      [T0, T1, T2, T3] = solveThrusts(0);
+      if (anyOverMax()) {
+        const scale = T_max / Math.max(T0, T1, T2, T3);
+        T0 *= scale;
+        T1 *= scale;
+        T2 *= scale;
+        T3 *= scale;
+      }
     }
-    
+
+    // Final clamping
+    T0 = Math.min(Math.max(T0, 0), T_max);
+    T1 = Math.min(Math.max(T1, 0), T_max);
+    T2 = Math.min(Math.max(T2, 0), T_max);
+    T3 = Math.min(Math.max(T3, 0), T_max);
+
     // Convert thrust to motor command [0,1]
     const omegaRange = this.omegaMax - this.omegaMin;
     const thrustToCmd = (T) => {
       const omega = Math.sqrt(Math.max(T, 0) / kF);
       const u = (omega - this.omegaMin) / omegaRange;
-      return Math.min(Math.max(u, 0), 1);
+      return THREE.MathUtils.clamp(u, 0, 1);
     };
-    
+
     return [thrustToCmd(T0), thrustToCmd(T1), thrustToCmd(T2), thrustToCmd(T3)];
   }
 

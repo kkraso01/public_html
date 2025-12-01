@@ -59,15 +59,15 @@ class StationaryHoverDemo {
     this.droneInitialOrientation = new THREE.Quaternion().set(0, 0, 0, 1);
 
     this.controller = new StationaryController(this.params);
-    // ETH Zürich cascaded gains - aggressive enough to produce tilt
+    // ETH Zürich aggressive tuning - Flying Machine Arena racing mode
     this.controller.updateGains({
-      kp: { x: 2.5, y: 2.5, z: 3.5 },  // Strong P gains to command lateral acceleration
-      kd: { x: 3.5, y: 3.5, z: 2.5 },  // Strong damping for stability
-      ki: { x: 0.10, y: 0.10, z: 0.15 },
+      kp: { x: 8.0, y: 8.0, z: 8.0 },  // Fast response in all axes
+      kd: { x: 4.0, y: 4.0, z: 4.0 },  // Strong damping for fast response
+      ki: { x: 0.2, y: 0.2, z: 0.8 },  // Strong integral for altitude precision
     });
     this.controller.updateAttitudeGains({
-      kR: { x: 1.0, y: 1.0, z: 5.0 },
-      kOmega: { x: 0.2, y: 0.2, z: 0.3 },
+      kR: { x: 0.05, y: 0.05, z: 0.2 },       // Aggressive roll/pitch for fast maneuvers
+      kOmega: { x: 0.02, y: 0.02, z: 0.08 },  // Strong damping for racing mode stability
     });
 
     this._initScene();

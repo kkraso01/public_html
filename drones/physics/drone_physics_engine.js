@@ -166,6 +166,14 @@ export class DronePhysicsEngine {
 
     this.state.omega_B.add(omegaDot.multiplyScalar(dt));
 
+    // Angular damping (air resistance on rotation)
+    // Real quadrotors experience rotational drag proportional to angular velocity
+    // Crazyflie typical values: ~0.5-2.0 for roll/pitch, ~1.0-3.0 for yaw
+    const dragAngular = { x: 1.0, y: 1.0, z: 2.0 }; // Higher yaw damping due to larger drag area
+    this.state.omega_B.x *= Math.exp(-dragAngular.x * dt);
+    this.state.omega_B.y *= Math.exp(-dragAngular.y * dt);
+    this.state.omega_B.z *= Math.exp(-dragAngular.z * dt);
+
     // Quaternion integration
     const qDot = quatDerivative(this.state.q_WB, this.state.omega_B);
     this.state.q_WB.x += qDot.x * dt;

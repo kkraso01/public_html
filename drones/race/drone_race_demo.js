@@ -2,6 +2,7 @@ import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
 import { RaceController } from './race_controller.js';
 import { MPCController } from './mpc_controller.js';
+import { TorusGate } from './gate_model.js';
 import { buildRaceTrack, ReferenceTrajectory } from './track.js';
 import { TimeOptimalTrajectory } from './trajectory_optimizer.js';
 import { RaceUIController } from './race_ui_controller.js';
@@ -180,6 +181,16 @@ class DroneRaceDemo {
     this.gates = gates;
     this.waypoints = waypoints;
     
+    // Convert Three.js gate meshes to TorusGate objects for MPC
+    // Gates are vertical rings (Y-Z plane) perpendicular to X-axis flight path
+    const torusGates = gates.map(gateMesh => {
+      const center = gateMesh.position.clone();
+      const axis = new THREE.Vector3(1, 0, 0); // Normal pointing in +X (forward)
+      const majorRadius = 1.5; // Ring center radius (from track.js)
+      const minorRadius = 0.5;  // Tube thickness (increased from visual 0.08 for easier racing)
+      return new TorusGate(center, axis, majorRadius, minorRadius);
+    });
+    
     // Create both trajectory types
     this.standardTrajectory = new ReferenceTrajectory(waypoints, 50); // Conservative 50s
     this.timeOptimalTrajectory = new TimeOptimalTrajectory(waypoints, {
@@ -188,9 +199,9 @@ class DroneRaceDemo {
       aggressiveness: 0.85,
     });
     
-    // Set trajectories on all controllers
+    // Set trajectories/gates on all controllers
     this.geometricController.setTrajectory(this.standardTrajectory);
-    this.mpcController.setTrajectory(this.standardTrajectory);
+    this.mpcController.setGates(torusGates); // MPC uses gates, not trajectory
     this.timeOptimalController.setTrajectory(this.timeOptimalTrajectory);
     
     this.trajectory = this.standardTrajectory;

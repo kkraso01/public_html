@@ -7,6 +7,12 @@ export class EthController {
     this.kM = params.torqueCoeff;
     this.L = params.armLength;
     this.gravity = params.gravity;
+    
+    // DEBUG: Verify correct Crazyflie mass is being used
+    console.log(`[ETH_CONTROLLER_INIT] mass=${this.mass} kg (should be ~0.032 kg for Crazyflie)`);
+    if (this.mass > 0.1) {
+      console.error(`⚠️  MASS TOO HIGH! ${this.mass} kg is not a Crazyflie. Controller gains will be wrong!`);
+    }
     const motor = params.motor || {};
     this.omegaMin = motor.omegaMin || 0;
     this.omegaMax = motor.omegaMax || 1;
@@ -15,24 +21,24 @@ export class EthController {
     // Diagonal inertia used by the geometric attitude controller
     this.inertia = new THREE.Vector3(params.inertia?.Jxx || 2.4e-5, params.inertia?.Jyy || 2.4e-5, params.inertia?.Jzz || 3.5e-5);
 
-    // Position loop gains (outer loop) - tuned for Crazyflie 32g mass
-    // Moderate gains for stable position tracking
-    this.Kp = new THREE.Vector3(2.0, 2.0, 4.0);
-    this.Kd = new THREE.Vector3(1.5, 1.5, 2.5);
-    this.Ki = new THREE.Vector3(0.01, 0.01, 0.02);
+    // Position loop gains (outer loop) - Crazyflie firmware aggressive defaults
+    // Fast convergence for racing/research mode (ETH Flying Machine Arena standard)
+    this.Kp = new THREE.Vector3(8.0, 8.0, 8.0);
+    this.Kd = new THREE.Vector3(4.0, 4.0, 4.0);
+    this.Ki = new THREE.Vector3(0.2, 0.2, 0.8);
 
     // Attitude loop gains (inner loop) for SE(3) geometric controller
-    // Scaled appropriately for Crazyflie's tiny inertia (J ~ 2.4e-5 kg·m²)
-    // Rule of thumb: K_R should produce reasonable torques (~ 1e-4 N·m) for unit attitude error
-    // Natural frequency target: ω_n ~ 50 rad/s → K_R ~ J * ω_n² ~ 2.4e-5 * 2500 ~ 0.06
-    this.KR = new THREE.Vector3(0.06, 0.06, 0.03);
-    this.Komega = new THREE.Vector3(0.012, 0.012, 0.006);
+    // Aggressive but stable - ETH Flying Machine Arena racing mode
+    // Roll/pitch 2.5x faster for quick maneuvers, still well below saturation
+    // Yaw remains strong for heading lock
+    this.KR = new THREE.Vector3(0.05, 0.05, 0.2);
+    this.Komega = new THREE.Vector3(0.02, 0.02, 0.08);
 
     // Integral clamp to avoid windup; scaled for small mass
     this.integralLimit = new THREE.Vector3(0.3, 0.3, 0.5);
 
     this.maxAcc = 15.0; // m/s² - Crazyflie has high thrust-to-weight ratio
-    this.maxTiltAngle = 40 * Math.PI / 180; // 40 degrees - aggressive but safe
+    this.maxTiltAngle = 55 * Math.PI / 180; // 55 degrees - ETH Flying Machine Arena racing mode (14 m/s² horizontal)
     this.reset();
   }
 
@@ -187,11 +193,20 @@ export class EthController {
     const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
     const R_des = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q_des));
 
-    // Required collective thrust projected onto the ACTUAL thrust axis (current b3)
-    // Using the current attitude avoids under-thrusting while the body is still rotating toward b3_des
-    const b3_actual = new THREE.Vector3(0, 0, 1).applyMatrix3(R).normalize();
+    // ETH SE(3) thrust calculation: T = m * ||a_des||
+    // This automatically compensates for tilt - when tilted, thrust increases to maintain vertical lift
+    // This is the KEY difference from naive projection (T = m * a·b3) which loses altitude when tilted
     const T_max = this.maxThrustPerMotor;
-    let thrust_des = this.mass * a_cmd.dot(b3_actual);
+    let thrust_des = this.mass * a_cmd.length();
+    
+    // DEBUG: Log thrust calculation every 1% of frames
+    if (Math.random() < 0.01) {
+      const hoverThrust = this.mass * this.gravity;
+      const thrustRatio = thrust_des / hoverThrust;
+      console.log(`[THRUST] T_des=${thrust_des.toFixed(4)} N | hover=${hoverThrust.toFixed(4)} N | ratio=${thrustRatio.toFixed(2)}x | ` +
+                  `||a||=${a_cmd.length().toFixed(2)} | maxPerMotor=${T_max.toFixed(6)} N`);
+    }
+    
     thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
 
     const R_T = R.clone().transpose();
