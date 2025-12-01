@@ -58,6 +58,12 @@ export class MPCController extends EthController {
   constructor(params) {
     super(params);
 
+    // Gate racing state (for compatibility with race demo)
+    this.gates = null;
+    this.currentGateIndex = 0;
+    this.previousPosition = new THREE.Vector3();
+    this.previousPositionSet = false;
+
     // Trajectory/time bookkeeping (shared with RaceController API)
     this.trajectory = null;
     this.simTime = 0;
@@ -98,6 +104,14 @@ export class MPCController extends EthController {
 
   // --- Public API compatibility helpers ----------------------------------------------------
 
+  setGates(gates) {
+    this.gates = gates || [];
+    this.currentGateIndex = 0;
+    this.gateIndex = 0;
+    this.previousPosition.set(0, 0, 0);
+    this.previousPositionSet = false;
+  }
+
   setTrajectory(trajectory) {
     this.trajectory = trajectory;
   }
@@ -106,6 +120,9 @@ export class MPCController extends EthController {
     super.reset();
     this.simTime = 0;
     this.gateIndex = 0;
+    this.currentGateIndex = 0;
+    this.previousPosition.set(0, 0, 0);
+    this.previousPositionSet = false;
     this.previousSolution = null;
     this.predictedTrajectory = [];
     this.lastOptimizationTime = 0;
@@ -117,7 +134,8 @@ export class MPCController extends EthController {
   }
 
   getTarget() {
-    return this._sampleReferenceAtTime(this.simTime) || {
+    const gateRef = this._getGateReference();
+    return this._sampleReferenceAtTime(this.simTime) || gateRef || {
       position: new THREE.Vector3(0, 0, 0.6),
       velocity: new THREE.Vector3(0, 0, 0),
       acceleration: new THREE.Vector3(0, 0, 0),
@@ -126,6 +144,8 @@ export class MPCController extends EthController {
   }
 
   updateGateIndex(position, waypoints, gateThreshold = 1.5) {
+    if (this._updateGateIndex(position)) return true;
+
     if (!waypoints || waypoints.length < 2) return false;
     if (this.gateIndex >= waypoints.length - 1) return false;
 
@@ -138,7 +158,49 @@ export class MPCController extends EthController {
   }
 
   getGateIndex() {
-    return this.gateIndex;
+    return this.gateIndex + this.currentGateIndex;
+  }
+
+  _getGateReference() {
+    if (!this.gates || this.currentGateIndex >= this.gates.length) return null;
+
+    const gate = this.gates[this.currentGateIndex];
+    const speed = 5.0;
+    const velocity = gate.axis.clone().multiplyScalar(speed);
+
+    return {
+      position: gate.center.clone(),
+      velocity,
+      acceleration: new THREE.Vector3(0, 0, 0),
+      yaw: 0,
+    };
+  }
+
+  _updateGateIndex(position) {
+    if (!this.gates || this.currentGateIndex >= this.gates.length) {
+      this.previousPosition.copy(position);
+      this.previousPositionSet = true;
+      return false;
+    }
+
+    if (!this.previousPositionSet) {
+      this.previousPosition.copy(position);
+      this.previousPositionSet = true;
+      return false;
+    }
+
+    const gate = this.gates[this.currentGateIndex];
+    const passed = gate.hasPassed(position, this.previousPosition);
+
+    this.previousPosition.copy(position);
+
+    if (passed) {
+      this.currentGateIndex += 1;
+      this.gateIndex = Math.max(this.gateIndex, this.currentGateIndex);
+      return true;
+    }
+
+    return false;
   }
 
   // --- MPC core ---------------------------------------------------------------------------
@@ -146,6 +208,8 @@ export class MPCController extends EthController {
   computeControl(state, target, dt) {
     const start = performance.now();
     this.simTime += dt;
+
+    this._updateGateIndex(state.position);
 
     const refHorizon = this._buildReferenceHorizon(target);
     const solution = this._solveMPC(state, refHorizon);
@@ -170,7 +234,7 @@ export class MPCController extends EthController {
       predictedTrajectory: this.predictedTrajectory,
       optimizationTime: this.lastOptimizationTime,
       cost: solution.cost,
-      gateIndex: this.gateIndex,
+      gateIndex: this.getGateIndex(),
     };
   }
 
@@ -192,7 +256,7 @@ export class MPCController extends EthController {
     const horizon = [];
     for (let i = 0; i < this.horizonSteps; i++) {
       const t = this.simTime + i * this.predictionDt;
-      const ref = this._sampleReferenceAtTime(t) || fallbackTarget;
+      const ref = this._sampleReferenceAtTime(t) || this._getGateReference() || fallbackTarget;
 
       const position = ref?.position?.clone?.() || new THREE.Vector3(0, 0, 0.6);
       const velocity = ref?.velocity?.clone?.() || new THREE.Vector3(0, 0, 0);
