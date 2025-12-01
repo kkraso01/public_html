@@ -112,6 +112,85 @@ class StationaryHoverDemo {
     const grid = new THREE.GridHelper(10, 20, 0x475569, 0x1f2937);
     grid.rotation.x = Math.PI / 2;
     this.scene.add(grid);
+
+    // Coordinate axes helper for understanding the frame
+    // RED = +X (forward), GREEN = +Y (left), BLUE = +Z (up)
+    const axesHelper = new THREE.AxesHelper(2);
+    this.scene.add(axesHelper);
+
+    // Add labeled arrows for each axis with text
+    this._addAxisLabels();
+  }
+
+  _addAxisLabels() {
+    // Create axis arrows with labels at origin
+    const arrowLength = 1.5;
+    const arrowColor = { x: 0xff0000, y: 0x00ff00, z: 0x0000ff };
+    
+    // X axis (RED - Forward)
+    const xArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(0, 0, 0),
+      arrowLength,
+      arrowColor.x,
+      0.2,
+      0.15
+    );
+    this.scene.add(xArrow);
+    
+    // Y axis (GREEN - Left)
+    const yArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, 0, 0),
+      arrowLength,
+      arrowColor.y,
+      0.2,
+      0.15
+    );
+    this.scene.add(yArrow);
+    
+    // Z axis (BLUE - Up)
+    const zArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, 0),
+      arrowLength,
+      arrowColor.z,
+      0.2,
+      0.15
+    );
+    this.scene.add(zArrow);
+
+    // Add text sprites for axis labels
+    const createTextSprite = (text, color) => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 128;
+      canvas.height = 64;
+      
+      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      context.font = 'Bold 48px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, 64, 32);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.scale.set(0.3, 0.15, 1);
+      return sprite;
+    };
+
+    const xLabel = createTextSprite('+X', arrowColor.x);
+    xLabel.position.set(1.8, 0, 0.3);
+    this.scene.add(xLabel);
+
+    const yLabel = createTextSprite('+Y', arrowColor.y);
+    yLabel.position.set(0, 1.8, 0.3);
+    this.scene.add(yLabel);
+
+    const zLabel = createTextSprite('+Z', arrowColor.z);
+    zLabel.position.set(0, 0, 2.1);
+    this.scene.add(zLabel);
   }
 
   _initCameraControls() {
@@ -154,13 +233,10 @@ class StationaryHoverDemo {
 
         if (intersectPoint) {
           // Set target to clicked position, maintain current altitude
-          // NOTE: Swap X and Y because Three.js camera view doesn't match physics frame:
-          // Physics: X=forward, Y=left, Z=up
-          // Three.js screen->world with this camera: X=left/right, Y=forward/back, Z=up
-          // So: Three.js X → Physics Y, Three.js Y → Physics X
-          this.target.position.set(intersectPoint.y, intersectPoint.x, this.target.position.z);
-          this.targetMarker.position.set(intersectPoint.y, intersectPoint.x, this.target.position.z);
-          console.log(`New target: (${intersectPoint.y.toFixed(2)}, ${intersectPoint.x.toFixed(2)}, ${this.target.position.z.toFixed(2)})`);
+          // Raycaster gives world coordinates directly (no swap needed)
+          this.target.position.set(intersectPoint.x, intersectPoint.y, this.target.position.z);
+          this.targetMarker.position.set(intersectPoint.x, intersectPoint.y, this.target.position.z);
+          console.log(`New target: (${intersectPoint.x.toFixed(2)}, ${intersectPoint.y.toFixed(2)}, ${this.target.position.z.toFixed(2)})`);
         }
       }
     });
@@ -541,6 +617,38 @@ class StationaryHoverDemo {
         this.controls[key].style.cssText = 'cursor:pointer; opacity:1;';
       }
     });
+
+    // Setup waypoint input box
+    this._setupWaypointInput();
+  }
+
+  _setupWaypointInput() {
+    const btnSetWaypoint = document.getElementById('set-waypoint-btn');
+    const inputX = document.getElementById('wp-x');
+    const inputY = document.getElementById('wp-y');
+    const inputZ = document.getElementById('wp-z');
+
+    if (btnSetWaypoint && inputX && inputY && inputZ) {
+      btnSetWaypoint.addEventListener('click', () => {
+        const x = parseFloat(inputX.value) || 0;
+        const y = parseFloat(inputY.value) || 0;
+        const z = parseFloat(inputZ.value) || 0.6;
+        
+        this.target.position.set(x, y, z);
+        this.targetMarker.position.set(x, y, z);
+        
+        console.log(`Waypoint set to: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
+      });
+
+      // Allow Enter key to set waypoint
+      [inputX, inputY, inputZ].forEach(input => {
+        input.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            btnSetWaypoint.click();
+          }
+        });
+      });
+    }
   }
 
   restart() {

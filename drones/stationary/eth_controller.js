@@ -246,17 +246,21 @@ export class EthController {
     //
     // Physics forward model (from drone_physics_engine.js):
     //   F_tot = F0 + F1 + F2 + F3
-    //   τ_x (roll)  = (L/√2) * kF * ((ω0² + ω3²) - (ω1² + ω2²))
-    //   τ_y (pitch) = (L/√2) * kF * ((ω0² + ω1²) - (ω2² + ω3²))
+    //   τ_x (roll)  = (L/√2) * kF * ((ω1² + ω2²) - (ω0² + ω3²))  [RIGHT - LEFT]
+    //   τ_y (pitch) = (L/√2) * kF * ((ω2² + ω3²) - (ω0² + ω1²))  [BACK - FRONT]
     //   τ_z (yaw)   = kM * (-ω0² + ω1² - ω2² + ω3²)
     //
     // Inverse allocation (solving for fᵢ = ωᵢ²):
     // Normalize: S = T/kF, Tx = τ_x·√2/(L·kF), Ty = τ_y·√2/(L·kF), Tz = τ_z/kM
-    // Then solve linear system:
-    //   f₀ = ¼(S + Tx + Ty - Tz)
-    //   f₁ = ¼(S - Tx + Ty + Tz)
-    //   f₂ = ¼(S - Tx - Ty - Tz)
-    //   f₃ = ¼(S + Tx - Ty + Tz)
+    // System: [1  1  1  1][f0]   [S ]
+    //         [-1 1  1 -1][f1] = [Tx]
+    //         [-1 -1 1  1][f2]   [Ty]
+    //         [-1 1 -1  1][f3]   [Tz]
+    // Solution:
+    //   f₀ = ¼(S - Tx - Ty - Tz)
+    //   f₁ = ¼(S + Tx - Ty + Tz)
+    //   f₂ = ¼(S + Tx + Ty - Tz)
+    //   f₃ = ¼(S - Tx + Ty + Tz)
 
     const L = this.L;
     const kF = this.kF;
@@ -268,10 +272,10 @@ export class EthController {
       const Ty = tau_cmd.y * Math.SQRT2 / (L * kF);
       const Tz = yawTorque / kM;
 
-      const f0 = 0.25 * (S + Tx + Ty - Tz);
-      const f1 = 0.25 * (S - Tx + Ty + Tz);
-      const f2 = 0.25 * (S - Tx - Ty - Tz);
-      const f3 = 0.25 * (S + Tx - Ty + Tz);
+      const f0 = 0.25 * (S - Tx - Ty - Tz);
+      const f1 = 0.25 * (S + Tx - Ty + Tz);
+      const f2 = 0.25 * (S + Tx + Ty - Tz);
+      const f3 = 0.25 * (S - Tx + Ty + Tz);
 
       // Convert back to thrust: Tᵢ = kF · fᵢ
       return [f0 * kF, f1 * kF, f2 * kF, f3 * kF];
