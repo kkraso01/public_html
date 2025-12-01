@@ -22,7 +22,7 @@
  * EthController to stay consistent with the physics engine.
  */
 
-import { EthController } from '../stationary/eth_controller.js';
+import { EthController } from './eth_controller.js';
 
 /**
  * Full SE(3) state used by the MPC forward simulation.
