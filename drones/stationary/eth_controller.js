@@ -182,16 +182,17 @@ export class EthController {
       console.log(`[Q_DES_CHECK] b3 extracted from q_des: (${b3_check.x.toFixed(3)}, ${b3_check.y.toFixed(3)}, ${b3_check.z.toFixed(3)})`);
     }
 
-    // Required collective thrust (project acceleration onto thrust direction = b3)
-    // ETH method: clip to physical limits but let motor allocation handle saturation details
-    const T_max = this.maxThrustPerMotor;
-    let thrust_des = this.mass * a_cmd.dot(b3);
-    thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
-
     // SE(3) geometric attitude controller
     const q = state.orientationQuat.clone();
     const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
     const R_des = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q_des));
+
+    // Required collective thrust projected onto the ACTUAL thrust axis (current b3)
+    // Using the current attitude avoids under-thrusting while the body is still rotating toward b3_des
+    const b3_actual = new THREE.Vector3(0, 0, 1).applyMatrix3(R).normalize();
+    const T_max = this.maxThrustPerMotor;
+    let thrust_des = this.mass * a_cmd.dot(b3_actual);
+    thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
 
     const R_T = R.clone().transpose();
     const R_des_T = R_des.clone().transpose();
@@ -204,11 +205,13 @@ export class EthController {
 
     // Correct vee operator for Three.js column-major matrices
     // For skew-symmetric [[0,-c,b],[c,0,-a],[-b,a,0]], vee returns [a,b,c]
-    // Three.js Matrix3 elements: [n11,n12,n13,n21,n22,n23,n31,n32,n33] = indices 0-8
+    // Three.js stores matrices column-major: index = col*3 + row.
+    // For skew-symmetric [[0,-c,b],[c,0,-a],[-b,a,0]] we have
+    // elements = [0,c,-b,-c,0,a,b,-a,0]. Vee returns [a,b,c] = [m21,m02,m10].
     const vee = (M) => new THREE.Vector3(
-      M.elements[7],  // a = M(2,1) = elements[7]
-      M.elements[2],  // b = M(0,2) = elements[2]
-      M.elements[3]   // c = M(1,0) = elements[3]
+      M.elements[5],  // m21 = a
+      M.elements[6],  // m02 = b
+      M.elements[1]   // m10 = c
     );
     const e_R = vee(skew).multiplyScalar(0.5);
 
@@ -246,21 +249,21 @@ export class EthController {
     //
     // Physics forward model (from drone_physics_engine.js):
     //   F_tot = F0 + F1 + F2 + F3
-    //   τ_x (roll)  = (L/√2) * kF * ((ω1² + ω2²) - (ω0² + ω3²))  [RIGHT - LEFT]
-    //   τ_y (pitch) = (L/√2) * kF * ((ω2² + ω3²) - (ω0² + ω1²))  [BACK - FRONT]
+    //   τ_x (roll)  = (L/√2) * kF * ((ω0² + ω3²) - (ω1² + ω2²))  [LEFT - RIGHT]
+    //   τ_y (pitch) = (L/√2) * kF * ((ω0² + ω1²) - (ω2² + ω3²))  [FRONT - BACK]
     //   τ_z (yaw)   = kM * (-ω0² + ω1² - ω2² + ω3²)
     //
     // Inverse allocation (solving for fᵢ = ωᵢ²):
     // Normalize: S = T/kF, Tx = τ_x·√2/(L·kF), Ty = τ_y·√2/(L·kF), Tz = τ_z/kM
     // System: [1  1  1  1][f0]   [S ]
-    //         [-1 1  1 -1][f1] = [Tx]
-    //         [-1 -1 1  1][f2]   [Ty]
+    //         [1 -1 -1  1][f1] = [Tx]
+    //         [1  1 -1 -1][f2]   [Ty]
     //         [-1 1 -1  1][f3]   [Tz]
     // Solution:
-    //   f₀ = ¼(S - Tx - Ty - Tz)
-    //   f₁ = ¼(S + Tx - Ty + Tz)
-    //   f₂ = ¼(S + Tx + Ty - Tz)
-    //   f₃ = ¼(S - Tx + Ty + Tz)
+    //   f₀ = ¼(S + Tx + Ty - Tz)
+    //   f₁ = ¼(S - Tx + Ty + Tz)
+    //   f₂ = ¼(S - Tx - Ty - Tz)
+    //   f₃ = ¼(S + Tx - Ty + Tz)
 
     const L = this.L;
     const kF = this.kF;
@@ -272,10 +275,10 @@ export class EthController {
       const Ty = tau_cmd.y * Math.SQRT2 / (L * kF);
       const Tz = yawTorque / kM;
 
-      const f0 = 0.25 * (S - Tx - Ty - Tz);
-      const f1 = 0.25 * (S + Tx - Ty + Tz);
-      const f2 = 0.25 * (S + Tx + Ty - Tz);
-      const f3 = 0.25 * (S - Tx + Ty + Tz);
+      const f0 = 0.25 * (S + Tx + Ty - Tz);
+      const f1 = 0.25 * (S - Tx + Ty + Tz);
+      const f2 = 0.25 * (S - Tx - Ty - Tz);
+      const f3 = 0.25 * (S + Tx - Ty + Tz);
 
       // Convert back to thrust: Tᵢ = kF · fᵢ
       return [f0 * kF, f1 * kF, f2 * kF, f3 * kF];

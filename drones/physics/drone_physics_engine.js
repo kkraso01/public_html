@@ -117,13 +117,12 @@ export class DronePhysicsEngine {
     // Correct Crazyflie X-configuration torque model with √2 arm projections
     // X-config arms project at 45° → effective moment arm = L/√2
     // 
-    // Roll torque (about +X axis): right motors faster = negative roll (right side down)
-    // For SE(3) controller: positive τ_x tilts right, so RIGHT - LEFT
-    const tau_x = (L / Math.sqrt(2)) * kF * ((omegaSq[1] + omegaSq[2]) - (omegaSq[0] + omegaSq[3]));
+    // Roll torque (about +X axis): follows Crazyflie X convention
+    // τ_x = (L/√2) · kF · [ (M0 + M3) - (M1 + M2) ] (left minus right)
+    const tau_x = (L / Math.sqrt(2)) * kF * ((omegaSq[0] + omegaSq[3]) - (omegaSq[1] + omegaSq[2]));
 
-    // Pitch torque (about +Y axis): back motors faster = positive pitch (nose down)
-    // For SE(3) controller: positive τ_y tilts forward, so BACK - FRONT  
-    const tau_y = (L / Math.sqrt(2)) * kF * ((omegaSq[2] + omegaSq[3]) - (omegaSq[0] + omegaSq[1]));
+    // Pitch torque (about +Y axis): τ_y = (L/√2) · kF · [ (M0 + M1) - (M2 + M3) ] (front minus back)
+    const tau_y = (L / Math.sqrt(2)) * kF * ((omegaSq[0] + omegaSq[1]) - (omegaSq[2] + omegaSq[3]));
 
     // Yaw torque: CW = negative, CCW = positive
     const tau_z = kM * (-omegaSq[0] + omegaSq[1] - omegaSq[2] + omegaSq[3]);
