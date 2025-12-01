@@ -182,16 +182,17 @@ export class EthController {
       console.log(`[Q_DES_CHECK] b3 extracted from q_des: (${b3_check.x.toFixed(3)}, ${b3_check.y.toFixed(3)}, ${b3_check.z.toFixed(3)})`);
     }
 
-    // Required collective thrust (project acceleration onto thrust direction = b3)
-    // ETH method: clip to physical limits but let motor allocation handle saturation details
-    const T_max = this.maxThrustPerMotor;
-    let thrust_des = this.mass * a_cmd.dot(b3);
-    thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
-
     // SE(3) geometric attitude controller
     const q = state.orientationQuat.clone();
     const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
     const R_des = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q_des));
+
+    // Required collective thrust projected onto the ACTUAL thrust axis (current b3)
+    // Using the current attitude avoids under-thrusting while the body is still rotating toward b3_des
+    const b3_actual = new THREE.Vector3(0, 0, 1).applyMatrix3(R).normalize();
+    const T_max = this.maxThrustPerMotor;
+    let thrust_des = this.mass * a_cmd.dot(b3_actual);
+    thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
 
     const R_T = R.clone().transpose();
     const R_des_T = R_des.clone().transpose();
