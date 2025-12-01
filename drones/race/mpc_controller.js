@@ -172,7 +172,7 @@ export class MPCController extends EthController {
       position: gate.center.clone(),
       velocity,
       acceleration: new THREE.Vector3(0, 0, 0),
-      yaw: Math.atan2(velocity.y, velocity.x),
+      yaw: 0,
     };
   }
 
