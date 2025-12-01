@@ -118,6 +118,11 @@ export class MPCController extends EthController {
 
   reset() {
     super.reset();
+
+    // The EthController constructor calls reset() before MPCController's fields
+    // are initialized, so lazily create vectors if they don't exist yet.
+    if (!this.previousPosition) this.previousPosition = new THREE.Vector3();
+
     this.simTime = 0;
     this.gateIndex = 0;
     this.currentGateIndex = 0;
