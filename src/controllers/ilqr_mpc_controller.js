@@ -71,15 +71,15 @@ export class ILQRMPCController extends EthController {
     this.lineSearch = [1.0, 0.7, 0.5, 0.3, 0.1, 0.05];
 
     this.weights = {
-      position: params.wPosition || 30.0,
-      velocity: params.wVelocity || 8.0,
-      tilt: params.wTilt || 4.0,
+      position: params.wPosition || 80.0,
+      velocity: params.wVelocity || 10.0,
+      tilt: params.wTilt || 0.25,
       yawRate: params.wYawRate || 0.2,
       thrust: params.wThrust || 1e-3,
-      torque: params.wTorque || 5e-4,
+      torque: params.wTorque || 1e-4,
       smooth: params.wSmooth || 5e-3,
-      terminalPosition: params.wTerminalPosition || 60.0,
-      terminalVelocity: params.wTerminalVelocity || 15.0,
+      terminalPosition: params.wTerminalPosition || 160.0,
+      terminalVelocity: params.wTerminalVelocity || 20.0,
     };
 
     this.refVelocityGain = params.refVelocityGain || 1.4;
@@ -210,7 +210,6 @@ export class ILQRMPCController extends EthController {
         yaw: yawTarget,
       });
       pos.copy(nextPos);
-      vel.copy(desiredVel);
     }
     return refTrajectory;
   }
@@ -403,7 +402,9 @@ export class ILQRMPCController extends EthController {
     let cost = 0;
     cost += this.weights.position * posErr.lengthSq();
     cost += this.weights.velocity * velErr.lengthSq();
-    cost += this.weights.tilt * tiltErr.lengthSq();
+    if (!isTerminal) {
+      cost += this.weights.tilt * tiltErr.lengthSq();
+    }
     cost += this.weights.yawRate * angularVelocity.z * angularVelocity.z;
     if (!isTerminal) {
       cost += this.weights.thrust * (u[0] - hoverThrust) * (u[0] - hoverThrust);
@@ -417,16 +418,13 @@ export class ILQRMPCController extends EthController {
   }
 
   _terminalCost(x, ref) {
-    const { position, velocity, orientationQuat } = this._vectorToState(x);
+    const { position, velocity } = this._vectorToState(x);
     const pref = ref?.position || ZERO_VEC3();
     const vref = ref?.velocity || ZERO_VEC3();
     const posErr = position.clone().sub(pref);
     const velErr = velocity.clone().sub(vref);
-    const b3 = new THREE.Vector3(0, 0, 1).applyQuaternion(orientationQuat);
-    const tiltErr = b3.clone().sub(new THREE.Vector3(0, 0, 1));
     return this.weights.terminalPosition * posErr.lengthSq()
-      + this.weights.terminalVelocity * velErr.lengthSq()
-      + this.weights.tilt * tiltErr.lengthSq();
+      + this.weights.terminalVelocity * velErr.lengthSq();
   }
 
   _costDerivatives(x, u, ref, isTerminal = false, uPrev = null) {
@@ -459,28 +457,30 @@ export class ILQRMPCController extends EthController {
     lxx[4][4] = 2 * this.weights.velocity;
     lxx[5][5] = 2 * this.weights.velocity;
 
-    const b3 = new THREE.Vector3(0, 0, 1).applyQuaternion(state.orientationQuat);
-    const desiredAccel = ref?.acceleration?.clone() || ZERO_VEC3();
-    const b3Ref = desiredAccel.lengthSq() > 1e-6
-      ? desiredAccel.clone().add(new THREE.Vector3(0, 0, this.gravity)).normalize()
-      : new THREE.Vector3(0, 0, 1);
-    const tiltErr = b3.clone().sub(b3Ref);
-    const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(state.orientationQuat));
-    const dRe3_dqvec = this._dRe3dq(R);
-    const tiltGrad = matVecMul(this._transpose(dRe3_dqvec), [tiltErr.x, tiltErr.y, tiltErr.z]);
-    lx[6] += 2 * this.weights.tilt * tiltGrad[0];
-    lx[7] += 2 * this.weights.tilt * tiltGrad[1];
-    lx[8] += 2 * this.weights.tilt * tiltGrad[2];
-    const tiltHess = matMul(this._transpose(dRe3_dqvec), dRe3_dqvec);
-    lxx[6][6] += 2 * this.weights.tilt * tiltHess[0][0];
-    lxx[6][7] += 2 * this.weights.tilt * tiltHess[0][1];
-    lxx[6][8] += 2 * this.weights.tilt * tiltHess[0][2];
-    lxx[7][6] += 2 * this.weights.tilt * tiltHess[1][0];
-    lxx[7][7] += 2 * this.weights.tilt * tiltHess[1][1];
-    lxx[7][8] += 2 * this.weights.tilt * tiltHess[1][2];
-    lxx[8][6] += 2 * this.weights.tilt * tiltHess[2][0];
-    lxx[8][7] += 2 * this.weights.tilt * tiltHess[2][1];
-    lxx[8][8] += 2 * this.weights.tilt * tiltHess[2][2];
+    if (!isTerminal) {
+      const b3 = new THREE.Vector3(0, 0, 1).applyQuaternion(state.orientationQuat);
+      const desiredAccel = ref?.acceleration?.clone() || ZERO_VEC3();
+      const b3Ref = desiredAccel.lengthSq() > 1e-6
+        ? desiredAccel.clone().add(new THREE.Vector3(0, 0, this.gravity)).normalize()
+        : new THREE.Vector3(0, 0, 1);
+      const tiltErr = b3.clone().sub(b3Ref);
+      const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(state.orientationQuat));
+      const dRe3_dqvec = this._dRe3dq(R);
+      const tiltGrad = matVecMul(this._transpose(dRe3_dqvec), [tiltErr.x, tiltErr.y, tiltErr.z]);
+      lx[6] += 2 * this.weights.tilt * tiltGrad[0];
+      lx[7] += 2 * this.weights.tilt * tiltGrad[1];
+      lx[8] += 2 * this.weights.tilt * tiltGrad[2];
+      const tiltHess = matMul(this._transpose(dRe3_dqvec), dRe3_dqvec);
+      lxx[6][6] += 2 * this.weights.tilt * tiltHess[0][0];
+      lxx[6][7] += 2 * this.weights.tilt * tiltHess[0][1];
+      lxx[6][8] += 2 * this.weights.tilt * tiltHess[0][2];
+      lxx[7][6] += 2 * this.weights.tilt * tiltHess[1][0];
+      lxx[7][7] += 2 * this.weights.tilt * tiltHess[1][1];
+      lxx[7][8] += 2 * this.weights.tilt * tiltHess[1][2];
+      lxx[8][6] += 2 * this.weights.tilt * tiltHess[2][0];
+      lxx[8][7] += 2 * this.weights.tilt * tiltHess[2][1];
+      lxx[8][8] += 2 * this.weights.tilt * tiltHess[2][2];
+    }
 
     lx[10] = 2 * this.weights.yawRate * state.angularVelocity.x;
     lx[11] = 2 * this.weights.yawRate * state.angularVelocity.y;
