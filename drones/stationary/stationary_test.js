@@ -1,7 +1,7 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
 import { EthController } from './eth_controller.js';
-import { MPCController } from './mpc_controller.js';
+import { ILQRMPCController } from '../../src/controllers/ilqr_mpc_controller.js';
 
 export function initStationaryHoverDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
@@ -62,7 +62,7 @@ class StationaryHoverDemo {
 
     this.controllers = {
       eth: new EthController(this.params),
-      mpc: new MPCController(this.params),
+      mpc: new ILQRMPCController(this.params),
     };
     this.activeControllerKey = 'eth';
     // ETH Zürich aggressive tuning - Flying Machine Arena racing mode
@@ -103,11 +103,11 @@ class StationaryHoverDemo {
     if (this.activeControllerKey === normalized) return;
     this.activeControllerKey = normalized;
     if (this.hud) {
-      this.hud.querySelector('#hudMode').textContent = normalized === 'mpc' ? 'Mode: MPC' : 'Mode: ETH cascaded';
+      this.hud.querySelector('#hudMode').textContent = normalized === 'mpc' ? 'Mode: iLQR MPC' : 'Mode: ETH cascaded';
     }
     if (this.controllerTitle) {
       this.controllerTitle.textContent = normalized === 'mpc'
-        ? 'Stationary Hover – MPC Controller'
+        ? 'Stationary Hover – iLQR MPC Controller'
         : 'Stationary Hover – ETH Cascaded Controller';
     }
     if (normalized !== 'mpc' && this.mpcPrediction) {
@@ -524,7 +524,7 @@ class StationaryHoverDemo {
     const toggleController = () => {
       const nextMode = this.activeControllerKey === 'eth' ? 'mpc' : 'eth';
       this._setControllerMode(nextMode);
-      controllerBtn.textContent = nextMode === 'mpc' ? 'Controller: MPC (M)' : 'Controller: ETH (M)';
+      controllerBtn.textContent = nextMode === 'mpc' ? 'Controller: iLQR MPC (M)' : 'Controller: ETH (M)';
     };
     controllerBtn.addEventListener('click', toggleController);
     window.addEventListener('keydown', (e) => {
@@ -952,7 +952,7 @@ class StationaryHoverDemo {
     if (!this.hud) return;
     const err = this.target.position.clone().sub(state.position);
     const vel = state.velocity;
-    const modeLabel = this.activeControllerKey === 'mpc' ? 'Mode: MPC' : 'Mode: ETH cascaded';
+    const modeLabel = this.activeControllerKey === 'mpc' ? 'Mode: iLQR MPC' : 'Mode: ETH cascaded';
     this.hud.querySelector('#hudMode').textContent = modeLabel;
     this.hud.querySelector('#hudAlt').textContent = `Altitude: ${state.position.z.toFixed(2)} m`;
     this.hud.querySelector('#hudError').textContent = `Position error: (${err.x.toFixed(2)}, ${err.y.toFixed(2)}, ${err.z.toFixed(2)})`;
