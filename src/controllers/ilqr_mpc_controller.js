@@ -528,7 +528,8 @@ export class ILQRMPCController extends EthController {
     const vDot = new THREE.Vector3(0, 0, -this.gravity).add(thrustDir.multiplyScalar(u[0] / this.mass));
 
     const omegaQuat = new THREE.Quaternion(omega.x, omega.y, omega.z, 0);
-    const qDot = new THREE.Quaternion().multiplyQuaternions(omegaQuat, q).multiplyScalar(0.5);
+    const qDot = new THREE.Quaternion().multiplyQuaternions(omegaQuat, q);
+    qDot.x *= 0.5; qDot.y *= 0.5; qDot.z *= 0.5; qDot.w *= 0.5;
 
     const J = this.inertia;
     const coriolis = omega.clone().cross(new THREE.Vector3(J.x * omega.x, J.y * omega.y, J.z * omega.z));
