@@ -82,6 +82,11 @@ export class ILQRMPCController extends EthController {
       terminalVelocity: params.wTerminalVelocity || 15.0,
     };
 
+    this.refVelocityGain = params.refVelocityGain || 1.4;
+    this.maxRefVelocity = params.maxRefVelocity || 4.0;
+    this.refAccelGain = params.refAccelGain || 2.0;
+    this.maxRefAcceleration = params.maxRefAcceleration || 8.0;
+
     const T_max = params.maxThrust || 4 * (params.maxThrustPerMotor || this.maxThrustPerMotor);
     this.constraints = {
       minThrust: params.minThrust || 0,
@@ -110,7 +115,7 @@ export class ILQRMPCController extends EthController {
   computeControl(state, target, dt) {
     const start = performance.now();
     const x0 = this._stateToVector(state);
-    const ref = this._buildReference(target);
+    const ref = this._buildReference(target, state);
 
     let controlSeq = this._warmStart();
     let nominal = this._rollout(x0, controlSeq, ref);
@@ -179,21 +184,33 @@ export class ILQRMPCController extends EthController {
     return Array.from({ length: this.horizonSteps }, () => [hoverThrust, 0, 0, 0]);
   }
 
-  _buildReference(target) {
-    const hover = {
-      position: target?.position?.clone() || ZERO_VEC3(),
-      velocity: target?.velocity?.clone() || ZERO_VEC3(),
-      acceleration: target?.acceleration?.clone() || ZERO_VEC3(),
-      yaw: target?.yaw || 0,
-    };
+  _buildReference(target, state) {
+    const start = state?.position?.clone() || ZERO_VEC3();
+    const posTarget = target?.position?.clone() || ZERO_VEC3();
+    const yawTarget = target?.yaw || 0;
+
+    const dir = posTarget.clone().sub(start);
+    const desiredVel = dir.multiplyScalar(this.refVelocityGain);
+    if (desiredVel.length() > this.maxRefVelocity) {
+      desiredVel.setLength(this.maxRefVelocity);
+    }
+
     const refTrajectory = [];
+    let pos = start.clone();
+    let vel = (state?.velocity?.clone() || ZERO_VEC3());
     for (let i = 0; i <= this.horizonSteps; i += 1) {
+      const acc = desiredVel.clone().sub(vel).multiplyScalar(this.refAccelGain);
+      if (acc.length() > this.maxRefAcceleration) acc.setLength(this.maxRefAcceleration);
+      vel = vel.clone().add(acc.clone().multiplyScalar(this.predictionDt));
+      const nextPos = pos.clone().add(vel.clone().multiplyScalar(this.predictionDt));
       refTrajectory.push({
-        position: hover.position.clone(),
-        velocity: hover.velocity.clone(),
-        acceleration: hover.acceleration.clone(),
-        yaw: hover.yaw,
+        position: nextPos.clone(),
+        velocity: vel.clone(),
+        acceleration: acc,
+        yaw: yawTarget,
       });
+      pos.copy(nextPos);
+      vel.copy(desiredVel);
     }
     return refTrajectory;
   }
