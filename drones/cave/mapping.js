@@ -124,7 +124,7 @@ export function chooseFrontierTarget(grid, currentPos) {
   const targetCluster = nearest?.dist < 4 ? nearest.cluster : largest;
   const targetCell = targetCluster.cells[0];
   const worldTarget = worldFromCell(grid, targetCell);
-  worldTarget.y = currentPos.y;
+  worldTarget.z = currentPos.z; // Z-up: preserve altitude, not Y
   return { point: worldTarget, clusterCount: clusters.length, targetSize: targetCluster.cells.length };
 }
 
@@ -172,7 +172,7 @@ export function planPath(grid, start, goal) {
     }
     return path.map((c) => {
       const wp = worldFromCell(grid, c);
-      wp.y = start.y;
+      wp.z = start.z; // Z-up: preserve altitude (not Y)
       return wp;
     });
   };

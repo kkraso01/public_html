@@ -72,24 +72,24 @@ export class MPCController extends EthController {
     // Horizon and solver settings
     this.horizonSteps = 15;
     this.predictionDt = 0.05; // seconds per prediction step
-    this.maxIterations = 4;
+    this.maxIterations = 8; // increased from 4 for better convergence
 
-    // Cost weights
+    // Cost weights (tuned for waypoint tracking with MPC)
     this.weights = {
-      position: 10.0,
-      velocity: 4.0,
-      thrust: 0.1,
-      torque: 0.1,
-      smooth: 0.05,
-      tilt: 0.5,
+      position: 25.0,  // CRITICAL: heavily penalize position error
+      velocity: 8.0,   // care about velocity tracking
+      thrust: 0.01,    // minimal: allow thrust variation freely
+      torque: 0.001,   // minimal: allow torque for tilting
+      smooth: 0.005,   // minimal: prioritize reaching goal over smoothness
+      tilt: 0.05,      // light: allow tilting to reach goal
     };
 
     // Physical constraints (aligned with EthController clamps)
     this.constraints = {
-      minThrust: 0,
+      minThrust: this.mass * this.gravity * 0.5,  // CRITICAL: prevent freefall (50% hover min)
       maxThrust: params.maxThrust || 4 * (params.maxThrustPerMotor || this.maxThrustPerMotor),
-      maxTorque: 0.02,
-      maxTorqueYaw: 0.01,
+      maxTorque: 0.02,  // matches ETH controller physical limit
+      maxTorqueYaw: 0.01,  // matches ETH controller physical limit
       maxTiltAngle: params.maxTiltAngle
         ? THREE.MathUtils.degToRad(params.maxTiltAngle)
         : THREE.MathUtils.degToRad(60),
@@ -221,6 +221,7 @@ export class MPCController extends EthController {
 
     // First control of horizon
     const controlAction = solution.controls[0];
+    
     const motorCommands = this._allocateMotorsFromThrustAndTorque(controlAction.thrust, controlAction.tau);
 
     this.previousSolution = solution;
@@ -274,7 +275,7 @@ export class MPCController extends EthController {
   }
 
   _solveMPC(currentState, refHorizon) {
-    let controls = this._initializeControls();
+    let controls = this._initializeControls(currentState, refHorizon);
     let bestCost = Infinity;
     let bestControls = controls;
     let bestStates = [];
@@ -301,16 +302,54 @@ export class MPCController extends EthController {
     return { controls: bestControls, predictedStates: bestStates, cost: bestCost };
   }
 
-  _initializeControls() {
+  _initializeControls(initialState, refHorizon) {
     const controls = [];
     const hoverT = this.mass * this.gravity;
-    for (let i = 0; i < this.horizonSteps; i++) {
-      if (this.previousSolution && i < this.previousSolution.controls.length - 1) {
-        controls.push(this.previousSolution.controls[i + 1].clone());
-      } else {
+    
+    // If we have previous solution, shift it forward (warm start)
+    if (this.previousSolution) {
+      for (let i = 0; i < this.horizonSteps; i++) {
+        if (i < this.previousSolution.controls.length - 1) {
+          controls.push(this.previousSolution.controls[i + 1].clone());
+        } else {
+          controls.push(new MPCControl(hoverT, 0, 0, 0));
+        }
+      }
+      return controls;
+    }
+
+    // First call: compute heuristic tilt toward target
+    const posError = refHorizon[0].position.clone().sub(initialState.position);
+    const distXY = Math.sqrt(posError.x * posError.x + posError.y * posError.y);
+    
+    // If target is far in XY, initialize with gentle tilt
+    if (distXY > 0.1) {
+      // Desired tilt angle (very gentle to avoid motor saturation)
+      const desiredTiltAngle = Math.min(0.08, distXY * 0.4); // max ~4.6 degrees
+      
+      // Direction to target in XY plane
+      const dirX = posError.x / distXY;
+      const dirY = posError.y / distXY;
+      
+      // Heuristic torques to create this tilt (very gentle initialization)
+      // Roll torque to tilt in +Y direction (body frame)
+      // Pitch torque to tilt in +X direction (body frame)
+      const tau_x = -dirY * desiredTiltAngle * 0.001; // very gentle: ~0.00008-0.00016 Nm
+      const tau_y = dirX * desiredTiltAngle * 0.001;
+      
+      // Increase thrust to compensate for tilt (T = mg/cos(θ))
+      const thrustBoost = hoverT * (1.0 + desiredTiltAngle * 2.0);
+      
+      for (let i = 0; i < this.horizonSteps; i++) {
+        controls.push(new MPCControl(thrustBoost, tau_x, tau_y, 0));
+      }
+    } else {
+      // Close to target, just hover
+      for (let i = 0; i < this.horizonSteps; i++) {
         controls.push(new MPCControl(hoverT, 0, 0, 0));
       }
     }
+    
     return controls;
   }
 
@@ -378,9 +417,12 @@ export class MPCController extends EthController {
       const ref = refHorizon[i];
       const control = controls[i];
 
+      // Heavily weight early steps (especially step 0) to force immediate action
+      const timeWeight = (i === 0) ? 5.0 : (i < 3 ? 2.0 : 1.0);
+
       const posError = state.position.clone().sub(ref.position).lengthSq();
       const velError = state.velocity.clone().sub(ref.velocity).lengthSq();
-      total += this.weights.position * posError + this.weights.velocity * velError;
+      total += timeWeight * (this.weights.position * posError + this.weights.velocity * velError);
 
       const thrustError = control.thrust - hoverThrust;
       total += this.weights.thrust * thrustError * thrustError;
@@ -412,13 +454,15 @@ export class MPCController extends EthController {
   }
 
   _updateControls(controls, predictedStates, refHorizon, initialState) {
-    const learningRate = 0.05;
     const epsilon = 0.01;
     const baseCost = this._evaluateCost(predictedStates, controls, refHorizon);
 
     const newControls = controls.map(c => c.clone());
 
     for (let i = 0; i < controls.length; i++) {
+      // Higher learning rate for early controls to force immediate action
+      const learningRate = (i < 3) ? 0.15 : 0.05;
+      
       const control = newControls[i];
 
       // Thrust gradient

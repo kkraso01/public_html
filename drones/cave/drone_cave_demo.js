@@ -1,6 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
-import { StationaryController } from '../stationary/stationary_controller.js';
+import { EthController } from '../stationary/eth_controller.js';
 import { CaveSim } from './cave_sim.js';
 import { Lidar } from './lidar.js';
 import { OccupancyGrid, updateGridFromLidar, chooseFrontierTarget, planPath } from './mapping.js';
@@ -41,7 +41,7 @@ class DroneCaveDemo {
     this.accumulator = 0;
     this._frameReq = null;
     this.debugEnabled = false;
-    this.cameraMode = 'overhead';
+    this.cameraMode = 'chase'; // Default to chase camera like drone race
 
     this._initScene();
     this._initSim();
@@ -55,12 +55,18 @@ class DroneCaveDemo {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x04070e);
     const aspect = this.options.width / this.options.height;
-    this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
-    this.chaseCamera.position.set(4, 4, 10);
+    
+    // Chase camera (follows drone from behind) - like race demo
+    this.chaseCamera = new THREE.PerspectiveCamera(70, aspect, 0.05, 200);
+    this.chaseCamera.position.set(-1.2, 0, 1.5); // Z-up: behind and above
+    this.chaseCamera.up.set(0, 0, 1); // +Z is up
+    
+    // Overhead camera (top-down view, Z-up)
     this.overheadCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
-    this.overheadCamera.position.set(0, 26, 0);
-    this.overheadCamera.up.set(0, 0, -1);
+    this.overheadCamera.position.set(0, 0, 12); // Lower for better view
+    this.overheadCamera.up.set(0, 1, 0); // Y is up in camera space
     this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
+    
     this.activeCamera = this.cameraMode === 'overhead' ? this.overheadCamera : this.chaseCamera;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -72,28 +78,37 @@ class DroneCaveDemo {
 
     const ambient = new THREE.AmbientLight(0x64748b, 0.25);
     this.scene.add(ambient);
+    
+    // Directional light from above (Z-up)
     const dir = new THREE.DirectionalLight(0xbcd7ff, 1.4);
-    dir.position.set(6, 10, 6);
+    dir.position.set(6, 6, 10); // Light from above
     dir.castShadow = true;
     this.scene.add(dir);
 
+    // Floor at Z=0 (XY plane) - dark brown/grey
     const floorGeo = new THREE.PlaneGeometry(200, 200);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x2d2520, roughness: 0.9, metalness: 0.05 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = this.floorHeight;
+    floor.position.z = this.floorHeight; // Z-up: floor at low Z
     floor.receiveShadow = true;
     this.scene.add(floor);
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x0b1220, roughness: 0.85, metalness: 0.05 });
-    const wallBox = new THREE.BoxGeometry(60, 8, 0.6);
-    const wallNorth = new THREE.Mesh(wallBox, wallMat);
-    wallNorth.position.set(0, 4, -30);
-    const wallSouth = wallNorth.clone();
-    wallSouth.position.set(0, 4, 30);
-    const wallEast = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 60), wallMat);
-    wallEast.position.set(30, 4, 0);
-    const wallWest = wallEast.clone();
-    wallWest.position.set(-30, 4, 0);
+    
+    // Boundary walls (Z-up: vertical walls in XY plane) - dark orange/brown
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.85, metalness: 0.05 });
+    const wallHeight = 8;
+    
+    const wallNorth = new THREE.Mesh(new THREE.BoxGeometry(60, 0.6, wallHeight), wallMat);
+    wallNorth.position.set(0, -30, wallHeight / 2);
+    
+    const wallSouth = new THREE.Mesh(new THREE.BoxGeometry(60, 0.6, wallHeight), wallMat);
+    wallSouth.position.set(0, 30, wallHeight / 2);
+    
+    const wallEast = new THREE.Mesh(new THREE.BoxGeometry(0.6, 60, wallHeight), wallMat);
+    wallEast.position.set(30, 0, wallHeight / 2);
+    
+    const wallWest = new THREE.Mesh(new THREE.BoxGeometry(0.6, 60, wallHeight), wallMat);
+    wallWest.position.set(-30, 0, wallHeight / 2);
+    
     [wallNorth, wallSouth, wallEast, wallWest].forEach((w) => {
       w.receiveShadow = true;
       w.castShadow = true;
@@ -105,28 +120,34 @@ class DroneCaveDemo {
     this.cave = new CaveSim(this.scene);
     this.grid = new OccupancyGrid();
     this.lidar = new Lidar();
+    
+    // Lidar ray visualization
+    this.lidarRayGroup = new THREE.Group();
+    this.scene.add(this.lidarRayGroup);
   }
 
   _initDrone() {
     this.params = CRAZYFLIE_PARAMS;
     this.drone = new DronePhysicsEngine(this.params);
-    this.drone.reset({ position: new THREE.Vector3(0, 1.4, 4) });
+    this.drone.reset({ position: new THREE.Vector3(0, 0, 1.4) }); // Z-up: start at 1.4m altitude
 
-    // Initialize ETH controller
-    this.controller = new StationaryController(this.params);
-    this.controller.updateGains({
-      kp: { x: 4.0, y: 4.0, z: 8.0 },
-      kd: { x: 3.0, y: 3.0, z: 5.0 },
-      ki: { x: 0.08, y: 0.08, z: 0.12 },
-    });
-    this.controller.updateAttitudeGains({
-      kR: { x: 1.0, y: 1.0, z: 5.0 },
-      kOmega: { x: 0.2, y: 0.2, z: 0.3 },
-    });
-    this.controller.eth.maxAcc = 15.0;
-    this.controller.eth.maxTiltAngle = 60 * Math.PI / 180;
+    // Initialize ETH controller with cave exploration gains
+    this.controller = new EthController(this.params);
+    
+    // Moderate position gains for smooth cave navigation
+    this.controller.Kp.set(5.0, 5.0, 8.0);
+    this.controller.Kd.set(3.5, 3.5, 5.0);
+    this.controller.Ki.set(0.1, 0.1, 0.2);
+    
+    // Conservative attitude gains for obstacle avoidance
+    this.controller.KR.set(0.03, 0.03, 0.15);
+    this.controller.Komega.set(0.015, 0.015, 0.06);
+    
+    // Limit aggressiveness in confined spaces
+    this.controller.maxAcc = 8.0;
+    this.controller.maxTiltAngle = 45 * Math.PI / 180;
 
-    // Create body matching stationary demo
+    // Create body matching race/stationary demo (+Z is up, X is forward)
     const bodyGeometry = new THREE.BoxGeometry(0.28, 0.28, 0.08);
     const topMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.35, roughness: 0.45 });
     const bottomMat = new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.35, roughness: 0.45 });
@@ -137,21 +158,21 @@ class DroneCaveDemo {
     body.receiveShadow = true;
     
     const armMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.25, roughness: 0.6 });
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), armMat);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), armMat); // Arm along X (forward)
     arm.castShadow = true;
     arm.receiveShadow = true;
 
     this.droneMesh = new THREE.Group();
     this.droneMesh.add(body, arm);
 
-    // Add colored motor rotors
+    // Add colored motor rotors (ETH Zürich X-configuration)
     const rotorGeo = new THREE.RingGeometry(0.09, 0.14, 16);
     const rotorColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00];
     const rotorPositions = [
-      new THREE.Vector3(0.28, 0.28, 0.06),
-      new THREE.Vector3(0.28, -0.28, 0.06),
-      new THREE.Vector3(-0.28, -0.28, 0.06),
-      new THREE.Vector3(-0.28, 0.28, 0.06),
+      new THREE.Vector3(0.28, 0.28, 0.06),   // Motor 0 - Front-Left: +X (front), +Y (left)
+      new THREE.Vector3(0.28, -0.28, 0.06),  // Motor 1 - Front-Right: +X (front), -Y (right)
+      new THREE.Vector3(-0.28, -0.28, 0.06), // Motor 2 - Back-Right: -X (back), -Y (right)
+      new THREE.Vector3(-0.28, 0.28, 0.06),  // Motor 3 - Back-Left: -X (back), +Y (left)
     ];
     rotorPositions.forEach((p, i) => {
       const rotorMat = new THREE.MeshStandardMaterial({ color: rotorColors[i], emissive: rotorColors[i], emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
@@ -226,15 +247,19 @@ class DroneCaveDemo {
   }
 
   restart() {
-    this.drone.reset({ position: new THREE.Vector3(0, 1.4, 4), orientation: new THREE.Quaternion() });
+    this.drone.reset({ position: new THREE.Vector3(0, 0, 1.4), orientation: new THREE.Quaternion() }); // Z-up: altitude 1.4m
+    this.controller.reset();
     this.grid = new OccupancyGrid();
-    this.target = new THREE.Vector3(0, 1.4, 0);
+    this.target = new THREE.Vector3(0, 0, 1.4); // Z-up target
     this.path = [];
     this.pathIndex = 0;
     this.lastHits = [];
     this.frontierInfo = null;
     this.simTime = 0;
     this.state = 'EXPLORING';
+    this.stuckTimer = 0;
+    this.lastExploredPos = new THREE.Vector3(0, 0, 1.4);
+    this.explorationTimeout = 5.0; // Seconds before considering stuck
   }
 
   pause(user = false) {
@@ -289,26 +314,74 @@ class DroneCaveDemo {
   _stepPhysics(dt) {
     this.simTime += dt;
 
-    if (this.simTime % 0.2 < dt) {
+    // Stuck detection - check if drone hasn't moved much
+    const distMoved = this.drone.state.position.distanceTo(this.lastExploredPos);
+    if (distMoved > 1.0) {
+      // Made progress, reset stuck timer
+      this.stuckTimer = 0;
+      this.lastExploredPos.copy(this.drone.state.position);
+    } else {
+      this.stuckTimer += dt;
+    }
+    
+    // Lidar scan at 10 Hz (faster for better responsiveness)
+    if (this.simTime % 0.1 < dt) {
       this.lastHits = this.lidar.scan(this.cave, this.drone.state);
+      
       updateGridFromLidar(this.grid, this.drone.state, this.lastHits);
       const coverage = this._coverage();
       this.overlay.querySelector('#caveCoverage').textContent = `Coverage: ${(coverage * 100).toFixed(1)}%`;
-      this.frontierInfo = chooseFrontierTarget(this.grid, this.drone.state.position);
+      
+      // Check if stuck - pick random exploration target
+      if (this.stuckTimer > this.explorationTimeout) {
+        this.state = 'RANDOM_EXPLORATION';
+        // Pick random point within cave bounds, away from current position
+        const randomTarget = this._generateRandomExplorationPoint();
+        this.frontierInfo = { point: randomTarget, clusterCount: 0, targetSize: 0 };
+        this.path = [];
+        this.pathIndex = 0;
+        this.stuckTimer = 0;
+      } else {
+        // Normal frontier-based exploration
+        this.frontierInfo = chooseFrontierTarget(this.grid, this.drone.state.position);
+      }
+      
       if (this.frontierInfo?.point) {
+        // Ensure frontier target has safe altitude
+        const minAltitude = this.floorHeight + 0.8;
+        this.frontierInfo.point.z = Math.max(minAltitude, this.frontierInfo.point.z);
+        
         const newPath = planPath(this.grid, this.drone.state.position, this.frontierInfo.point);
         if (newPath.length) {
-          this.path = newPath;
+          // Ensure all waypoints maintain safe altitude
+          this.path = newPath.map(wp => {
+            wp.z = Math.max(minAltitude, wp.z);
+            return wp;
+          });
+          this.pathIndex = 0;
+          this.state = 'EXPLORING';
+        } else if (this.state !== 'RANDOM_EXPLORATION') {
+          // Path planning failed, try direct approach
+          this.path = [this.frontierInfo.point];
           this.pathIndex = 0;
         }
+      } else if (this.state !== 'RANDOM_EXPLORATION') {
+        // No frontiers found, pick random exploration point
+        this.state = 'RANDOM_EXPLORATION';
+        const randomTarget = this._generateRandomExplorationPoint();
+        this.frontierInfo = { point: randomTarget, clusterCount: 0, targetSize: 0 };
+        this.path = [randomTarget];
+        this.pathIndex = 0;
       }
+      
       if (this.frontierInfo) {
         this.overlay.querySelector('#caveFrontiers').textContent = `Frontiers: ${this.frontierInfo.clusterCount}`;
         this.overlay.querySelector('#caveTarget').textContent =
-          `Target: (${this.frontierInfo.point.x.toFixed(1)}, ${this.frontierInfo.point.z.toFixed(1)})`;
+          `Target: (${this.frontierInfo.point.x.toFixed(1)}, ${this.frontierInfo.point.y.toFixed(1)}, ${this.frontierInfo.point.z.toFixed(1)})`;
       }
     }
 
+    // Path following with obstacle avoidance
     const waypoint = this.path[this.pathIndex] || this.frontierInfo?.point || this.target;
     if (waypoint) {
       this.target.copy(waypoint);
@@ -317,31 +390,49 @@ class DroneCaveDemo {
       }
     }
 
-    // Use ETH controller
-    const state = this.drone.getState();
+    // Ensure target maintains safe altitude (Z-up convention)
     const targetPos = this.target.clone();
-    targetPos.y = Math.max(1.4, this.target.y || 1.4);
+    const minAltitude = this.floorHeight + 0.8; // Floor + safety margin
+    const maxAltitude = 4.0;
+    targetPos.z = Math.max(minAltitude, Math.min(targetPos.z, maxAltitude)); // Keep between safe altitude and ceiling
+    
+    // Compute reactive obstacle avoidance force
     const avoidance = this._avoidanceFromHits();
     
+    // Build target for controller
+    const state = this.drone.getState();
     const targetObj = {
       position: targetPos,
       velocity: new THREE.Vector3(0, 0, 0),
-      acceleration: avoidance, // Use avoidance as feedforward
-      yaw: Math.atan2(targetPos.x - state.position.x, targetPos.z - state.position.z),
+      acceleration: avoidance.multiplyScalar(1.5), // Stronger avoidance response
+      yaw: Math.atan2(targetPos.y - state.position.y, targetPos.x - state.position.x), // XY plane heading
     };
     
-    const result = this.controller.eth.computeControl(state, targetObj, dt);
+    // Compute control using ETH controller
+    const result = this.controller.computeControl(state, targetObj, dt);
     this.drone.applyMotorCommands(result.motorCommands[0], result.motorCommands[1], result.motorCommands[2], result.motorCommands[3]);
     this.drone.step(dt);
 
+    // Collision detection and response
     const postState = this.drone.getState();
+    const minSafeAltitude = this.floorHeight + 0.5; // Safety margin above floor
+    
+    // Check floor collision
+    if (postState.position.z < minSafeAltitude) {
+      // Stop downward motion and push to safe altitude
+      this.drone.state.v_W.z = Math.max(0, this.drone.state.v_W.z); // Stop falling
+      this.drone.state.p_W.z = minSafeAltitude; // Teleport to safe altitude
+      this.drone.state.v_W.multiplyScalar(0.7); // Dampen horizontal velocity
+    }
+    
+    // Check obstacle collision
     if (this.cave.collide(postState.position)) {
-      // Apply collision response by modifying internal state
-      this.drone.state.v_W.multiplyScalar(-0.2);
-      this.drone.state.p_W.add(new THREE.Vector3(0, 0.05, 0));
+      // Bounce back and push upward (+Z)
+      this.drone.state.v_W.multiplyScalar(-0.3);
+      this.drone.state.p_W.add(new THREE.Vector3(0, 0, 0.15)); // Push up in Z
     }
 
-    this.overlay.querySelector('#caveState').textContent = `Exploring → (${this.target.x.toFixed(1)}, ${this.target.z.toFixed(1)})`;
+    this.overlay.querySelector('#caveState').textContent = `Exploring → (${this.target.x.toFixed(1)}, ${this.target.y.toFixed(1)}, ${this.target.z.toFixed(1)})`;
   }
 
   _coverage() {
@@ -352,79 +443,32 @@ class DroneCaveDemo {
     return known / this.grid.grid.length;
   }
 
-  _computeMotorCommands() {
-    const params = this.drone.params;
-    const kp = 2.8;
-    const kd = 2.2;
-    const kR = 3.0;
-    const kOmega = 0.25;
-    const targetPos = this.target.clone();
-    targetPos.y = Math.max(1.4, this.target.y || 1.4);
-
-    const posErr = targetPos.clone().sub(this.drone.state.position);
-    const velErr = new THREE.Vector3().sub(this.drone.state.velocity);
-    const avoidance = this._avoidanceFromHits();
-    const desiredAcc = posErr.multiplyScalar(kp).add(velErr.multiplyScalar(kd)).add(avoidance);
-    desiredAcc.clampLength(0, 3.2);
-
-    const desiredYaw = Math.atan2(posErr.x, posErr.z);
-    const thrustVector = desiredAcc.clone().add(new THREE.Vector3(0, 9.81, 0)).multiplyScalar(params.mass);
-
-    const desiredOrientation = this._desiredOrientationFromThrust(thrustVector, desiredYaw);
-    this.drone.desiredOrientationQuat.copy(desiredOrientation);
-    const kp_att = this.drone.params.kp_att;
-    const kd_att = this.drone.params.kd_att;
-    const currentQuat = this.drone.state.orientationQuat || this.drone.state.orientation;
-    const qError = desiredOrientation.clone().multiply(currentQuat.clone().invert());
-    const errorAxis = new THREE.Vector3(qError.x, qError.y, qError.z).multiplyScalar(2.0);
-    const torque = errorAxis.multiplyScalar(kp_att).add(this.drone.state.angularVelocity.clone().multiplyScalar(-kd_att));
-
-    const thrustMag = clamp(thrustVector.length(), 0, params.mass * 20);
-    const kYaw = params.kM / Math.max(params.kF, 1e-9);
-    const L = params.armLength;
-    const m0 = 0.25 * thrustMag - torque.y / (2 * L) + torque.z / (4 * kYaw);
-    const m1 = 0.25 * thrustMag + torque.x / (2 * L) - torque.z / (4 * kYaw);
-    const m2 = 0.25 * thrustMag + torque.y / (2 * L) + torque.z / (4 * kYaw);
-    const m3 = 0.25 * thrustMag - torque.x / (2 * L) - torque.z / (4 * kYaw);
-    const thrusts = [m0, m1, m2, m3].map((m) => clamp(m, 0, thrustMag));
-    const rpms = thrusts.map((t) => Math.sqrt(Math.max(t, 0) / Math.max(params.kF, 1e-9)));
-    return rpms.map((r) => {
-      const clamped = clamp(r, params.minRPM, params.maxRPM);
-      return THREE.MathUtils.clamp((clamped - params.minRPM) / (params.maxRPM - params.minRPM), 0, 1);
-    });
-  }
-
-  _desiredOrientationFromThrust(thrustVec, yaw) {
-    const zBody = thrustVec.lengthSq() > 1e-6 ? thrustVec.clone().normalize() : new THREE.Vector3(0, 1, 0);
-    const xC = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-    const yBody = zBody.clone().cross(xC).normalize();
-    if (yBody.lengthSq() < 1e-6) return new THREE.Quaternion();
-    const xBody = yBody.clone().cross(zBody).normalize();
-    const m = new THREE.Matrix4();
-    m.makeBasis(xBody, yBody, zBody);
-    const q = new THREE.Quaternion();
-    q.setFromRotationMatrix(m);
-    return q;
-  }
-
   _render() {
     if (this.cameraMode === 'chase') {
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.drone.state.orientation);
-      const desiredPos = this.drone.state.position
-        .clone()
-        .add(forward.clone().multiplyScalar(-6.5))
-        .add(new THREE.Vector3(0, 3.0, 0));
-      desiredPos.y = Math.max(desiredPos.y, this.floorHeight + 0.8);
-      this.chaseCamera.position.lerp(desiredPos, 0.08);
-      this.chaseCamera.lookAt(this.drone.state.position.clone().add(new THREE.Vector3(0, 0.8, 0)));
+      // Third-person camera follows drone from behind and rotates with it
+      // Offset in body frame: behind (negative X), centered (Y=0), slightly above (positive Z)
+      const offsetBody = new THREE.Vector3(-1.2, 0, 0.6);
+      
+      // Transform offset from body frame to world frame using drone's orientation
+      const offsetWorld = offsetBody.clone().applyQuaternion(this.drone.state.orientation);
+      const targetPos = this.drone.state.position.clone().add(offsetWorld);
+      this.chaseCamera.position.lerp(targetPos, 0.12); // Smooth follow
+      
+      // Look at a point ahead of the drone in its body frame
+      const lookAheadBody = new THREE.Vector3(1.5, 0, 0.2); // Ahead (X), centered (Y), slightly up (Z)
+      const lookAheadWorld = lookAheadBody.clone().applyQuaternion(this.drone.state.orientation);
+      const lookTarget = this.drone.state.position.clone().add(lookAheadWorld);
+      this.chaseCamera.lookAt(lookTarget);
       this.activeCamera = this.chaseCamera;
     } else {
-      this.overheadCamera.position.y = 26;
+      // Overhead view: Z position looking down
+      this.overheadCamera.position.set(0, 0, 12); // Z-up: camera above (lowered for better view)
       this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
       this.activeCamera = this.overheadCamera;
     }
     this.droneMesh.position.copy(this.drone.state.position);
     this.droneMesh.quaternion.copy(this.drone.state.orientation);
+    this._updateLidarVisualization(); // Update every frame for smooth display
     this._updateDebugPanel();
     this.renderer.render(this.scene, this.activeCamera || this.overheadCamera);
   }
@@ -441,7 +485,7 @@ class DroneCaveDemo {
 
     this.debugPanel.querySelector('#dbgPos').textContent =
       `Pos: ${st.position.x.toFixed(2)}, ${st.position.y.toFixed(2)}, ${st.position.z.toFixed(2)}`;
-    this.debugPanel.querySelector('#dbgAlt').textContent = `Alt: ${st.position.y.toFixed(2)} m`;
+    this.debugPanel.querySelector('#dbgAlt').textContent = `Alt: ${st.position.z.toFixed(2)} m`; // Z-up: altitude is Z
     this.debugPanel.querySelector('#dbgVel').textContent =
       `Vel: ${velMag.toFixed(2)} m/s (${st.velocity.x.toFixed(2)}, ${st.velocity.y.toFixed(2)}, ${st.velocity.z.toFixed(2)})`;
     this.debugPanel.querySelector('#dbgRPM').textContent = `RPM: ${rpm.map((r) => r.toFixed(0)).join(' | ')}`;
@@ -457,9 +501,105 @@ class DroneCaveDemo {
 
   _avoidanceFromHits() {
     if (!this.lastHits || !this.lastHits.length) return new THREE.Vector3();
-    return this.lastHits.reduce((acc, h) => {
-      const strength = Math.max(0, 1 - h.distance / this.lidar.maxRange);
-      return acc.add(h.direction.clone().multiplyScalar(-strength * 3.5));
-    }, new THREE.Vector3()).clampLength(0, 2.5);
+    
+    // Compute repulsive force from nearby obstacles
+    const avoidance = this.lastHits.reduce((acc, h) => {
+      // Stronger repulsion for closer obstacles
+      const strength = Math.pow(Math.max(0, 1 - h.distance / this.lidar.maxRange), 2);
+      return acc.add(h.direction.clone().multiplyScalar(-strength * 5.0));
+    }, new THREE.Vector3());
+    
+    return avoidance.clampLength(0, 3.5);
+  }
+  
+  _generateRandomExplorationPoint() {
+    // Generate random point within cave bounds, away from current position
+    const minAltitude = this.floorHeight + 0.8;
+    const maxAltitude = 3.5;
+    const caveBounds = 10; // Stay within reasonable bounds
+    
+    let x, y, attempts = 0;
+    const currentPos2d = new THREE.Vector2(this.drone.state.position.x, this.drone.state.position.y);
+    
+    // Find point at least 3m away from current position
+    do {
+      x = (Math.random() - 0.5) * caveBounds * 2;
+      y = (Math.random() - 0.5) * caveBounds * 2;
+      attempts++;
+    } while (new THREE.Vector2(x, y).distanceTo(currentPos2d) < 3.0 && attempts < 20);
+    
+    const z = minAltitude + Math.random() * (maxAltitude - minAltitude);
+    return new THREE.Vector3(x, y, z);
+  }
+  
+  _updateLidarVisualization() {
+    // Clear previous visualization
+    this.lidarRayGroup.clear();
+    
+    if (!this.lastHits || !this.lastHits.length) return;
+    
+    const dronePos = this.drone.state.position;
+    
+    // Separate hits from misses
+    const actualHits = this.lastHits.filter(h => h.hit);
+    const misses = this.lastHits.filter(h => !h.hit);
+    
+    // Group actual hits by proximity zones
+    const closeHits = actualHits.filter(h => h.distance < 2.5);
+    const midHits = actualHits.filter(h => h.distance >= 2.5 && h.distance < 5.0);
+    const farHits = actualHits.filter(h => h.distance >= 5.0);
+    
+    // Draw detection cone for actual hits
+    const drawCone = (hits, color, opacity) => {
+      if (hits.length === 0) return;
+      
+      // Create point cloud for the hit area
+      const points = hits.map(h => h.point.clone());
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.PointsMaterial({ 
+        color: color,
+        size: 0.15,
+        opacity: opacity,
+        transparent: true,
+        sizeAttenuation: true,
+      });
+      const pointCloud = new THREE.Points(geometry, material);
+      this.lidarRayGroup.add(pointCloud);
+      
+      // Draw ALL rays to show full cone structure
+      for (let i = 0; i < hits.length; i++) {
+        const hit = hits[i];
+        const lineMat = new THREE.LineBasicMaterial({ 
+          color: color,
+          opacity: opacity * 0.5,
+          transparent: true,
+        });
+        const linePoints = [dronePos.clone(), hit.point.clone()];
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+        const line = new THREE.Line(lineGeo, lineMat);
+        this.lidarRayGroup.add(line);
+      }
+    };
+    
+    // Draw misses (rays that go to max range) in dim cyan to show cone shape
+    if (misses.length > 0) {
+      for (let i = 0; i < misses.length; i++) {
+        const miss = misses[i];
+        const lineMat = new THREE.LineBasicMaterial({ 
+          color: 0x00ffff,
+          opacity: 0.15,
+          transparent: true,
+        });
+        const linePoints = [dronePos.clone(), miss.point.clone()];
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+        const line = new THREE.Line(lineGeo, lineMat);
+        this.lidarRayGroup.add(line);
+      }
+    }
+    
+    // Red for danger zone (<2.5m), yellow for caution (2.5-5m), green for safe (>5m)
+    drawCone(closeHits, 0xff3333, 0.8);
+    drawCone(midHits, 0xffaa00, 0.6);
+    drawCone(farHits, 0x33ff33, 0.4);
   }
 }

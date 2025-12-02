@@ -9,7 +9,7 @@ export class EthController {
     this.gravity = params.gravity;
     
     // DEBUG: Verify correct Crazyflie mass is being used
-    console.log(`[ETH_CONTROLLER_INIT] mass=${this.mass} kg (should be ~0.032 kg for Crazyflie)`);
+    // console.log(`[ETH_CONTROLLER_INIT] mass=${this.mass} kg (should be ~0.028 kg for Crazyflie)`);
     if (this.mass > 0.1) {
       console.error(`⚠️  MASS TOO HIGH! ${this.mass} kg is not a Crazyflie. Controller gains will be wrong!`);
     }
@@ -19,7 +19,7 @@ export class EthController {
     this.maxThrustPerMotor = params.maxThrustPerMotor || this.kF * this.omegaMax * this.omegaMax;
 
     // Diagonal inertia used by the geometric attitude controller
-    this.inertia = new THREE.Vector3(params.inertia?.Jxx || 2.4e-5, params.inertia?.Jyy || 2.4e-5, params.inertia?.Jzz || 3.5e-5);
+    this.inertia = new THREE.Vector3(params.inertia?.Jxx || 1.4e-5, params.inertia?.Jyy || 1.4e-5, params.inertia?.Jzz || 2.17e-5);
 
     // Position loop gains (outer loop) - Crazyflie firmware aggressive defaults
     // Fast convergence for racing/research mode (ETH Flying Machine Arena standard)
@@ -113,10 +113,10 @@ export class EthController {
     );
 
     // DEBUG: Log raw acceleration command to verify outer loop is working
-    if (Math.random() < 0.01) { // Log 1% of frames to avoid spam
-      console.log(`[ACMD_RAW] a_cmd: (${a_cmd.x.toFixed(3)}, ${a_cmd.y.toFixed(3)}, ${a_cmd.z.toFixed(3)}) | ` +
-                  `Kp: (${this.Kp.x}, ${this.Kp.y}, ${this.Kp.z}) | posErr: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)})`);
-    }
+    // if (Math.random() < 0.01) { // Log 1% of frames to avoid spam
+    //   console.log(`[ACMD_RAW] a_cmd: (${a_cmd.x.toFixed(3)}, ${a_cmd.y.toFixed(3)}, ${a_cmd.z.toFixed(3)}) | ` +
+    //               `Kp: (${this.Kp.x}, ${this.Kp.y}, ${this.Kp.z}) | posErr: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)})`);
+    // }
 
     if (a_cmd.length() > this.maxAcc) {
       a_cmd.multiplyScalar(this.maxAcc / a_cmd.length());
@@ -132,20 +132,20 @@ export class EthController {
     }
 
     // DEBUG: Log after tilt clamping to verify horizontal acceleration survives
-    if (Math.random() < 0.01) {
-      console.log(`[ACMD_POST_CLAMP] a_cmd: (${a_cmd.x.toFixed(3)}, ${a_cmd.y.toFixed(3)}, ${a_cmd.z.toFixed(3)}) | ` +
-                  `horizAcc: ${horizontalAcc.toFixed(2)}, maxHorizAcc: ${maxHorizontalAcc.toFixed(2)} @ ${(this.maxTiltAngle*180/Math.PI).toFixed(0)}°`);
-    }
+    // if (Math.random() < 0.01) {
+    //   console.log(`[ACMD_POST_CLAMP] a_cmd: (${a_cmd.x.toFixed(3)}, ${a_cmd.y.toFixed(3)}, ${a_cmd.z.toFixed(3)}) | ` +
+    //               `horizAcc: ${horizontalAcc.toFixed(2)}, maxHorizAcc: ${maxHorizontalAcc.toFixed(2)} @ ${(this.maxTiltAngle*180/Math.PI).toFixed(0)}°`);
+    // }
 
     // Differential flatness mapping to desired orientation (ETH/Lee SE(3) method)
     // Physics uses body +Z as thrust direction, world +Z is up
     const b3 = a_cmd.lengthSq() > 1e-9 ? a_cmd.clone().normalize() : new THREE.Vector3(0, 0, 1);
     
     // DEBUG: Log b3 immediately after normalization
-    if (Math.random() < 0.01) {
-      console.log(`[B3_COMPUTED] b3 AFTER normalize: (${b3.x.toFixed(3)}, ${b3.y.toFixed(3)}, ${b3.z.toFixed(3)}) | ` +
-                  `a_cmd was: (${a_cmd.x.toFixed(2)}, ${a_cmd.y.toFixed(2)}, ${a_cmd.z.toFixed(2)})`);
-    }
+    // if (Math.random() < 0.01) {
+    //   console.log(`[B3_COMPUTED] b3 AFTER normalize: (${b3.x.toFixed(3)}, ${b3.y.toFixed(3)}, ${b3.z.toFixed(3)}) | ` +
+    //               `a_cmd was: (${a_cmd.x.toFixed(2)}, ${a_cmd.y.toFixed(2)}, ${a_cmd.z.toFixed(2)})`);
+    // }
     
     // Avoid upside-down ambiguity (thrust should point generally upward)
     if (b3.z < 0) b3.negate();
@@ -168,11 +168,11 @@ export class EthController {
     const b1 = new THREE.Vector3().crossVectors(b2, b3).normalize();
 
     // DEBUG: Log b1, b2, b3 before matrix construction
-    if (Math.random() < 0.01) {
-      console.log(`[B1B2B3] b1: (${b1.x.toFixed(2)}, ${b1.y.toFixed(2)}, ${b1.z.toFixed(2)}) | ` +
-                  `b2: (${b2.x.toFixed(2)}, ${b2.y.toFixed(2)}, ${b2.z.toFixed(2)}) | ` +
-                  `b3: (${b3.x.toFixed(2)}, ${b3.y.toFixed(2)}, ${b3.z.toFixed(2)})`);
-    }
+    // if (Math.random() < 0.01) {
+    //   console.log(`[B1B2B3] b1: (${b1.x.toFixed(2)}, ${b1.y.toFixed(2)}, ${b1.z.toFixed(2)}) | ` +
+    //               `b2: (${b2.x.toFixed(2)}, ${b2.y.toFixed(2)}, ${b2.z.toFixed(2)}) | ` +
+    //               `b3: (${b3.x.toFixed(2)}, ${b3.y.toFixed(2)}, ${b3.z.toFixed(2)})`);
+    // }
 
     // Construct rotation matrix from basis vectors
     // Three.js makeBasis(x, y, z) creates matrix with x, y, z as COLUMNS
@@ -182,11 +182,11 @@ export class EthController {
     const q_des = new THREE.Quaternion().setFromRotationMatrix(m4);
     
     // DEBUG: Verify q_des by extracting b3 back out
-    if (Math.random() < 0.01) {
-      const R_check = new THREE.Matrix3().setFromMatrix4(m4);
-      const b3_check = new THREE.Vector3(0, 0, 1).applyMatrix3(R_check);
-      console.log(`[Q_DES_CHECK] b3 extracted from q_des: (${b3_check.x.toFixed(3)}, ${b3_check.y.toFixed(3)}, ${b3_check.z.toFixed(3)})`);
-    }
+    // if (Math.random() < 0.01) {
+    //   const R_check = new THREE.Matrix3().setFromMatrix4(m4);
+    //   const b3_check = new THREE.Vector3(0, 0, 1).applyMatrix3(R_check);
+    //   console.log(`[Q_DES_CHECK] b3 extracted from q_des: (${b3_check.x.toFixed(3)}, ${b3_check.y.toFixed(3)}, ${b3_check.z.toFixed(3)})`);
+    // }
 
     // SE(3) geometric attitude controller
     const q = state.orientationQuat.clone();
@@ -200,12 +200,12 @@ export class EthController {
     let thrust_des = this.mass * a_cmd.length();
     
     // DEBUG: Log thrust calculation every 1% of frames
-    if (Math.random() < 0.01) {
-      const hoverThrust = this.mass * this.gravity;
-      const thrustRatio = thrust_des / hoverThrust;
-      console.log(`[THRUST] T_des=${thrust_des.toFixed(4)} N | hover=${hoverThrust.toFixed(4)} N | ratio=${thrustRatio.toFixed(2)}x | ` +
-                  `||a||=${a_cmd.length().toFixed(2)} | maxPerMotor=${T_max.toFixed(6)} N`);
-    }
+    // if (Math.random() < 0.01) {
+    //   const hoverThrust = this.mass * this.gravity;
+    //   const thrustRatio = thrust_des / hoverThrust;
+    //   console.log(`[THRUST] T_des=${thrust_des.toFixed(4)} N | hover=${hoverThrust.toFixed(4)} N | ratio=${thrustRatio.toFixed(2)}x | ` +
+    //               `||a||=${a_cmd.length().toFixed(2)} | maxPerMotor=${T_max.toFixed(6)} N`);
+    // }
     
     thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
 

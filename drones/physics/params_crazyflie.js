@@ -1,13 +1,13 @@
 // Physical parameters for Crazyflie 2.x quadrotor (real hardware specifications)
 export const CRAZYFLIE_PARAMS = {
   // Vehicle properties
-  mass: 0.032, // kg (32 grams)
-  armLength: 0.046, // m (46 mm center to rotor)
-  inertia: { Jxx: 2.4e-5, Jyy: 2.4e-5, Jzz: 3.5e-5 }, // kg·m² (measured values)
+  mass: 0.028, // kg (28 grams)
+  armLength: 0.046, // m (92 mm prop-to-prop / 2)
+  inertia: { Jxx: 1.4e-5, Jyy: 1.4e-5, Jzz: 2.17e-5 }, // kg·m² (measured values)
 
   // Aerodynamic/thrust coefficients (Crazyflie 2.x with 7mm coreless motors)
-  thrustCoeff: 3.2e-8, // kF: thrust = kF * omega^2 (N)
-  torqueCoeff: 7.5e-10, // kM: reaction torque = kM * omega^2 (N·m)
+  thrustCoeff: 2.88e-8, // kF: thrust = kF * omega^2 (N·s²)
+  torqueCoeff: 7.24e-10, // kM: reaction torque = kM * omega^2 (N·m·s²)
 
   // Linear drag in the world frame (simple proportional model)
   dragLinear: { x: 0.1, y: 0.1, z: 0.2 },

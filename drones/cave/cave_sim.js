@@ -14,28 +14,60 @@ export class CaveSim {
   }
 
   _initEnvironment() {
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x0b1220, roughness: 0.8, metalness: 0.05 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), wallMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-
-    const rimMaterial = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.6 });
+    // Ground at Z=0 (XY plane) - Z-up convention, no rotation needed
+    // Note: floor is already added in drone_cave_demo.js, don't add duplicate
+    
+    // Varied colors for cave walls - orange/brown/tan rock tones
+    const rockColors = [0x8B6F47, 0xA0826D, 0x6B4423, 0x9C6644, 0x755C48];
     const radius = 12;
     for (let i = 0; i < 10; i++) {
       const angle = (i / 10) * Math.PI * 2;
-      const pos = new THREE.Vector3(Math.cos(angle) * radius, 2, Math.sin(angle) * radius);
-      const box = createBoxMesh(new THREE.Vector3(3, 3.5, 0.6), pos, rimMaterial);
-      box.rotation.y = -angle;
+      // Z-up: walls around perimeter, positioned in XY plane with Z height
+      const pos = new THREE.Vector3(
+        Math.cos(angle) * radius,  // X position
+        Math.sin(angle) * radius,  // Y position
+        2                          // Z altitude (wall height center)
+      );
+      const rimMaterial = new THREE.MeshStandardMaterial({ 
+        color: rockColors[i % rockColors.length], 
+        roughness: 0.7 + Math.random() * 0.2,
+        metalness: 0.05 
+      });
+      // Wall dimensions: width (X/Y), depth (Y/X), height (Z)
+      const box = createBoxMesh(new THREE.Vector3(3, 0.6, 3.5), pos, rimMaterial);
+      box.rotation.z = -angle; // Rotate around Z axis to face center
       this.scene.add(box);
-      this._addObstacleBox(box, new THREE.Vector3(3, 3.5, 0.6));
+      this._addObstacleBox(box, new THREE.Vector3(3, 0.6, 3.5));
     }
 
+    // Colored stalactites/columns - varied earth tones
+    const columnColors = [0x7A5C3D, 0x9B7653, 0x654321, 0x8B7355, 0x6F5438, 0xA68064];
+    const startClearRadius = 3.0; // Keep area clear around drone start position (0,0)
+    
     for (let i = 0; i < 6; i++) {
-      const x = (Math.random() - 0.5) * 14;
-      const z = (Math.random() - 0.5) * 14;
-      const size = new THREE.Vector3(1.5 + Math.random(), 2 + Math.random() * 2, 1.5 + Math.random());
-      const column = createBoxMesh(size, new THREE.Vector3(x, size.y / 2, z), rimMaterial);
+      let x, y;
+      let attempts = 0;
+      // Find position that's not too close to origin (drone start)
+      do {
+        x = (Math.random() - 0.5) * 14;
+        y = (Math.random() - 0.5) * 14;
+        attempts++;
+      } while (Math.sqrt(x*x + y*y) < startClearRadius && attempts < 20);
+      
+      // Z-up: columns extend vertically in Z direction
+      const columnHeight = 2 + Math.random() * 2;
+      const size = new THREE.Vector3(
+        1.5 + Math.random(),  // X width
+        1.5 + Math.random(),  // Y depth
+        columnHeight          // Z height
+      );
+      const columnMaterial = new THREE.MeshStandardMaterial({ 
+        color: columnColors[i % columnColors.length],
+        roughness: 0.75 + Math.random() * 0.15,
+        metalness: 0.05
+      });
+      // Position at ground (Z=0) plus half height
+      const column = createBoxMesh(size, new THREE.Vector3(x, y, size.z / 2), columnMaterial);
       this.scene.add(column);
       this._addObstacleBox(column, size);
     }
