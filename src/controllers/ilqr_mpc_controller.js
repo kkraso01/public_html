@@ -542,7 +542,9 @@ export class ILQRMPCController extends EthController {
 
     const pNext = state.position.clone().add(pDot.multiplyScalar(dt));
     const vNext = state.velocity.clone().add(vDot.multiplyScalar(dt));
-    const qNext = q.clone().add(new THREE.Quaternion(qDot.x * dt, qDot.y * dt, qDot.z * dt, qDot.w * dt)).normalize();
+    const qNext = q.clone();
+    qNext.x += qDot.x * dt; qNext.y += qDot.y * dt; qNext.z += qDot.z * dt; qNext.w += qDot.w * dt;
+    qNext.normalize();
     const omegaNext = omega.clone().add(omegaDot.multiplyScalar(dt));
 
     return [pNext.x, pNext.y, pNext.z, vNext.x, vNext.y, vNext.z, qNext.x, qNext.y, qNext.z, qNext.w, omegaNext.x, omegaNext.y, omegaNext.z];
