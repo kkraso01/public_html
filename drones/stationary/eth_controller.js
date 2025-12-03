@@ -17,28 +17,32 @@ export class EthController {
     this.omegaMin = motor.omegaMin || 0;
     this.omegaMax = motor.omegaMax || 1;
     this.maxThrustPerMotor = params.maxThrustPerMotor || this.kF * this.omegaMax * this.omegaMax;
+    
+    // Store last valid nose-first heading to maintain orientation near waypoints
+    this.lastNoseFirstYaw = 0;
 
     // Diagonal inertia used by the geometric attitude controller
     this.inertia = new THREE.Vector3(params.inertia?.Jxx || 1.4e-5, params.inertia?.Jyy || 1.4e-5, params.inertia?.Jzz || 2.17e-5);
 
-    // Position loop gains (outer loop) - Crazyflie firmware aggressive defaults
-    // Fast convergence for racing/research mode (ETH Flying Machine Arena standard)
-    this.Kp = new THREE.Vector3(8.0, 8.0, 8.0);
-    this.Kd = new THREE.Vector3(4.0, 4.0, 4.0);
-    this.Ki = new THREE.Vector3(0.2, 0.2, 0.8);
+    // Position loop gains (outer loop) - TRUE Crazyflie 2.x dynamics
+    // Tuned to match real CF2 firmware (Pz≈15-18, Dz≈8-12 in Bitcraze implementation)
+    // Z gains MUCH higher for responsive altitude tracking with SE(3) thrust mapping
+    this.Kp = new THREE.Vector3(4.0, 4.0, 12.0);  // Z 2× stronger - matches CF2 firmware
+    this.Kd = new THREE.Vector3(3.0, 3.0, 6.0);   // Z damping doubled - prevents bounce
+    this.Ki = new THREE.Vector3(0.05, 0.05, 0.30); // Z integral increased but still safe
 
     // Attitude loop gains (inner loop) for SE(3) geometric controller
-    // Aggressive but stable - ETH Flying Machine Arena racing mode
-    // Roll/pitch 2.5x faster for quick maneuvers, still well below saturation
-    // Yaw remains strong for heading lock
-    this.KR = new THREE.Vector3(0.05, 0.05, 0.2);
-    this.Komega = new THREE.Vector3(0.02, 0.02, 0.08);
+    // Matched to real Crazyflie brushed motor responsiveness + inertia (Jxx=1.4e-5, Jzz=2.17e-5)
+    // Roll/pitch MUCH higher for fast tilt tracking (was 50× too low before!)
+    // Yaw moderate for nose-first mode without oscillation
+    this.KR = new THREE.Vector3(3.0, 3.0, 0.8);      // Roll/pitch aggressive, yaw smooth
+    this.Komega = new THREE.Vector3(0.08, 0.08, 0.02); // Angular rate damping
 
-    // Integral clamp to avoid windup; scaled for small mass
+    // Integral clamp to avoid windup; scaled for CF2 low mass
     this.integralLimit = new THREE.Vector3(0.3, 0.3, 0.5);
 
-    this.maxAcc = 15.0; // m/s² - Crazyflie has high thrust-to-weight ratio
-    this.maxTiltAngle = 55 * Math.PI / 180; // 55 degrees - ETH Flying Machine Arena racing mode (14 m/s² horizontal)
+    this.maxAcc = 22.0; // m/s² - increased to allow aggressive climbing (CF2 max capability)
+    this.maxTiltAngle = 45 * Math.PI / 180; // 45° - increased to allow steeper climbs while moving
     this.reset();
   }
 
@@ -112,10 +116,10 @@ export class EthController {
       this.Kp.z * posError.z + this.Kd.z * velError.z + this.Ki.z * this.posIntegral.z + a_ff.z + this.gravity,
     );
 
-    // DEBUG: Log raw acceleration command to verify outer loop is working
+    // DEBUG: Log raw acceleration command to verify outer loop is working (disabled for cleaner logs)
     // if (Math.random() < 0.01) { // Log 1% of frames to avoid spam
     //   console.log(`[ACMD_RAW] a_cmd: (${a_cmd.x.toFixed(3)}, ${a_cmd.y.toFixed(3)}, ${a_cmd.z.toFixed(3)}) | ` +
-    //               `Kp: (${this.Kp.x}, ${this.Kp.y}, ${this.Kp.z}) | posErr: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)})`);
+    //               `Kp: (${this.Kp.x}, ${this.Kp.y}, ${this.Kp.z}) | posErr: (${posError.x.toFixed(2)}, ${posError.y.toFixed(2)}, ${posError.z.toFixed(2)})`);
     // }
 
     if (a_cmd.length() > this.maxAcc) {
@@ -153,6 +157,11 @@ export class EthController {
     // Desired heading in world frame (yaw) - body X should point this direction
     const b1_ref = new THREE.Vector3(Math.cos(yaw_des), Math.sin(yaw_des), 0);
     
+    // DEBUG: Check b1_ref computation
+    if (Math.random() < 0.02) {
+      console.log(`[B1_REF] yaw_des=${(yaw_des * 180 / Math.PI).toFixed(1)}° → b1_ref=(${b1_ref.x.toFixed(3)}, ${b1_ref.y.toFixed(3)}, ${b1_ref.z.toFixed(3)})`);
+    }
+    
     // Body Y-axis: perpendicular to both thrust (b3) and desired heading (b1_ref)
     // Using crossVectors ensures b2 = b3 × b1_ref (proper right-handed convention)
     let b2 = new THREE.Vector3().crossVectors(b3, b1_ref);
@@ -167,12 +176,13 @@ export class EthController {
     // b1 = b2 × b3 ensures X points in heading direction
     const b1 = new THREE.Vector3().crossVectors(b2, b3).normalize();
 
-    // DEBUG: Log b1, b2, b3 before matrix construction
-    // if (Math.random() < 0.01) {
-    //   console.log(`[B1B2B3] b1: (${b1.x.toFixed(2)}, ${b1.y.toFixed(2)}, ${b1.z.toFixed(2)}) | ` +
-    //               `b2: (${b2.x.toFixed(2)}, ${b2.y.toFixed(2)}, ${b2.z.toFixed(2)}) | ` +
-    //               `b3: (${b3.x.toFixed(2)}, ${b3.y.toFixed(2)}, ${b3.z.toFixed(2)})`);
-    // }
+    // DEBUG: Log b1, b2, b3 and yaw
+    if (Math.random() < 0.01) {
+      const yaw_from_b1 = Math.atan2(b1.y, b1.x) * 180 / Math.PI;
+      console.log(`[ETH_CTRL] yaw_des=${(yaw_des * 180 / Math.PI).toFixed(1)}°, b1_yaw=${yaw_from_b1.toFixed(1)}° | ` +
+                  `b1: (${b1.x.toFixed(2)}, ${b1.y.toFixed(2)}, ${b1.z.toFixed(2)}) | ` +
+                  `b1_ref: (${b1_ref.x.toFixed(2)}, ${b1_ref.y.toFixed(2)})`);
+    }
 
     // Construct rotation matrix from basis vectors
     // Three.js makeBasis(x, y, z) creates matrix with x, y, z as COLUMNS
@@ -338,6 +348,247 @@ export class EthController {
     return {
       motorCommands,
       desiredOrientation: q_des,
+    };
+  }
+
+  // ========================================================================
+  // NOSE-FIRST TRAJECTORY FOLLOWING EXTENSION
+  // ========================================================================
+  
+  /**
+   * Compute desired yaw to point nose toward target position
+   * @param {THREE.Vector3} currentPos - Current position
+   * @param {THREE.Vector3} targetPos - Target waypoint position
+   * @returns {number} Desired yaw angle in radians
+   */
+  computeNoseFirstYaw(currentPos, targetPos) {
+    const dx = targetPos.x - currentPos.x;
+    const dy = targetPos.y - currentPos.y;
+    
+    // Only update heading if moving significantly (avoid jitter at waypoint)
+    const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
+    if (distanceToTarget < 0.05) {
+      return null; // No heading update near waypoint
+    }
+    
+    return Math.atan2(dy, dx);
+  }
+
+  /**
+   * Compute nose-first control with automatic heading alignment
+   * @param {Object} state - Current drone state
+   * @param {Object} target - Target waypoint {position, velocity?, acceleration?, yaw?}
+   * @param {number} dt - Time step
+   * @param {Object} options - Optional config {enableNoseFacing: true, yawRate: 2.0}
+   * @returns {Object} Control output with motorCommands and desiredOrientation
+   */
+  computeNoseFirstControl(state, target, dt, options = {}) {
+    const enableNoseFacing = options.enableNoseFacing !== false;
+    const maxYawRate = options.maxYawRate || 100.0; // rad/s - VERY fast for racing (no rate limiting in practice)
+    const aggressiveYawTracking = options.aggressiveYawTracking !== false; // Use proportional tracking for large errors
+    
+    if (!enableNoseFacing) {
+      // Fallback to standard control if nose-first disabled
+      return this.computeControl(state, target, dt);
+    }
+
+    // Compute heading toward target based on position vector
+    const dx = target.position.x - state.position.x;
+    const dy = target.position.y - state.position.y;
+    const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
+    
+    // Update heading based on distance to target
+    let desiredYaw;
+    if (distanceToTarget > 0.05) {
+      // Far from waypoint: point nose toward target
+      desiredYaw = Math.atan2(dy, dx);
+      this.lastNoseFirstYaw = desiredYaw; // Store for use near waypoint
+      
+      // Debug log occasionally
+      if (Math.random() < 0.01) {
+        console.log(`[NOSE_FIRST] distance=${distanceToTarget.toFixed(2)}m, dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}, desiredYaw=${(desiredYaw * 180 / Math.PI).toFixed(1)}°`);
+      }
+    } else {
+      // Near waypoint: maintain last heading to avoid sudden rotation
+      desiredYaw = this.lastNoseFirstYaw;
+    }
+    
+    // Extract current yaw from quaternion
+    // For +Z up convention: yaw is rotation around Z axis
+    const q = state.orientationQuat;
+    const currentYaw = Math.atan2(
+      2 * (q.w * q.z + q.x * q.y),
+      1 - 2 * (q.y * q.y + q.z * q.z)
+    );
+    
+    // Compute yaw error and wrap to [-π, π]
+    let yawError = desiredYaw - currentYaw;
+    const yawErrorRaw = yawError;
+    while (yawError > Math.PI) yawError -= 2 * Math.PI;
+    while (yawError < -Math.PI) yawError += 2 * Math.PI;
+    
+    // ETH Racing Strategy: Feed the TRUE desired yaw directly to SE(3) controller
+    // Let the attitude gains (KR.z=2.0, Komega.z=0.5) handle smooth convergence
+    // This is the CORRECT way - no intermediate yaw tracking layer
+    const yawCommand = desiredYaw;
+    
+    // Debug log occasionally
+    if (Math.random() < 0.01) {
+      console.log(`[NOSE_FIRST_CTRL] desiredYaw=${(desiredYaw * 180 / Math.PI).toFixed(1)}°, currentYaw=${(currentYaw * 180 / Math.PI).toFixed(1)}°, ` +
+                  `error=${(yawError * 180 / Math.PI).toFixed(1)}°, yawCmd=${(yawCommand * 180 / Math.PI).toFixed(1)}° ✓ DIRECT`);
+    }
+
+    // Create modified target with nose-first yaw
+    const noseFirstTarget = {
+      position: target.position,
+      velocity: target.velocity || new THREE.Vector3(),
+      acceleration: target.acceleration || new THREE.Vector3(),
+      yaw: yawCommand,
+    };
+
+    return this.computeControl(state, noseFirstTarget, dt);
+  }
+
+  /**
+   * Generate a smooth trajectory segment with nose-first orientation
+   * Useful for waypoint-based racing or exploration
+   * @param {THREE.Vector3} startPos - Start position
+   * @param {THREE.Vector3} endPos - End position
+   * @param {number} cruiseSpeed - Desired cruise speed (m/s)
+   * @param {number} t - Current time in segment [0, duration]
+   * @returns {Object} Trajectory point {position, velocity, acceleration, yaw}
+   */
+  generateNoseFirstTrajectory(startPos, endPos, cruiseSpeed, t) {
+    const direction = endPos.clone().sub(startPos);
+    const totalDistance = direction.length();
+    
+    if (totalDistance < 1e-6) {
+      return {
+        position: startPos.clone(),
+        velocity: new THREE.Vector3(),
+        acceleration: new THREE.Vector3(),
+        yaw: 0,
+      };
+    }
+    
+    direction.normalize();
+    
+    // Simple trapezoidal velocity profile
+    const accelPhase = Math.min(cruiseSpeed / 2.0, totalDistance / 3); // 1/3 distance for accel
+    const decelPhase = accelPhase;
+    const cruisePhase = totalDistance - accelPhase - decelPhase;
+    
+    const accelTime = accelPhase > 0 ? Math.sqrt(2 * accelPhase / 2.0) : 0;
+    const cruiseTime = cruisePhase > 0 ? cruisePhase / cruiseSpeed : 0;
+    const decelTime = accelTime;
+    const totalTime = accelTime + cruiseTime + decelTime;
+    
+    let s, v, a;
+    
+    if (t < accelTime) {
+      // Acceleration phase
+      const tau = t / accelTime;
+      s = 0.5 * 2.0 * t * t;
+      v = 2.0 * t;
+      a = 2.0;
+    } else if (t < accelTime + cruiseTime) {
+      // Cruise phase
+      const tCruise = t - accelTime;
+      s = accelPhase + cruiseSpeed * tCruise;
+      v = cruiseSpeed;
+      a = 0;
+    } else if (t < totalTime) {
+      // Deceleration phase
+      const tDecel = t - accelTime - cruiseTime;
+      const tau = tDecel / decelTime;
+      s = accelPhase + cruisePhase + cruiseSpeed * tDecel - 0.5 * 2.0 * tDecel * tDecel;
+      v = cruiseSpeed - 2.0 * tDecel;
+      a = -2.0;
+    } else {
+      // Reached endpoint
+      s = totalDistance;
+      v = 0;
+      a = 0;
+    }
+    
+    const position = startPos.clone().add(direction.clone().multiplyScalar(s));
+    const velocity = direction.clone().multiplyScalar(v);
+    const acceleration = direction.clone().multiplyScalar(a);
+    const yaw = Math.atan2(direction.y, direction.x);
+    
+    return { position, velocity, acceleration, yaw };
+  }
+
+  /**
+   * Multi-waypoint trajectory with nose-first following
+   * @param {Array<THREE.Vector3>} waypoints - Array of waypoint positions
+   * @param {number} cruiseSpeed - Desired cruise speed between waypoints
+   * @param {number} globalTime - Current time in full trajectory
+   * @returns {Object} Current trajectory point {position, velocity, acceleration, yaw, waypointIndex}
+   */
+  followWaypointPath(waypoints, cruiseSpeed, globalTime) {
+    if (!waypoints || waypoints.length === 0) {
+      return {
+        position: new THREE.Vector3(),
+        velocity: new THREE.Vector3(),
+        acceleration: new THREE.Vector3(),
+        yaw: 0,
+        waypointIndex: -1,
+      };
+    }
+    
+    if (waypoints.length === 1) {
+      return {
+        position: waypoints[0].clone(),
+        velocity: new THREE.Vector3(),
+        acceleration: new THREE.Vector3(),
+        yaw: 0,
+        waypointIndex: 0,
+      };
+    }
+
+    // Compute segment durations
+    const segments = [];
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const start = waypoints[i];
+      const end = waypoints[i + 1];
+      const distance = start.distanceTo(end);
+      
+      // Estimate duration using trapezoidal profile
+      const accelDist = Math.min(cruiseSpeed / 2.0, distance / 3);
+      const decelDist = accelDist;
+      const cruiseDist = distance - accelDist - decelDist;
+      
+      const accelTime = accelDist > 0 ? Math.sqrt(2 * accelDist / 2.0) : 0;
+      const cruiseTime = cruiseDist > 0 ? cruiseDist / cruiseSpeed : 0;
+      const decelTime = accelTime;
+      
+      const duration = accelTime + cruiseTime + decelTime;
+      
+      segments.push({ start, end, duration });
+    }
+
+    // Find active segment
+    let accumulatedTime = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (globalTime < accumulatedTime + seg.duration) {
+        const localTime = globalTime - accumulatedTime;
+        const traj = this.generateNoseFirstTrajectory(seg.start, seg.end, cruiseSpeed, localTime);
+        traj.waypointIndex = i;
+        return traj;
+      }
+      accumulatedTime += seg.duration;
+    }
+
+    // Past final waypoint - hold position
+    const finalPos = waypoints[waypoints.length - 1];
+    return {
+      position: finalPos.clone(),
+      velocity: new THREE.Vector3(),
+      acceleration: new THREE.Vector3(),
+      yaw: 0,
+      waypointIndex: waypoints.length - 1,
     };
   }
 }

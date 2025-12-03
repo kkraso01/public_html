@@ -1,6 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
-import { EthController } from './eth_controller.js';
+import { StationaryController } from './stationary_controller.js';
 import { ILQRMPCController } from '../../src/controllers/ilqr_mpc_controller.js';
 
 export function initStationaryHoverDemo(container, options = {}) {
@@ -61,7 +61,7 @@ class StationaryHoverDemo {
     this.droneInitialOrientation = new THREE.Quaternion().set(0, 0, 0, 1);
 
     this.controllers = {
-      eth: new EthController(this.params),
+      eth: new StationaryController(this.params),
       mpc: new ILQRMPCController(this.params),
     };
     this.activeControllerKey = 'eth';
@@ -72,9 +72,11 @@ class StationaryHoverDemo {
       ki: { x: 0.2, y: 0.2, z: 0.8 },  // Strong integral for altitude precision
     });
     this._applyAttitudeGains({
-      kR: { x: 0.05, y: 0.05, z: 0.2 },       // Aggressive roll/pitch for fast maneuvers
-      kOmega: { x: 0.02, y: 0.02, z: 0.08 },  // Strong damping for racing mode stability
+      kR: { x: 0.05, y: 0.05, z: 0.8 },       // Aggressive roll/pitch/yaw for nose-first mode
+      kOmega: { x: 0.02, y: 0.02, z: 0.3 },  // Strong damping for racing mode stability
     });
+
+    this.noseFirstEnabled = false;
 
     this._initScene();
     this._initDrone();
@@ -259,6 +261,19 @@ class StationaryHoverDemo {
     this.targetMarker.position.set(0, 0, 0.6);
     this.targetMarker.visible = true;
     this.scene.add(this.targetMarker);
+
+    // Path vector arrow (shows direction from drone to target)
+    this.pathArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(1, 0, 0), // direction (will be updated)
+      new THREE.Vector3(0, 0, 0.6), // origin (will be updated)
+      1.0, // length (will be updated)
+      0xffff00, // bright yellow
+      0.2, // headLength
+      0.15  // headWidth
+    );
+    this.pathArrow.line.material.linewidth = 3;
+    this.pathArrow.visible = false;
+    this.scene.add(this.pathArrow);
 
     this.renderer.domElement.addEventListener('mousedown', (e) => {
       // Right click or Ctrl+Click for camera rotation
@@ -446,6 +461,24 @@ class StationaryHoverDemo {
     this.thrustDesiredArrow.cone.material.transparent = true;
     this.droneMesh.add(this.thrustDesiredArrow);
 
+    // Add nose indicator (points forward in +X direction)
+    // Cone geometry: height along Y-axis by default, rotate to point along +X
+    const noseGeometry = new THREE.ConeGeometry(0.06, 0.2, 8);
+    const noseMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.8,
+      metalness: 0.3,
+      roughness: 0.4
+    });
+    this.noseIndicator = new THREE.Mesh(noseGeometry, noseMaterial);
+    // Rotate cone to point forward (+X): default is +Y, rotate -90° around Z
+    this.noseIndicator.rotation.z = -Math.PI / 2;
+    // Position at front center of drone body
+    this.noseIndicator.position.set(0.2, 0, 0);
+    this.noseIndicator.castShadow = true;
+    this.droneMesh.add(this.noseIndicator);
+
     this.scene.add(this.droneMesh);
   }
 
@@ -587,10 +620,12 @@ class StationaryHoverDemo {
 
     this.overlay.appendChild(targetContainer);
 
+    // Access gains from the nested ETH controller
+    const ethController = this.controllers.eth.eth || this.controllers.eth;
     const sliderDefs = [
-      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: this.controllers.eth.Kp.x, onInput: (v) => this._applyPositionGains({ kp: v }) },
-      { key: 'ki', label: 'Ki (pos)', min: 0, max: 2, step: 0.02, value: this.controllers.eth.Ki.x, onInput: (v) => this._applyPositionGains({ ki: v }) },
-      { key: 'kd', label: 'Kd (pos)', min: 0, max: 10, step: 0.05, value: this.controllers.eth.Kd.x, onInput: (v) => this._applyPositionGains({ kd: v }) },
+      { key: 'kp', label: 'Kp (pos)', min: 0, max: 12, step: 0.1, value: ethController.Kp.x, onInput: (v) => this._applyPositionGains({ kp: v }) },
+      { key: 'ki', label: 'Ki (pos)', min: 0, max: 2, step: 0.02, value: ethController.Ki.x, onInput: (v) => this._applyPositionGains({ ki: v }) },
+      { key: 'kd', label: 'Kd (pos)', min: 0, max: 10, step: 0.05, value: ethController.Kd.x, onInput: (v) => this._applyPositionGains({ kd: v }) },
     ];
 
     sliderDefs.forEach((def) => {
@@ -623,10 +658,10 @@ class StationaryHoverDemo {
     this.overlay.appendChild(attitudeLabel);
 
     const attitudeSliderDefs = [
-      { key: 'kRxy', label: 'KR roll/pitch', min: 0, max: 8.0, step: 0.1, value: this.controllers.eth.KR.x, onInput: (v) => this._applyAttitudeGains({ kR: { x: v, y: v } }) },
-      { key: 'kRz', label: 'KR yaw', min: 0, max: 10, step: 0.1, value: this.controllers.eth.KR.z, onInput: (v) => this._applyAttitudeGains({ kR: { z: v } }) },
-      { key: 'kOxy', label: 'Kω roll/pitch', min: 0, max: 1.0, step: 0.01, value: this.controllers.eth.Komega.x, onInput: (v) => this._applyAttitudeGains({ kOmega: { x: v, y: v } }) },
-      { key: 'kOz', label: 'Kω yaw', min: 0, max: 2, step: 0.02, value: this.controllers.eth.Komega.z, onInput: (v) => this._applyAttitudeGains({ kOmega: { z: v } }) },
+      { key: 'kRxy', label: 'KR roll/pitch', min: 0, max: 8.0, step: 0.1, value: ethController.KR.x, onInput: (v) => this._applyAttitudeGains({ kR: { x: v, y: v } }) },
+      { key: 'kRz', label: 'KR yaw', min: 0, max: 10, step: 0.1, value: ethController.KR.z, onInput: (v) => this._applyAttitudeGains({ kR: { z: v } }) },
+      { key: 'kOxy', label: 'Kω roll/pitch', min: 0, max: 1.0, step: 0.01, value: ethController.Komega.x, onInput: (v) => this._applyAttitudeGains({ kOmega: { x: v, y: v } }) },
+      { key: 'kOz', label: 'Kω yaw', min: 0, max: 2, step: 0.02, value: ethController.Komega.z, onInput: (v) => this._applyAttitudeGains({ kOmega: { z: v } }) },
     ];
 
     attitudeSliderDefs.forEach((def) => {
@@ -686,6 +721,7 @@ class StationaryHoverDemo {
 
   _setupWaypointInput() {
     const btnSetWaypoint = document.getElementById('set-waypoint-btn');
+    const btnToggleNose = document.getElementById('toggle-nose-btn');
     const inputX = document.getElementById('wp-x');
     const inputY = document.getElementById('wp-y');
     const inputZ = document.getElementById('wp-z');
@@ -709,6 +745,21 @@ class StationaryHoverDemo {
             btnSetWaypoint.click();
           }
         });
+      });
+    }
+
+    // Setup nose-first toggle button
+    if (btnToggleNose) {
+      btnToggleNose.addEventListener('click', () => {
+        this.noseFirstEnabled = !this.noseFirstEnabled;
+        const ethController = this.controllers.eth;
+        if (ethController && ethController.setNoseFacing) {
+          ethController.setNoseFacing(this.noseFirstEnabled);
+        }
+        btnToggleNose.textContent = `Nose-First: ${this.noseFirstEnabled ? 'ON' : 'OFF'}`;
+        btnToggleNose.style.background = this.noseFirstEnabled
+          ? 'linear-gradient(135deg, #10b981, #059669)'
+          : 'linear-gradient(135deg, #8b5cf6, #7c3aed)';
       });
     }
   }
@@ -799,11 +850,30 @@ class StationaryHoverDemo {
       position: this.target.position.clone(),
       velocity: this.target.velocity.clone(),
       acceleration: this.target.acceleration.clone(),
-      yaw: this.target.yaw,
+      yaw: this.target.yaw || 0,
     };
 
+    // If nose-first mode is enabled, compute desired yaw from direction vector
+    if (this.noseFirstEnabled) {
+      const dx = target.position.x - state.position.x;
+      const dy = target.position.y - state.position.y;
+      const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
+      
+      // Only update heading if moving significantly (avoid jitter at waypoint)
+      if (distanceToTarget > 0.05) {
+        target.yaw = Math.atan2(dy, dx);
+        
+        // Debug log occasionally
+        if (Math.random() < 0.02) {
+          console.log(`[NOSE_FIRST] Distance: ${distanceToTarget.toFixed(2)}m, Desired yaw: ${(target.yaw * 180 / Math.PI).toFixed(1)}°`);
+        }
+      }
+    }
+
     const controller = this._getActiveController();
-    const result = controller.computeControl(state, target, dt);
+    const result = controller.compute 
+      ? controller.compute(state, dt, target)
+      : controller.computeControl(state, target, dt);
     const m4_actual = new THREE.Matrix4().makeRotationFromQuaternion(state.orientationQuat);
     const b3_actual = new THREE.Vector3(
       m4_actual.elements[8],
@@ -835,11 +905,11 @@ class StationaryHoverDemo {
     const posError = this.target.position.clone().sub(state.position);
     const vel = state.velocity;
     
-    // Log every 10 steps to avoid spam
+    // Log every 240 steps (once per second at 240Hz physics rate) to avoid spam
     // Motor colors: M0=Red(FL), M1=Green(FR), M2=Blue(BL), M3=Yellow(BR)
     if (!this.logCounter) this.logCounter = 0;
     this.logCounter++;
-    if (this.logCounter >= 10) {
+    if (this.logCounter >= 240) {
       const pwm0 = Math.round(motorCommands[0] * 65535); // Front-Left (Red)
       const pwm1 = Math.round(motorCommands[1] * 65535); // Front-Right (Green)
       const pwm2 = Math.round(motorCommands[2] * 65535); // Back-Left (Blue)
@@ -891,6 +961,24 @@ class StationaryHoverDemo {
     const state = this.drone.getState();
     this.droneMesh.position.copy(state.position);
     this.droneMesh.quaternion.copy(state.orientationQuat);
+
+    // Update path vector arrow (from drone to target)
+    if (this.noseFirstEnabled) {
+      const pathVector = this.target.position.clone().sub(state.position);
+      const distance = pathVector.length();
+      
+      if (distance > 0.1) {
+        pathVector.normalize();
+        this.pathArrow.position.copy(state.position);
+        this.pathArrow.setDirection(pathVector);
+        this.pathArrow.setLength(distance, 0.2, 0.15);
+        this.pathArrow.visible = true;
+      } else {
+        this.pathArrow.visible = false;
+      }
+    } else {
+      this.pathArrow.visible = false;
+    }
 
     // Update thrust arrows
     if (this.lastControlResult && this.lastControlResult.diagnostics) {
@@ -952,7 +1040,7 @@ class StationaryHoverDemo {
     if (!this.hud) return;
     const err = this.target.position.clone().sub(state.position);
     const vel = state.velocity;
-    const modeLabel = this.activeControllerKey === 'mpc' ? 'Mode: iLQR MPC' : 'Mode: ETH cascaded';
+    const modeLabel = this.activeControllerKey === 'mpc' ? 'Mode: MPC' : 'Mode: ETH cascaded';
     this.hud.querySelector('#hudMode').textContent = modeLabel;
     this.hud.querySelector('#hudAlt').textContent = `Altitude: ${state.position.z.toFixed(2)} m`;
     this.hud.querySelector('#hudError').textContent = `Position error: (${err.x.toFixed(2)}, ${err.y.toFixed(2)}, ${err.z.toFixed(2)})`;

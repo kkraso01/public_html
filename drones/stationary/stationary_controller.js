@@ -5,6 +5,7 @@ export class StationaryController {
     this.params = params;
     this.eth = new EthController(params);
     this.useFOPID = false; // kept for HUD compatibility
+    this.useNoseFacing = false; // nose-first mode toggle
     this.lastIntegrationMs = 0; // placeholder for legacy HUD
   }
 
@@ -25,6 +26,17 @@ export class StationaryController {
     this.useFOPID = false;
   }
 
+  toggleNoseFacing() {
+    this.useNoseFacing = !this.useNoseFacing;
+    console.log(`[STATIONARY_CTRL] Nose-first mode: ${this.useNoseFacing ? 'ENABLED' : 'DISABLED'}`);
+    return this.useNoseFacing;
+  }
+
+  setNoseFacing(enabled) {
+    this.useNoseFacing = enabled;
+    console.log(`[STATIONARY_CTRL] Nose-first mode: ${this.useNoseFacing ? 'ENABLED' : 'DISABLED'}`);
+  }
+
   compute(state, dt, target = null) {
     // Use provided target or default to hover at origin
     // Hover altitude adjusted for Crazyflie scale (smaller drone, lower default height)
@@ -37,7 +49,15 @@ export class StationaryController {
       };
     }
 
-    const result = this.eth.computeControl(state, target, dt);
+    // Debug log occasionally
+    if (Math.random() < 0.01) {
+      console.log(`[STATIONARY_CTRL.compute] useNoseFacing=${this.useNoseFacing}, target=(${target.position.x.toFixed(2)}, ${target.position.y.toFixed(2)}), state=(${state.position.x.toFixed(2)}, ${state.position.y.toFixed(2)})`);
+    }
+
+    // Use nose-first control when enabled (maxYawRate defaults to 10 rad/s in eth controller)
+    const result = this.useNoseFacing
+      ? this.eth.computeNoseFirstControl(state, target, dt, { enableNoseFacing: true })
+      : this.eth.computeControl(state, target, dt);
 
     // Add meaningful diagnostics for SE(3) controller (not Euler angles!)
     // Extract actual thrust direction from current orientation
@@ -58,10 +78,22 @@ export class StationaryController {
       m4_desired.elements[10]   // m33
     );
 
-    // DEBUG: Log to verify extraction
+    // DEBUG: Log to verify extraction and extract yaw from quaternion
     if (Math.random() < 0.02) {
-      console.log(`[STATIONARY_CTRL] q_des: (${result.desiredOrientation.x.toFixed(3)}, ${result.desiredOrientation.y.toFixed(3)}, ` +
-                  `${result.desiredOrientation.z.toFixed(3)}, ${result.desiredOrientation.w.toFixed(3)}) → ` +
+      const q_des = result.desiredOrientation;
+      const desiredYawFromQuat = Math.atan2(
+        2 * (q_des.w * q_des.z + q_des.x * q_des.y),
+        1 - 2 * (q_des.y * q_des.y + q_des.z * q_des.z)
+      );
+      
+      // Extract actual yaw from drone state
+      const q_actual = state.orientationQuat;
+      const actualYaw = Math.atan2(
+        2 * (q_actual.w * q_actual.z + q_actual.x * q_actual.y),
+        1 - 2 * (q_actual.y * q_actual.y + q_actual.z * q_actual.z)
+      );
+      
+      console.log(`[STATIONARY_CTRL] Yaw: actual=${(actualYaw * 180 / Math.PI).toFixed(1)}°, desired=${(desiredYawFromQuat * 180 / Math.PI).toFixed(1)}° | ` +
                   `b3_desired: (${b3_desired.x.toFixed(3)}, ${b3_desired.y.toFixed(3)}, ${b3_desired.z.toFixed(3)})`);
     }
 
