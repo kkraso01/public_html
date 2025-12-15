@@ -195,15 +195,19 @@ export class EthController {
     
     // Desired heading in world frame (yaw) - body X should point this direction
     const b1_ref = new THREE.Vector3(Math.cos(yaw_des), Math.sin(yaw_des), 0);
-    
+
+    // Project b1_ref into the plane orthogonal to b3 to prevent Z leakage when the
+    // drone is heavily tilted. This keeps the thrust axis truly vertical in Z.
+    const b1_proj = b1_ref.clone().sub(b3.clone().multiplyScalar(b1_ref.dot(b3)));
+
     // DEBUG: Check b1_ref computation
     if (Math.random() < 0.02) {
       console.log(`[B1_REF] yaw_des=${(yaw_des * 180 / Math.PI).toFixed(1)}° → b1_ref=(${b1_ref.x.toFixed(3)}, ${b1_ref.y.toFixed(3)}, ${b1_ref.z.toFixed(3)})`);
     }
-    
-    // Body Y-axis: perpendicular to both thrust (b3) and desired heading (b1_ref)
-    // Using crossVectors ensures b2 = b3 × b1_ref (proper right-handed convention)
-    let b2 = new THREE.Vector3().crossVectors(b3, b1_ref);
+
+    // Body Y-axis: perpendicular to both thrust (b3) and projected heading (b1_proj)
+    // Using crossVectors ensures b2 = b3 × b1_proj (proper right-handed convention)
+    let b2 = new THREE.Vector3().crossVectors(b3, b1_proj);
     if (b2.lengthSq() < 1e-6) {
       // Thrust parallel to desired heading - pick arbitrary Y perpendicular to b3
       b2.set(-b3.y, b3.x, 0);

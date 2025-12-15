@@ -29,7 +29,7 @@ class ObstacleDropDemo {
     this.physicsRate = 200;
     this.floorHeight = options.floorHeight ?? 0.05;
     this.userPaused = false;
-    this.visibilityPaused = false;
+    this.visibilityPaused = !!options.startPaused;
     this.lastFrame = null;
     this.accumulator = 0;
     this._frameReq = null;
