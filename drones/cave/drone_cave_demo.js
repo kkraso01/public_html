@@ -40,7 +40,7 @@ class DroneCaveDemo {
     this.physicsRate = 200;
     this.timeScale = 1;
     this.userPaused = false;
-    this.visibilityPaused = false;
+    this.visibilityPaused = !!options.startPaused;
     this.lastFrame = null;
     this.accumulator = 0;
     this._frameReq = null;

@@ -10,6 +10,19 @@ function setupDemo(containerId, demoFactory, controlsId, toggleBtnId, restartBtn
   let visibilityObserver = null;
   let visibilityHandler = null;
   let userPaused = false;
+  const VISIBILITY_THRESHOLD = 0.2;
+
+  const computeVisibility = () => {
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    const intersectionWidth = Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0));
+    const intersectionHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+    const intersectionArea = intersectionWidth * intersectionHeight;
+    const targetArea = rect.width * rect.height;
+    if (targetArea === 0) return false;
+    const ratio = intersectionArea / targetArea;
+    return ratio >= VISIBILITY_THRESHOLD;
+  };
 
   const attachVisibility = () => {
     if (visibilityObserver) visibilityObserver.disconnect();
@@ -26,9 +39,14 @@ function setupDemo(containerId, demoFactory, controlsId, toggleBtnId, restartBtn
           activeDemo.pause?.();
         }
       });
-    }, { threshold: 0.2 });
+    }, { threshold: VISIBILITY_THRESHOLD });
 
     visibilityObserver.observe(container);
+
+    const initiallyVisible = computeVisibility() && document.visibilityState === 'visible';
+    if (activeDemo.setPausedFromVisibility) activeDemo.setPausedFromVisibility(initiallyVisible);
+    else if (initiallyVisible) activeDemo.resume?.();
+    else activeDemo.pause?.();
 
     visibilityHandler = () => {
       const visible = document.visibilityState === 'visible';
@@ -52,6 +70,7 @@ function setupDemo(containerId, demoFactory, controlsId, toggleBtnId, restartBtn
       height: container.clientHeight || 520,
       enableShadows: true,
       highQuality: true,
+      startPaused: true,
     };
     activeDemo = demoFactory(container, opts);
     userPaused = false;
