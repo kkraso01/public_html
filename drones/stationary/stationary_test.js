@@ -1,7 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
 import { StationaryController } from './stationary_controller.js';
-import { ILQRMPCController } from '../../src/controllers/ilqr_mpc_controller.js';
 
 export function initStationaryHoverDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
@@ -47,6 +46,7 @@ class StationaryHoverDemo {
     this.lastFrame = null;
     this.accumulator = 0;
     this._frameReq = null;
+    this.ethControllerLogShown = false;
 
     this.params = CRAZYFLIE_PARAMS;
 
@@ -62,7 +62,6 @@ class StationaryHoverDemo {
 
     this.controllers = {
       eth: new StationaryController(this.params),
-      mpc: new ILQRMPCController(this.params),
     };
     this.activeControllerKey = 'eth';
     // ETH Zürich aggressive tuning - Flying Machine Arena racing mode
@@ -97,22 +96,21 @@ class StationaryHoverDemo {
   }
 
   _getActiveController() {
-    return this.controllers[this.activeControllerKey] || this.controllers.eth;
+    return this.controllers.eth;
   }
 
   _setControllerMode(mode) {
-    const normalized = mode === 'mpc' ? 'mpc' : 'eth';
-    if (this.activeControllerKey === normalized) return;
-    this.activeControllerKey = normalized;
+    const normalized = 'eth';
+    if (this.activeControllerKey !== normalized) {
+      this.activeControllerKey = normalized;
+    }
     if (this.hud) {
-      this.hud.querySelector('#hudMode').textContent = normalized === 'mpc' ? 'Mode: iLQR MPC' : 'Mode: ETH cascaded';
+      this.hud.querySelector('#hudMode').textContent = 'Mode: ETH cascaded (MPC disabled)';
     }
     if (this.controllerTitle) {
-      this.controllerTitle.textContent = normalized === 'mpc'
-        ? 'Stationary Hover – iLQR MPC Controller'
-        : 'Stationary Hover – ETH Cascaded Controller';
+      this.controllerTitle.textContent = 'Stationary Hover – ETH Cascaded Controller';
     }
-    if (normalized !== 'mpc' && this.mpcPrediction) {
+    if (this.mpcPrediction) {
       while (this.mpcPrediction.children.length) {
         this.mpcPrediction.remove(this.mpcPrediction.children[0]);
       }
@@ -552,20 +550,11 @@ class StationaryHoverDemo {
     buttonContainer.appendChild(resetBtn);
 
     const controllerBtn = document.createElement('button');
-    controllerBtn.textContent = 'Controller: ETH (M)';
-    controllerBtn.style.cssText = 'padding:8px; background:#22d3ee; color:#0c111c; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:12px;';
-    const toggleController = () => {
-      const nextMode = this.activeControllerKey === 'eth' ? 'mpc' : 'eth';
-      this._setControllerMode(nextMode);
-      controllerBtn.textContent = nextMode === 'mpc' ? 'Controller: iLQR MPC (M)' : 'Controller: ETH (M)';
-    };
-    controllerBtn.addEventListener('click', toggleController);
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'm' || e.key === 'M') {
-        toggleController();
-      }
-    });
-
+    controllerBtn.textContent = 'Controller: ETH (MPC disabled)';
+    controllerBtn.style.cssText = 'padding:8px; background:#22d3ee; color:#0c111c; border:none; border-radius:6px; font-weight:600; cursor:not-allowed; font-size:12px; opacity:0.65;';
+    controllerBtn.title = 'MPC is disabled; ETH controller is always active.';
+    controllerBtn.disabled = true;
+    
     buttonContainer.appendChild(controllerBtn);
     this.overlay.appendChild(buttonContainer);
 
@@ -691,7 +680,7 @@ class StationaryHoverDemo {
     this.hud = document.createElement('div');
     this.hud.style.cssText = 'display:grid; grid-template-columns:1fr; gap:4px; font-size:12px; color:#cbd5f5;';
     this.hud.innerHTML = `
-      <div id="hudMode">Mode: ETH cascaded</div>
+      <div id="hudMode">Mode: ETH cascaded (MPC disabled)</div>
       <div id="hudAlt">Altitude: 0.00 m</div>
       <div id="hudError">Position error: (0,0,0)</div>
       <div id="hudVel">Velocity: (0,0,0)</div>
@@ -775,6 +764,7 @@ class StationaryHoverDemo {
     this.target.velocity.set(0, 0, 0);
     this.target.acceleration.set(0, 0, 0);
     this.simTime = 0;
+    this.ethControllerLogShown = false;
     Object.values(this.controllers).forEach((controller) => controller.reset?.());
     if (this.mpcPrediction) {
       while (this.mpcPrediction.children.length) {
@@ -944,15 +934,15 @@ class StationaryHoverDemo {
         'color: #ffff00; font-weight: bold', 'color: inherit'
       ];
 
-      if (this.activeControllerKey === 'mpc' && typeof result.optimizationTime !== 'undefined') {
-        console.log(...logParts);
-        console.log(`[MPC] optimize ${result.optimizationTime.toFixed(2)} ms | cost=${result.cost?.toFixed?.(3) || '0.000'} | horizon=${result.predictedTrajectory?.length || 0}`);
-      } else {
-        console.log(...logParts);
-      }
+      console.log(...logParts);
       this.logCounter = 0;
     }
-    
+
+    if (!this.ethControllerLogShown) {
+      console.log('[CTRL] ETH controller active');
+      this.ethControllerLogShown = true;
+    }
+
     this.drone.applyMotorCommands(motorCommands[0], motorCommands[1], motorCommands[2], motorCommands[3]);
     this.drone.step(dt);
   }
@@ -1024,7 +1014,7 @@ class StationaryHoverDemo {
     while (this.mpcPrediction.children.length) {
       this.mpcPrediction.remove(this.mpcPrediction.children[0]);
     }
-    if (this.activeControllerKey !== 'mpc' || !this.lastControlResult?.predictedTrajectory?.length) return;
+    if (!this.lastControlResult?.predictedTrajectory?.length) return;
 
     const geometry = new THREE.SphereGeometry(0.03, 10, 10);
     const material = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.45 });
@@ -1040,8 +1030,7 @@ class StationaryHoverDemo {
     if (!this.hud) return;
     const err = this.target.position.clone().sub(state.position);
     const vel = state.velocity;
-    const modeLabel = this.activeControllerKey === 'mpc' ? 'Mode: MPC' : 'Mode: ETH cascaded';
-    this.hud.querySelector('#hudMode').textContent = modeLabel;
+    this.hud.querySelector('#hudMode').textContent = 'Mode: ETH cascaded (MPC disabled)';
     this.hud.querySelector('#hudAlt').textContent = `Altitude: ${state.position.z.toFixed(2)} m`;
     this.hud.querySelector('#hudError').textContent = `Position error: (${err.x.toFixed(2)}, ${err.y.toFixed(2)}, ${err.z.toFixed(2)})`;
     this.hud.querySelector('#hudVel').textContent = `Velocity: (${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)})`;

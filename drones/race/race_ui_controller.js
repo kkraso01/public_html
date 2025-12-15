@@ -56,21 +56,17 @@ export class RaceUIController {
   setupHUDButtons() {
     // Individual controller selection buttons
     const geometricBtn = document.getElementById('hud-controller-geometric');
-    const mpcBtn = document.getElementById('hud-controller-mpc');
     const timeoptBtn = document.getElementById('hud-controller-timeopt');
-    
+
     const updateButtonStates = (activeMode) => {
-      [geometricBtn, mpcBtn, timeoptBtn].forEach(btn => {
+      [geometricBtn, timeoptBtn].forEach(btn => {
         if (btn) btn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
         if (btn) btn.classList.add('bg-gray-700', 'hover:bg-gray-600');
       });
-      
+
       if (activeMode === 'geometric' && geometricBtn) {
         geometricBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
         geometricBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
-      } else if (activeMode === 'mpc' && mpcBtn) {
-        mpcBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
-        mpcBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
       } else if (activeMode === 'time-optimal' && timeoptBtn) {
         timeoptBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
         timeoptBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
@@ -83,14 +79,7 @@ export class RaceUIController {
         updateButtonStates('geometric');
       });
     }
-    
-    if (mpcBtn) {
-      mpcBtn.addEventListener('click', () => {
-        this.demo._setControllerMode('mpc');
-        updateButtonStates('mpc');
-      });
-    }
-    
+
     if (timeoptBtn) {
       timeoptBtn.addEventListener('click', () => {
         this.demo._setControllerMode('time-optimal');
