@@ -77,25 +77,6 @@ export function createUnifiedHUD(controlsPanel) {
       </div>
     </div>
 
-    <!-- MPC Metrics (hidden by default) -->
-    <div id="hud-mpc-metrics" class="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 p-2 rounded-lg border border-blue-700/30" style="display: none;">
-      <div class="text-xs font-semibold text-blue-300 mb-1.5">🔮 MPC</div>
-      <div class="space-y-0.5 text-xs">
-        <div class="flex justify-between">
-          <span class="text-gray-500">Opt Time</span>
-          <span id="hud-mpc-opt-time" class="font-mono text-blue-300">0.0 ms</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-gray-500">Horizon</span>
-          <span id="hud-mpc-horizon" class="font-mono text-blue-300">15 (0.75s)</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-gray-500">Cost</span>
-          <span id="hud-mpc-cost" class="font-mono text-blue-300">0.00</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Time-Optimal Metrics (hidden by default) -->
     <div id="hud-timeopt-metrics" class="bg-gradient-to-r from-orange-900/20 to-amber-900/20 p-2 rounded-lg border border-orange-700/30" style="display: none;">
       <div class="text-xs font-semibold text-orange-300 mb-1.5">🔥 Time-Opt</div>
@@ -135,12 +116,9 @@ export function createUnifiedHUD(controlsPanel) {
     <!-- Control Buttons -->
     <div class="bg-gray-900/40 p-3 rounded-lg border border-gray-700/50">
       <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">🎮 Controller Mode</div>
-      <div class="grid grid-cols-3 gap-1.5 mb-3">
+      <div class="grid grid-cols-2 gap-1.5 mb-3">
         <button id="hud-controller-geometric" class="px-2 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors">
           Geometric
-        </button>
-        <button id="hud-controller-mpc" class="px-2 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-white font-semibold text-xs transition-colors">
-          MPC
         </button>
         <button id="hud-controller-timeopt" class="px-2 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-white font-semibold text-xs transition-colors">
           Time-Opt
@@ -174,7 +152,6 @@ export function createUnifiedHUD(controlsPanel) {
       acceleration: hudContainer.querySelector('#hud-acceleration'),
       tiltAngle: hudContainer.querySelector('#hud-tilt-angle'),
       altitude: hudContainer.querySelector('#hud-altitude'),
-      mpcMetrics: hudContainer.querySelector('#hud-mpc-metrics'),
       timeoptMetrics: hudContainer.querySelector('#hud-timeopt-metrics'),
       debugPanel: hudContainer.querySelector('#hud-debug-panel'),
     }
@@ -198,7 +175,6 @@ export function updateUnifiedHUD(hud, data) {
   if (data.controllerMode) {
     const names = {
       'geometric': 'Geometric (ETH)',
-      'mpc': 'Model Predictive Control',
       'time-optimal': 'Time-Optimal Racing'
     };
     el.controllerName.textContent = names[data.controllerMode] || 'Unknown';
@@ -217,24 +193,6 @@ export function updateUnifiedHUD(hud, data) {
   if (data.acceleration !== undefined) el.acceleration.textContent = `${data.acceleration.toFixed(1)} m/s²`;
   if (data.tiltAngle !== undefined) el.tiltAngle.textContent = `${data.tiltAngle.toFixed(1)}°`;
   if (data.altitude !== undefined) el.altitude.textContent = `${data.altitude.toFixed(2)} m`;
-  
-  // MPC metrics
-  if (data.controllerMode === 'mpc' && data.mpcData) {
-    el.mpcMetrics.style.display = 'block';
-    if (data.mpcData.optimizationTime !== undefined) {
-      hud.container.querySelector('#hud-mpc-opt-time').textContent = 
-        `${data.mpcData.optimizationTime.toFixed(1)} ms`;
-    }
-    if (data.mpcData.horizonSteps !== undefined) {
-      hud.container.querySelector('#hud-mpc-horizon').textContent = 
-        `${data.mpcData.horizonSteps} steps (${data.mpcData.predictionTime?.toFixed(2)}s)`;
-    }
-    if (data.mpcData.cost !== undefined) {
-      hud.container.querySelector('#hud-mpc-cost').textContent = data.mpcData.cost.toFixed(2);
-    }
-  } else {
-    el.mpcMetrics.style.display = 'none';
-  }
   
   // Time-optimal metrics
   if (data.controllerMode === 'time-optimal' && data.timeOptData) {

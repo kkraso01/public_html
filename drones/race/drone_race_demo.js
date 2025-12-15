@@ -1,8 +1,6 @@
 import { DronePhysicsEngine } from '../physics/drone_physics_engine.js';
 import { CRAZYFLIE_PARAMS } from '../physics/params_crazyflie.js';
 import { RaceController } from './race_controller.js';
-import { MPCController } from './mpc_controller.js';
-import { TorusGate } from './gate_model.js';
 import { buildRaceTrack, ReferenceTrajectory } from './track.js';
 import { TimeOptimalTrajectory } from './trajectory_optimizer.js';
 import { RaceUIController } from './race_ui_controller.js';
@@ -53,9 +51,10 @@ class DroneRaceDemo {
     this._frameReq = null;
     this.debugEnabled = false;
     this.cameraMode = 'chase';
-    this.controllerMode = 'geometric'; // 'geometric', 'mpc', or 'time-optimal'
+    this.controllerMode = 'geometric'; // 'geometric' or 'time-optimal'
     this.stabilizationTime = 1.5; // Hold position for 1.5 seconds before starting trajectory
     this.elapsedStabilizationTime = 0;
+    this.ethControllerLogShown = false;
 
     this._initScene();
     this._initDrone();
@@ -117,9 +116,8 @@ class DroneRaceDemo {
     this.params = CRAZYFLIE_PARAMS;
     this.drone = new DronePhysicsEngine(this.params);
 
-    // Initialize all three controller types
+    // Initialize controller types (ETH-based)
     this.geometricController = new RaceController(this.params);
-    this.mpcController = new MPCController(this.params);
     this.timeOptimalController = new RaceController(this.params); // Will use time-optimal trajectory
     
     // Set active controller
@@ -168,28 +166,12 @@ class DroneRaceDemo {
     this.droneMesh.position.copy(new THREE.Vector3(-15, 0, 2.4)); // Start on the platform (same as waypoint)
     this.scene.add(this.droneMesh);
     
-    // Create MPC prediction horizon visualization
-    this.predictionLine = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]),
-      new THREE.LineBasicMaterial({ color: 0xff6b6b, transparent: true, opacity: 0.7, linewidth: 2 })
-    );
-    this.scene.add(this.predictionLine);
   }
 
   _initTrack() {
     const { gates, waypoints } = buildRaceTrack(this.scene);
     this.gates = gates;
     this.waypoints = waypoints;
-    
-    // Convert Three.js gate meshes to TorusGate objects for MPC
-    // Gates are vertical rings (Y-Z plane) perpendicular to X-axis flight path
-    const torusGates = gates.map(gateMesh => {
-      const center = gateMesh.position.clone();
-      const axis = new THREE.Vector3(1, 0, 0); // Normal pointing in +X (forward)
-      const majorRadius = 1.5; // Ring center radius (from track.js)
-      const minorRadius = 0.5;  // Tube thickness (increased from visual 0.08 for easier racing)
-      return new TorusGate(center, axis, majorRadius, minorRadius);
-    });
     
     // Create both trajectory types
     this.standardTrajectory = new ReferenceTrajectory(waypoints, 50); // Conservative 50s
@@ -198,10 +180,9 @@ class DroneRaceDemo {
       maxAcceleration: 20.0,
       aggressiveness: 0.85,
     });
-    
-    // Set trajectories/gates on all controllers
+
+    // Set trajectories on controllers
     this.geometricController.setTrajectory(this.standardTrajectory);
-    this.mpcController.setGates(torusGates); // MPC uses gates, not trajectory
     this.timeOptimalController.setTrajectory(this.timeOptimalTrajectory);
     
     this.trajectory = this.standardTrajectory;
@@ -238,14 +219,11 @@ class DroneRaceDemo {
   }
 
   _setControllerMode(mode) {
-    this.controllerMode = mode;
+    this.controllerMode = mode === 'time-optimal' ? 'time-optimal' : 'geometric';
     
     // Switch controller and trajectory
     if (this.controllerMode === 'geometric') {
       this.controller = this.geometricController;
-      this.trajectory = this.standardTrajectory;
-    } else if (this.controllerMode === 'mpc') {
-      this.controller = this.mpcController;
       this.trajectory = this.standardTrajectory;
     } else if (this.controllerMode === 'time-optimal') {
       this.controller = this.timeOptimalController;
@@ -257,10 +235,16 @@ class DroneRaceDemo {
   }
 
   _cycleControllerMode() {
-    const modes = ['geometric', 'mpc', 'time-optimal'];
+    const modes = ['geometric', 'time-optimal'];
     const currentIdx = modes.indexOf(this.controllerMode);
     const nextIdx = (currentIdx + 1) % modes.length;
     this._setControllerMode(modes[nextIdx]);
+  }
+
+  _logEthControllerActive() {
+    if (this.ethControllerLogShown) return;
+    console.log('[CTRL] ETH controller active');
+    this.ethControllerLogShown = true;
   }
 
   _cycleCameraMode() {
@@ -284,10 +268,10 @@ class DroneRaceDemo {
     };
     this.drone.reset(droneState);
     this.geometricController.reset();
-    this.mpcController.reset();
     this.timeOptimalController.reset();
     this.state = 'STABILIZING'; // Hold position first
     this.elapsedStabilizationTime = 0;
+    this.ethControllerLogShown = false;
     const state = this.drone.getState();
     this.trailGeometry.setFromPoints([state.position.clone(), state.position.clone()]);
     // Sync mesh position with physics state
@@ -363,8 +347,9 @@ class DroneRaceDemo {
         yaw: 0,
       };
       const result = this.controller.computeControl(state, hoverTarget, dt);
-      
+
       // Apply motor commands and step physics
+      this._logEthControllerActive();
       this.drone.applyMotorCommands(result.motorCommands[0], result.motorCommands[1], result.motorCommands[2], result.motorCommands[3]);
       this.drone.step(dt);
       
@@ -389,18 +374,8 @@ class DroneRaceDemo {
     // Store result for visualization and debug
     this.lastControlResult = result;
     
-    // Update MPC prediction visualization
-    if (this.controllerMode === 'mpc' && result.predictedTrajectory) {
-      const predPoints = result.predictedTrajectory.map(s => s.position);
-      if (predPoints.length > 0) {
-        this.predictionLine.geometry.setFromPoints(predPoints);
-        this.predictionLine.visible = true;
-      }
-    } else {
-      this.predictionLine.visible = false;
-    }
-    
     // Apply motor commands and step physics
+    this._logEthControllerActive();
     this.drone.applyMotorCommands(result.motorCommands[0], result.motorCommands[1], result.motorCommands[2], result.motorCommands[3]);
     this.drone.step(dt);
 
@@ -560,17 +535,6 @@ class DroneRaceDemo {
       // Debug
       debugEnabled: this.debugEnabled,
     };
-    
-    // Add MPC-specific data
-    if (this.controllerMode === 'mpc' && this.lastControlResult) {
-      const metrics = this.mpcController.getMetrics();
-      hudData.mpcData = {
-        optimizationTime: this.lastControlResult.optimizationTime,
-        horizonSteps: metrics.horizonSteps,
-        predictionTime: metrics.predictionTime,
-        cost: this.lastControlResult.cost,
-      };
-    }
     
     // Add time-optimal data
     if (this.controllerMode === 'time-optimal') {
