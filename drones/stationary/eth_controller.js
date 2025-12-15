@@ -542,10 +542,15 @@ export class EthController {
     while (yawError > Math.PI) yawError -= 2 * Math.PI;
     while (yawError < -Math.PI) yawError += 2 * Math.PI;
     
-    // ETH Racing Strategy: Feed the TRUE desired yaw directly to SE(3) controller
-    // Let the attitude gains (KR.z=2.0, Komega.z=0.5) handle smooth convergence
-    // This is the CORRECT way - no intermediate yaw tracking layer
-    const yawCommand = desiredYaw;
+    // Smooth yaw command to avoid large transients that dump thrust during rapid
+    // reorientation (critical for cave demo when heading swings 180° between
+    // waypoints). Respect maxYawRate to keep attitude errors manageable and
+    // preserve vertical authority.
+    const maxYawStep = maxYawRate * dt;
+    const yawStep = THREE.MathUtils.clamp(yawError, -maxYawStep, maxYawStep);
+    const yawCommand = aggressiveYawTracking
+      ? currentYaw + yawStep // Fast but rate-limited for stability
+      : currentYaw + yawStep * 0.5; // Extra smoothing if aggressive tracking is disabled
     
     // Debug log occasionally
     if (Math.random() < 0.01) {
