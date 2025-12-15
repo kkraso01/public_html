@@ -64,15 +64,15 @@ class StationaryHoverDemo {
       eth: new StationaryController(this.params),
     };
     this.activeControllerKey = 'eth';
-    // ETH Zürich aggressive tuning - Flying Machine Arena racing mode
+    // ETH Zürich proven-stable tuning (restores full attitude authority)
     this._applyPositionGains({
-      kp: { x: 8.0, y: 8.0, z: 8.0 },  // Fast response in all axes
-      kd: { x: 4.0, y: 4.0, z: 4.0 },  // Strong damping for fast response
-      ki: { x: 0.2, y: 0.2, z: 0.8 },  // Strong integral for altitude precision
+      kp: { x: 4.0, y: 4.0, z: 8.0 },
+      kd: { x: 3.0, y: 3.0, z: 4.0 },
+      ki: { x: 0.05, y: 0.05, z: 0.2 },
     });
     this._applyAttitudeGains({
-      kR: { x: 0.05, y: 0.05, z: 0.8 },       // Aggressive roll/pitch/yaw for nose-first mode
-      kOmega: { x: 0.02, y: 0.02, z: 0.3 },  // Strong damping for racing mode stability
+      kR: { x: 4.5, y: 4.5, z: 1.0 },
+      kOmega: { x: 0.1, y: 0.1, z: 0.05 },
     });
 
     this.noseFirstEnabled = false;

@@ -285,17 +285,18 @@ export class EthController {
     const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
     const R_des = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q_des));
 
-    // ETH SE(3) thrust calculation: T = m * ||a_des||
-    // This automatically compensates for tilt - when tilted, thrust increases to maintain vertical lift
-    // This is the KEY difference from naive projection (T = m * a·b3) which loses altitude when tilted
-    
+    // ETH SE(3) thrust calculation: project desired acceleration onto the *current*
+    // thrust axis to account for attitude tracking error. This prevents overestimating
+    // vertical authority when the body Z axis is tilted away from the commanded b3.
+    const b3_actual = new THREE.Vector3(0, 0, 1).applyMatrix3(R); // body Z in world frame
+
     // FIX #1: Correct thrust saturation (CRITICAL BUG FIX)
     // T_i_max = max thrust PER MOTOR
     // T_total_max = max COMBINED thrust of all 4 motors
     const T_i_max = this.maxThrustPerMotor;  // Per-motor limit (e.g., 0.18 N for Crazyflie)
     const T_total_max = 4 * T_i_max;          // Total system limit (e.g., 0.72 N)
-    
-    let thrust_des = this.mass * a_cmd.length();
+
+    let thrust_des = this.mass * Math.max(0, a_cmd.dot(b3_actual));
 
     const now = performance.now?.() ?? Date.now();
     if (now - this.lastCtrlZLog > 250) {
