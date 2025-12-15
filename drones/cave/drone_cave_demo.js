@@ -638,9 +638,10 @@ class DroneCaveDemo {
     // Path following with obstacle avoidance
     const minAltitude = this.floorHeight + 1.2; // Safety margin to prevent ground contact
     const maxAltitude = 7.0; // Increased to allow exploration of full cave height (walls are 8m)
-    
+
     const waypoint = this.path[this.pathIndex] || this.frontierInfo?.point || this.target;
     if (waypoint) {
+      const rawWaypointZ = waypoint.z;
       this.target.copy(waypoint);
       // Allow full altitude range - only clamp to safe bounds, don't artificially limit exploration
       this.target.z = Math.max(minAltitude, Math.min(this.target.z, maxAltitude));
@@ -655,6 +656,15 @@ class DroneCaveDemo {
       );
       const verticalDist = Math.abs(currentPos.z - this.target.z);
       const velocity = this.drone.state.velocity.length();
+
+      if (Math.random() < 0.05) {
+        console.log(
+          '[ALT_CLAMP]',
+          'waypoint.z=', rawWaypointZ.toFixed(2),
+          'target.z=', this.target.z.toFixed(2),
+          'current.z=', currentPos.z.toFixed(2)
+        );
+      }
       
       // Calculate if we're heading towards the waypoint
       const toWaypoint = waypoint.clone().sub(currentPos).normalize();
