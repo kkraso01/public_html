@@ -34,7 +34,11 @@ export class EthController {
     
     // Store last valid nose-first heading to maintain orientation near waypoints
     this.lastNoseFirstYaw = 0;
-    this.lastValidHeading = new THREE.Vector3(1, 0, 0); // Stable fallback for heading projection
+
+    // Heading fallback is kept FLAT (z=0) so degenerate projections never reintroduce
+    // vertical components into the desired body frame. It gets re-projected onto b3
+    // every frame to guarantee orthonormality.
+    this.lastFlatHeading = new THREE.Vector3(1, 0, 0);
 
     // Diagonal inertia used by the geometric attitude controller
     this.inertia = new THREE.Vector3(params.inertia?.Jxx || 1.4e-5, params.inertia?.Jyy || 1.4e-5, params.inertia?.Jzz || 2.17e-5);
@@ -204,11 +208,15 @@ export class EthController {
     let b1_proj = projectHeading(b1_ref);
 
     // If the heading is nearly parallel to thrust (projection collapses), reuse the
-    // last valid heading to preserve a consistent body frame.
+    // last *flat* heading (z=0) so we never inject vertical bias into the body frame.
     if (b1_proj.lengthSq() < 1e-6) {
-      b1_proj = projectHeading(this.lastValidHeading);
+      b1_proj = projectHeading(this.lastFlatHeading);
     }
     b1_proj.normalize();
+
+    // Track the last requested flat heading (not the projected one) for future fallbacks
+    // to keep the yaw intention consistent across aggressive tilts.
+    this.lastFlatHeading.copy(b1_ref);
 
     // DEBUG: Check b1_ref computation
     if (Math.random() < 0.02) {
@@ -227,8 +235,28 @@ export class EthController {
 
     // Body X-axis: completes right-handed frame, guaranteed to point forward
     // b1 = b2 × b3 ensures X points in heading direction
-    const b1 = new THREE.Vector3().crossVectors(b2, b3).normalize();
-    this.lastValidHeading.copy(b1);
+    let b1 = new THREE.Vector3().crossVectors(b2, b3);
+    if (b1.lengthSq() < 1e-6) {
+      // Degenerate basis; fall back to projected heading directly
+      b1 = b1_proj.clone();
+    }
+    b1.normalize();
+
+    // Re-orthonormalize b2 after b1 normalization to eliminate numerical drift
+    b2 = new THREE.Vector3().crossVectors(b3, b1).normalize();
+
+    // Runtime invariant check: basis must remain orthonormal
+    const dot13 = Math.abs(b1.dot(b3));
+    const dot23 = Math.abs(b2.dot(b3));
+    const dot12 = Math.abs(b1.dot(b2));
+    if (dot13 > 1e-3 || dot23 > 1e-3 || dot12 > 1e-3) {
+      console.warn('[ETH_BASIS_WARN] Non-orthonormal basis detected', {
+        b1: b1.toArray().map((v) => v.toFixed(3)),
+        b2: b2.toArray().map((v) => v.toFixed(3)),
+        b3: b3.toArray().map((v) => v.toFixed(3)),
+        dots: { dot12: dot12.toFixed(4), dot13: dot13.toFixed(4), dot23: dot23.toFixed(4) },
+      });
+    }
 
     // DEBUG: Log b1, b2, b3 and yaw
     if (Math.random() < 0.01) {
