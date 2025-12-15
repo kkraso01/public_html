@@ -83,10 +83,15 @@ export function computeNextBestView(grid, slamPose, options = {}) {
     const angle = (i / numCandidates) * Math.PI * 2;
     const radius = radiusMin + Math.random() * (radiusMax - radiusMin);
 
+    // Bias towards higher altitudes for better coverage (75% chance of going up)
+    const zBias = Math.random() < 0.75 ? 1.0 : -0.5; // Favor upward exploration
+    const zRange = (maxZ - minZ) * 0.5; // Larger Z variation for 3D exploration
+    const targetZ = currentPos.z + zBias * Math.random() * zRange;
+
     const candidatePos = new THREE.Vector3(
       currentPos.x + Math.cos(angle) * radius,
       currentPos.y + Math.sin(angle) * radius,
-      THREE.MathUtils.clamp(currentPos.z + (Math.random() - 0.5) * 0.8, minZ, maxZ)
+      THREE.MathUtils.clamp(targetZ, minZ, maxZ)
     );
 
     // Face roughly towards current position (good for seeing new stuff)
@@ -100,9 +105,12 @@ export function computeNextBestView(grid, slamPose, options = {}) {
 
     const gain = estimateInfoGain(grid, pose, { maxRange: options.maxRange ?? 12.0 });
 
-    // Simple score: information gain minus small travel penalty
+    // Altitude bonus: higher viewpoints get bonus (better for coverage)
+    const heightBonus = (candidatePos.z - minZ) / (maxZ - minZ) * 10.0; // 0-10 points for height
+    
+    // Simple score: information gain + height bonus - travel penalty
     const travelCost = candidatePos.distanceTo(currentPos);
-    const score = gain - travelCost * (options.travelWeight ?? 0.1);
+    const score = gain + heightBonus - travelCost * (options.travelWeight ?? 0.1);
 
     if (!best || score > best.score) {
       best = { pose, score, gain, travelCost };

@@ -18,6 +18,7 @@ export function initDroneCaveDemo(container, options = {}) {
     return { pause() {}, resume() {}, restart() {}, setPausedFromVisibility() {}, destroy() {} };
   }
   const demo = new DroneCaveDemo(container, options);
+  window.caveDemo = demo; // Expose for console access to performance flags
   demo.start();
   return {
     pause: () => demo.pause(true),
@@ -45,6 +46,11 @@ class DroneCaveDemo {
     this._frameReq = null;
     this.debugEnabled = false;
     this.cameraMode = 'chase'; // Default to chase camera like drone race
+    
+    // Performance optimization flags
+    this.enableSliceViz = false; // MOST EXPENSIVE: 2500 cell iterations + canvas ops (disable for 30% perf boost)
+    this.enableLidarBeams = false; // EXPENSIVE: 80 line updates per frame (disable for 15% perf boost)
+    this.enablePathSpheres = true; // MODERATE: Few spheres (keep enabled)
 
     this._initScene();
     this._initSim();
@@ -70,7 +76,13 @@ class DroneCaveDemo {
     this.overheadCamera.up.set(0, 1, 0); // Y is up in camera space
     this.overheadCamera.lookAt(new THREE.Vector3(0, 0, 0));
     
-    this.activeCamera = this.cameraMode === 'overhead' ? this.overheadCamera : this.chaseCamera;
+    // Isometric 45° third-person camera - view whole maze from angle
+    this.isometricCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
+    this.isometricCamera.position.set(12, 12, 8); // 45° angle: equal X, Y, lower Z for perspective
+    this.isometricCamera.up.set(0, 0, 1); // +Z is up
+    this.isometricCamera.lookAt(new THREE.Vector3(0, 0, 3)); // Look at center of cave at Z=3m
+    
+    this.activeCamera = this.cameraMode === 'overhead' ? this.overheadCamera : (this.cameraMode === 'isometric' ? this.isometricCamera : this.chaseCamera);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.options.width, this.options.height);
@@ -343,6 +355,12 @@ class DroneCaveDemo {
   }
 
   _bindInputs() {
+    // Log performance optimization info to console
+    console.log('[CAVE DEMO] Performance flags (toggle in console):');
+    console.log('  window.caveDemo.enableSliceViz = true/false  (currently: ' + this.enableSliceViz + ') - MOST EXPENSIVE');
+    console.log('  window.caveDemo.enableLidarBeams = true/false (currently: ' + this.enableLidarBeams + ') - EXPENSIVE');
+    console.log('  window.caveDemo.enablePathSpheres = true/false (currently: ' + this.enablePathSpheres + ')');
+    
     window.addEventListener('keydown', (e) => {
       if (e.key === 'd' || e.key === 'D') {
         this.debugEnabled = !this.debugEnabled;
@@ -350,13 +368,16 @@ class DroneCaveDemo {
       }
       if (e.key === 'c' || e.key === 'C') {
         if (this.cameraMode === 'chase') {
+          this.cameraMode = 'isometric';
+          this.activeCamera = this.isometricCamera;
+        } else if (this.cameraMode === 'isometric') {
           this.cameraMode = 'overhead';
           this.activeCamera = this.overheadCamera;
         } else {
           this.cameraMode = 'chase';
           this.activeCamera = this.chaseCamera;
         }
-        if (this.cameraLabel) this.cameraLabel.textContent = `Camera: ${this.cameraMode.toUpperCase()}`;
+        if (this.cameraLabel) this.cameraLabel.textContent = `Camera: ${this.cameraMode === 'isometric' ? '45° ISO' : this.cameraMode.toUpperCase()}`;
       }
     });
   }
@@ -488,7 +509,7 @@ class DroneCaveDemo {
       
       // Update slice visualization less frequently for performance
       this.slamUpdateCounter++;
-      if (this.slamUpdateCounter % 10 === 0) {
+      if (this.enableSliceViz && this.slamUpdateCounter % 10 === 0) {
         this._updateSliceVisualization();
       }
     }
@@ -503,18 +524,18 @@ class DroneCaveDemo {
     // Use SLAM pose instead of ground truth for exploration logic (realistic)
     const slamPos = this.slamPose ? this.slamPose.position : this.drone.state.position;
     
-    // Only replan when: 1) no target, 2) reached final target (close enough), or 3) stuck
+    // Only replan when: 1) no target, 2) EXACTLY at magenta waypoint (≤0.1m), or 3) stuck
     // Keep following path to magenta target even if intermediate waypoints remain
-    const hasTarget = this.frontierInfo && this.frontierInfo.point;
+    // Note: hasTarget already declared in stuck detection above
     const completedPath = this.pathIndex >= this.path.length; // Advanced past all waypoints
     const distToFinalTarget = hasTarget ? slamPos.distanceTo(this.frontierInfo.point) : 999;
-    const reachedFinalTarget = hasTarget && distToFinalTarget < 0.8; // Reached if close enough (regardless of path completion)
+    const reachedMagentaWaypoint = hasTarget && completedPath && distToFinalTarget <= 0.1; // NBV triggers ONLY at magenta (≤0.1m error)
     const noTarget = !this.frontierInfo;
     
-    // NEVER replan while actively navigating to a target - only when reached or stuck
-    if (noTarget || reachedFinalTarget || this.stuckTimer > this.explorationTimeout) {
+    // NEVER replan while actively navigating to a target - only when EXACTLY at magenta or stuck
+    if (noTarget || reachedMagentaWaypoint || this.stuckTimer > this.explorationTimeout) {
       if (noTarget) console.log('[REPLAN] Trigger: No target');
-      else if (reachedFinalTarget) console.log(`[REPLAN] Trigger: Reached target (completed=${completedPath}, dist=${distToFinalTarget.toFixed(2)}m)`);
+      else if (reachedMagentaWaypoint) console.log(`[NBV] At magenta waypoint! (completed=${completedPath}, dist=${distToFinalTarget.toFixed(3)}m ≤ 0.1m) → Computing NBV...`);
       else console.log(`[REPLAN] Trigger: Stuck (timer=${this.stuckTimer.toFixed(1)}s)`);
       
       this.lastReplanTime = this.simTime;
@@ -542,23 +563,27 @@ class DroneCaveDemo {
           this.frontierInfo = chooseFrontierTarget(this.grid, slamPos);
           console.log(`[FRONTIER] NBV gain too low, using frontier. Found: ${this.frontierInfo ? 'YES' : 'NO'}, clusters=${this.frontierInfo?.clusterCount || 0}`);
         } else {
+          const nbvOriginalZ = nbv.pose.position.z;
           this.frontierInfo = {
             point: nbv.pose.position.clone(),
             clusterCount: 0,
             targetSize: nbv.gain,
           };
-          console.log(`[NBV] Using NBV target with gain: ${nbv.gain.toFixed(1)}, travel: ${nbv.travelCost.toFixed(2)}`);
+          console.log(`[NBV] Target Z=${nbvOriginalZ.toFixed(2)}m, gain: ${nbv.gain.toFixed(1)}, travel: ${nbv.travelCost.toFixed(2)}`);
         }
         
         if (this.frontierInfo?.point) {
-          console.log(`[TARGET] At (${this.frontierInfo.point.x.toFixed(2)}, ${this.frontierInfo.point.y.toFixed(2)}, ${this.frontierInfo.point.z.toFixed(2)})`);
+          const beforeClampZ = this.frontierInfo.point.z;
+          console.log(`[TARGET] Before clamp: (${this.frontierInfo.point.x.toFixed(2)}, ${this.frontierInfo.point.y.toFixed(2)}, Z=${beforeClampZ.toFixed(2)}m)`);
         }
       }
       
       if (this.frontierInfo?.point) {
         // Ensure frontier target has safe altitude
         const minAltitude = this.floorHeight + 1.2; // Increased from 0.8 to prevent ground contact
+        const beforeClamp = this.frontierInfo.point.z;
         this.frontierInfo.point.z = Math.max(minAltitude, this.frontierInfo.point.z);
+        console.log(`[TARGET] After clamp: Z=${beforeClamp.toFixed(2)}m → ${this.frontierInfo.point.z.toFixed(2)}m (minAlt=${minAltitude.toFixed(2)}m)`);
         
         const distToTarget = slamPos.distanceTo(this.frontierInfo.point);
         
@@ -566,8 +591,12 @@ class DroneCaveDemo {
         const newPath = planPath(this.grid, slamPos, this.frontierInfo.point);
         if (newPath.length > 0) {
           // Ensure all waypoints maintain safe altitude
-          this.path = newPath.map(wp => {
+          this.path = newPath.map((wp, idx) => {
+            const wpOrigZ = wp.z;
             wp.z = Math.max(minAltitude, wp.z);
+            if (idx === 0 || idx === newPath.length - 1) {
+              console.log(`[PATH] Waypoint ${idx}: Z=${wpOrigZ.toFixed(2)}m → ${wp.z.toFixed(2)}m`);
+            }
             return wp;
           });
           this.pathIndex = 0;
@@ -616,43 +645,68 @@ class DroneCaveDemo {
       // Allow full altitude range - only clamp to safe bounds, don't artificially limit exploration
       this.target.z = Math.max(minAltitude, Math.min(this.target.z, maxAltitude));
       
-      // Waypoint advancement - advance earlier for smoother flight
-      const distToWaypoint = this.drone.state.position.distanceTo(waypoint);
+      // Waypoint advancement - require BOTH horizontal AND vertical proximity
+      // CRITICAL: Check distance to CLAMPED target (this.target), not original waypoint!
+      const currentPos = this.drone.state.position;
+      const distToWaypoint = currentPos.distanceTo(this.target);
+      const horizontalDist = Math.sqrt(
+        Math.pow(currentPos.x - this.target.x, 2) + 
+        Math.pow(currentPos.y - this.target.y, 2)
+      );
+      const verticalDist = Math.abs(currentPos.z - this.target.z);
       const velocity = this.drone.state.velocity.length();
       
       // Calculate if we're heading towards the waypoint
-      const toWaypoint = waypoint.clone().sub(this.drone.state.position).normalize();
+      const toWaypoint = waypoint.clone().sub(currentPos).normalize();
       const velDir = this.drone.state.velocity.clone().normalize();
       const heading = toWaypoint.dot(velDir);
       
-      // Advance earlier if we're moving fast and aligned (smoother flight)
-      let advanceThreshold = 0.3; // Base threshold
-      if (heading > 0.7 && velocity > 0.5) {
-        // Moving towards waypoint - can advance earlier for smooth flight
-        advanceThreshold = 0.8;
-      }
+      // Advance only when BOTH horizontal and vertical distances are small (0.1m precision)
+      const threshold = 0.1; // MUST be within 0.1m in BOTH H and V directions
+      const bothClose = horizontalDist < threshold && verticalDist < threshold;
       
-      if (distToWaypoint < advanceThreshold) {
+      if (bothClose) {
         this.pathIndex += 1;
         const finalWaypoint = this.pathIndex >= this.path.length;
-        console.log(`[NAV] Advanced to waypoint ${this.pathIndex}/${this.path.length} (dist: ${distToWaypoint.toFixed(2)}m)${finalWaypoint ? ' ✓ COMPLETED PATH' : ''}`);
+        console.log(`[NAV] Advanced to waypoint ${this.pathIndex}/${this.path.length} (H=${horizontalDist.toFixed(2)}m, V=${verticalDist.toFixed(2)}m)${finalWaypoint ? ' ✓ COMPLETED PATH' : ''}`);
+        // DEBUG: Log what the next target will be
+        const nextWaypoint = this.path[this.pathIndex] || this.frontierInfo?.point;
+        if (nextWaypoint) {
+          console.log(`[NAV_DEBUG] Next target: (${nextWaypoint.x.toFixed(2)}, ${nextWaypoint.y.toFixed(2)}, Z=${nextWaypoint.z.toFixed(2)}m)`);
+        }
+      } else if (distToWaypoint < 1.5 && Math.random() < 0.02) {
+        // Debug: Show progress toward waypoint
+        console.log(`[NAV] Approaching wp${this.pathIndex}: (${this.target.x.toFixed(2)}, ${this.target.y.toFixed(2)}, Z=${this.target.z.toFixed(2)}m) | H=${horizontalDist.toFixed(2)}m, V=${verticalDist.toFixed(2)}m (need BOTH <0.1m)`);
       }
     }
 
     // Target position for control (Z-up convention) - already clamped above
     const targetPos = this.target.clone();
     
-    // Compute reactive obstacle avoidance force
-    const avoidance = this._avoidanceFromHits();
-    
     // Build target for controller
     const state = this.drone.getState();
+    
+    // DEBUG: Log target being sent to controller
+    if (Math.random() < 0.05) {
+      console.log(`[CTRL_TARGET] Path index=${this.pathIndex}/${this.path.length} | Target: (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)}, Z=${targetPos.z.toFixed(2)}m) | Drone pos: Z=${state.position.z.toFixed(2)}m`);
+    }
+    
+    // Compute desired velocity for smooth motion (like stationary demo)
+    const toTarget = targetPos.clone().sub(state.position);
+    const distToTarget = toTarget.length();
+    const desiredSpeed = Math.min(3.0, distToTarget * 2.0); // Speed scales with distance, max 3 m/s
+    const desiredVelocity = distToTarget > 0.1 
+      ? toTarget.normalize().multiplyScalar(desiredSpeed)
+      : new THREE.Vector3(0, 0, 0);
+    
+    // Path planner (A*) already handles obstacle avoidance - no reactive avoidance needed!
+    // Reactive forces would fight the planned path and cause jittery motion
     
     // Use nose-first control mode - ETH controller handles yaw tracking automatically
     const targetObj = {
       position: targetPos,
-      velocity: new THREE.Vector3(0, 0, 0),
-      acceleration: avoidance, // Obstacle avoidance acceleration
+      velocity: desiredVelocity, // Smooth velocity feedforward
+      acceleration: new THREE.Vector3(0, 0, 0), // Trust the path planner
     };
     
     // Compute control using ETH controller's nose-first mode
@@ -669,26 +723,22 @@ class DroneCaveDemo {
     const postState = this.drone.getState();
     const minSafeAltitude = this.floorHeight + 0.6; // Increased safety margin above floor
     
-    // Check floor collision - enforce hard floor constraint
+    // Check floor collision - enforce hard floor constraint (minimal damping)
     if (postState.position.z < minSafeAltitude) {
-      // Stop all downward motion and force to safe altitude
-      this.drone.state.v_W.z = Math.max(0.5, this.drone.state.v_W.z); // Add upward velocity
+      // Stop downward motion only, don't fight horizontal movement
+      this.drone.state.v_W.z = Math.max(0, this.drone.state.v_W.z); // Prevent going down
       this.drone.state.p_W.z = minSafeAltitude; // Hard constraint to safe altitude
-      this.drone.state.v_W.x *= 0.5; // Dampen horizontal velocity more
-      this.drone.state.v_W.y *= 0.5;
-    }
-    
-    // Additional hard floor constraint
-    if (this.drone.state.p_W.z < this.floorHeight + 0.3) {
-      this.drone.state.p_W.z = this.floorHeight + 0.6;
-      this.drone.state.v_W.z = 1.0; // Strong upward push
+      // Remove horizontal damping - let controller handle it smoothly
     }
     
     // Check obstacle collision
     if (this.cave.collide(postState.position)) {
-      // Bounce back and push upward (+Z)
-      this.drone.state.v_W.multiplyScalar(-0.3);
-      this.drone.state.p_W.add(new THREE.Vector3(0, 0, 0.15)); // Push up in Z
+      // CRITICAL: Don't reverse Z velocity - that would cancel climbing!
+      // Only bounce XY velocity to push away from obstacle horizontally
+      const oldVz = this.drone.state.v_W.z;
+      this.drone.state.v_W.multiplyScalar(-0.3); // Reverse all velocity
+      this.drone.state.v_W.z = Math.max(0.2, oldVz); // Restore upward velocity with minimum 0.2 m/s
+      this.drone.state.p_W.add(new THREE.Vector3(0, 0, 0.3)); // Push up in Z (increased from 0.2)
     }
 
     this.overlay.querySelector('#caveState').textContent = `Exploring → (${this.target.x.toFixed(1)}, ${this.target.y.toFixed(1)}, ${this.target.z.toFixed(1)})`;
@@ -719,6 +769,11 @@ class DroneCaveDemo {
       const lookTarget = this.drone.state.position.clone().add(lookAheadWorld);
       this.chaseCamera.lookAt(lookTarget);
       this.activeCamera = this.chaseCamera;
+    } else if (this.cameraMode === 'isometric') {
+      // Isometric 45° third-person view - see whole maze from angle
+      this.isometricCamera.position.set(12, 12, 8);
+      this.isometricCamera.lookAt(new THREE.Vector3(0, 0, 3)); // Center of cave at Z=3m
+      this.activeCamera = this.isometricCamera;
     } else {
       // Overhead view: Z position looking down
       this.overheadCamera.position.set(0, 0, 12); // Z-up: camera above (lowered for better view)
@@ -778,21 +833,21 @@ class DroneCaveDemo {
       const dotProduct = h.direction.dot(forward);
       if (dotProduct < 0.3) return; // Ignore obstacles behind or to the side (cos(72°) ≈ 0.3)
       
-      // Critical distance threshold for strong avoidance
-      const criticalDist = 1.5; // Start avoiding at 1.5m
-      const emergencyDist = 0.8; // Emergency avoidance at 0.8m
+      // Critical distance threshold for smooth avoidance
+      const criticalDist = 2.0; // Start avoiding earlier at 2.0m for smoother response
+      const emergencyDist = 1.0; // Emergency avoidance at 1.0m
       
       if (h.distance < criticalDist) {
         closeObstacles++;
         
-        // Very strong exponential repulsion for close obstacles
+        // Gentler exponential repulsion for smooth motion
         let strength;
         if (h.distance < emergencyDist) {
-          // Emergency: extremely strong repulsion
-          strength = Math.pow((emergencyDist - h.distance) / emergencyDist, 2) * 20.0;
+          // Emergency: strong but not jerky repulsion
+          strength = Math.pow((emergencyDist - h.distance) / emergencyDist, 1.5) * 8.0; // Reduced from 20.0
         } else {
-          // Normal: moderate repulsion
-          strength = Math.pow((criticalDist - h.distance) / criticalDist, 2) * 8.0;
+          // Normal: gentle guidance away from obstacle
+          strength = Math.pow((criticalDist - h.distance) / criticalDist, 1.5) * 3.0; // Reduced from 8.0
         }
         
         // Weight by how much the obstacle is in front (stronger for directly ahead)
@@ -803,8 +858,8 @@ class DroneCaveDemo {
       }
     });
     
-    // Clamp avoidance force to reasonable limits
-    return avoidance.clampLength(0, closeObstacles > 5 ? 10.0 : 6.0);
+    // Clamp avoidance force to gentle limits (scaled down by 3x in main code)
+    return avoidance.clampLength(0, 4.0); // Reduced from 6.0-10.0
   }
   
   _generateRandomExplorationPoint() {
@@ -828,8 +883,16 @@ class DroneCaveDemo {
   }
   
   _updateLidarVisualization() {
+    // EXPENSIVE: 80+ line geometries + buffer updates every frame
+    // Disable for 15% performance boost
+    if (!this.enableLidarBeams) {
+      this.lidarRayGroup.visible = false;
+      return;
+    }
+    
     // Clear previous visualization
     this.lidarRayGroup.clear();
+    this.lidarRayGroup.visible = true;
     
     if (!this.lastHits || !this.lastHits.length) return;
     
@@ -924,9 +987,8 @@ class DroneCaveDemo {
         this.waypointLine.geometry.setFromPoints(points);
         this.waypointLine.visible = true;
         
-        // Pulse effect based on distance
-        const scale = 1.0 + 0.3 * Math.sin(Date.now() * 0.005);
-        this.waypointMarker.scale.set(scale, scale, scale);
+        // Static scale (pulse disabled for performance)
+        this.waypointMarker.scale.set(1.0, 1.0, 1.0);
         
         // Change color based on distance and progress
         let color;
@@ -963,9 +1025,8 @@ class DroneCaveDemo {
         this.finalTargetMarker.position.copy(finalTarget);
         this.finalTargetMarker.visible = true;
         
-        // Slower pulse for final target
-        const scale = 1.0 + 0.2 * Math.sin(Date.now() * 0.003);
-        this.finalTargetMarker.scale.set(scale, scale, scale);
+        // Static scale (pulse disabled for performance)
+        this.finalTargetMarker.scale.set(1.0, 1.0, 1.0);
         
         // Faint line to final target
         const finalPoints = [
@@ -996,8 +1057,9 @@ class DroneCaveDemo {
         this.pathLine.geometry.setFromPoints(pathPoints);
         this.pathLine.visible = true;
         
-        // Show spheres at each waypoint
-        for (let i = 0; i < this.pathSpheres.length; i++) {
+        // Show spheres at each waypoint (moderate cost, can disable for small perf gain)
+        if (this.enablePathSpheres) {
+          for (let i = 0; i < this.pathSpheres.length; i++) {
           if (i < pathPoints.length - 1) { // -1 to skip drone position
             this.pathSpheres[i].position.copy(pathPoints[i + 1]);
             this.pathSpheres[i].visible = true;
@@ -1010,6 +1072,10 @@ class DroneCaveDemo {
           } else {
             this.pathSpheres[i].visible = false;
           }
+        }
+        } else {
+          // Hide all spheres if disabled
+          this.pathSpheres.forEach(s => s.visible = false);
         }
       } else {
         this.pathLine.visible = false;

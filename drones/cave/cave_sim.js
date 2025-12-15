@@ -26,18 +26,18 @@ export class CaveSim {
       const pos = new THREE.Vector3(
         Math.cos(angle) * radius,  // X position
         Math.sin(angle) * radius,  // Y position
-        2                          // Z altitude (wall height center)
+        4.0                        // Z altitude (wall height center) - INCREASED from 2m to center taller walls
       );
       const rimMaterial = new THREE.MeshStandardMaterial({ 
         color: rockColors[i % rockColors.length], 
         roughness: 0.7 + Math.random() * 0.2,
         metalness: 0.05 
       });
-      // Wall dimensions: width (X/Y), depth (Y/X), height (Z)
-      const box = createBoxMesh(new THREE.Vector3(3, 0.6, 3.5), pos, rimMaterial);
+      // Wall dimensions: width (X/Y), depth (Y/X), height (Z) - INCREASED from 3.5m to 8.0m to match cave height
+      const box = createBoxMesh(new THREE.Vector3(3, 0.6, 8.0), pos, rimMaterial);
       box.rotation.z = -angle; // Rotate around Z axis to face center
       this.scene.add(box);
-      this._addObstacleBox(box, new THREE.Vector3(3, 0.6, 3.5));
+      this._addObstacleBox(box, new THREE.Vector3(3, 0.6, 8.0));
     }
 
     // Colored stalactites/columns - varied earth tones

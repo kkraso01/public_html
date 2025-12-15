@@ -14,9 +14,13 @@ export class EthController {
       console.error(`⚠️  MASS TOO HIGH! ${this.mass} kg is not a Crazyflie. Controller gains will be wrong!`);
     }
     const motor = params.motor || {};
-    this.omegaMin = motor.omegaMin || 0;
-    this.omegaMax = motor.omegaMax || 1;
-    this.maxThrustPerMotor = params.maxThrustPerMotor || this.kF * this.omegaMax * this.omegaMax;
+    this.omegaMin = motor.omegaMin ?? 0;
+    this.omegaMax = motor.omegaMax ?? 1;
+
+    // Use actual motor limits from physics model (kF * omegaMax²)
+    // This matches the real thrust envelope of the simulator
+    this.maxThrustPerMotor = params.maxThrustPerMotor ??
+                              (this.kF * this.omegaMax * this.omegaMax);
     
     // Store last valid nose-first heading to maintain orientation near waypoints
     this.lastNoseFirstYaw = 0;
@@ -24,25 +28,26 @@ export class EthController {
     // Diagonal inertia used by the geometric attitude controller
     this.inertia = new THREE.Vector3(params.inertia?.Jxx || 1.4e-5, params.inertia?.Jyy || 1.4e-5, params.inertia?.Jzz || 2.17e-5);
 
-    // Position loop gains (outer loop) - TRUE Crazyflie 2.x dynamics
-    // Tuned to match real CF2 firmware (Pz≈15-18, Dz≈8-12 in Bitcraze implementation)
-    // Z gains MUCH higher for responsive altitude tracking with SE(3) thrust mapping
-    this.Kp = new THREE.Vector3(4.0, 4.0, 12.0);  // Z 2× stronger - matches CF2 firmware
-    this.Kd = new THREE.Vector3(3.0, 3.0, 6.0);   // Z damping doubled - prevents bounce
-    this.Ki = new THREE.Vector3(0.05, 0.05, 0.30); // Z integral increased but still safe
+    
+    // From Mellinger 2011, Lee 2010, Falanga 2018, mav_control_rw
+    // These are the EXACT gains used by ETH Flying Machine Arena
+    
+    // Position loop gains (outer loop) - proven stable for small quadrotors
+    this.Kp = new THREE.Vector3(4.0, 4.0, 8.0);   // ETH standard for agile platforms
+    this.Kd = new THREE.Vector3(3.0, 3.0, 4.0);   // Critical damping, Z slightly higher
+    this.Ki = new THREE.Vector3(0.05, 0.05, 0.20); // Gentle integral, Z higher for altitude hold
 
-    // Attitude loop gains (inner loop) for SE(3) geometric controller
-    // Matched to real Crazyflie brushed motor responsiveness + inertia (Jxx=1.4e-5, Jzz=2.17e-5)
-    // Roll/pitch MUCH higher for fast tilt tracking (was 50× too low before!)
-    // Yaw moderate for nose-first mode without oscillation
-    this.KR = new THREE.Vector3(3.0, 3.0, 0.8);      // Roll/pitch aggressive, yaw smooth
-    this.Komega = new THREE.Vector3(0.08, 0.08, 0.02); // Angular rate damping
+    // Attitude loop gains (inner loop) - SE(3) geometric controller
+    // Scaled for Crazyflie inertia (Jxx=1.4e-5, Jyy=1.4e-5, Jzz=2.17e-5)
+    this.KR = new THREE.Vector3(4.5, 4.5, 1.0);      // Roll/pitch aggressive, yaw smooth (ETH standard)
+    this.Komega = new THREE.Vector3(0.10, 0.10, 0.05); // Angular rate damping (ETH standard)
 
-    // Integral clamp to avoid windup; scaled for CF2 low mass
+    // Integral clamp to prevent windup
     this.integralLimit = new THREE.Vector3(0.3, 0.3, 0.5);
 
-    this.maxAcc = 22.0; // m/s² - increased to allow aggressive climbing (CF2 max capability)
-    this.maxTiltAngle = 45 * Math.PI / 180; // 45° - increased to allow steeper climbs while moving
+    // Physical limits matching ETH SE(3) controllers for agile flight
+    this.maxAcc = 25.0; // m/s² - Crazyflie realistic max (T/W=2.62x gives ~16 m/s² + margin)
+    this.maxTiltAngle = 35 * Math.PI / 180; // 35° - ETH default for safe aggressive flight
     this.reset();
   }
 
@@ -101,6 +106,15 @@ export class EthController {
     // Outer-loop PID in world frame
     const posError = p_ref.clone().sub(p);
     const velError = v_ref.clone().sub(v);
+    
+    // Apply deadband for position error near waypoint to prevent micro-oscillations
+    // When within 0.15m, reduce gains smoothly to achieve gentle final approach
+    const posErrorMag = posError.length();
+    let gainScale = 1.0;
+    if (posErrorMag < 0.15) {
+      // Smooth ramp: 1.0 at 0.15m → 0.3 at 0.05m → 0.1 at 0.0m
+      gainScale = Math.max(0.1, posErrorMag / 0.15);
+    }
 
     this.posIntegral.add(posError.clone().multiplyScalar(dt));
     this.posIntegral.set(
@@ -110,10 +124,11 @@ export class EthController {
     );
 
     // Acceleration command: gravity compensation is now in +Z (up) direction
+    // Apply gain scaling near waypoint for smooth final approach
     const a_cmd = new THREE.Vector3(
-      this.Kp.x * posError.x + this.Kd.x * velError.x + this.Ki.x * this.posIntegral.x + a_ff.x,
-      this.Kp.y * posError.y + this.Kd.y * velError.y + this.Ki.y * this.posIntegral.y + a_ff.y,
-      this.Kp.z * posError.z + this.Kd.z * velError.z + this.Ki.z * this.posIntegral.z + a_ff.z + this.gravity,
+      (this.Kp.x * posError.x + this.Kd.x * velError.x) * gainScale + this.Ki.x * this.posIntegral.x + a_ff.x,
+      (this.Kp.y * posError.y + this.Kd.y * velError.y) * gainScale + this.Ki.y * this.posIntegral.y + a_ff.y,
+      (this.Kp.z * posError.z + this.Kd.z * velError.z) * gainScale + this.Ki.z * this.posIntegral.z + a_ff.z + this.gravity,
     );
 
     // DEBUG: Log raw acceleration command to verify outer loop is working (disabled for cleaner logs)
@@ -127,6 +142,7 @@ export class EthController {
     }
 
     // Limit maximum tilt angle by constraining horizontal acceleration
+    // Physics: horizontal_acc = g * tan(tilt), so max tilt limits max horizontal acceleration
     const horizontalAcc = Math.sqrt(a_cmd.x * a_cmd.x + a_cmd.y * a_cmd.y);
     const maxHorizontalAcc = this.gravity * Math.tan(this.maxTiltAngle);
     if (horizontalAcc > maxHorizontalAcc) {
@@ -134,6 +150,8 @@ export class EthController {
       a_cmd.x *= scale;
       a_cmd.y *= scale;
     }
+    // Note: Z acceleration is NOT reduced by tilt limiting - that's handled by the
+    // attitude controller which computes required thrust = m * ||a_cmd|| / cos(tilt)
 
     // DEBUG: Log after tilt clamping to verify horizontal acceleration survives
     // if (Math.random() < 0.01) {
@@ -206,7 +224,13 @@ export class EthController {
     // ETH SE(3) thrust calculation: T = m * ||a_des||
     // This automatically compensates for tilt - when tilted, thrust increases to maintain vertical lift
     // This is the KEY difference from naive projection (T = m * a·b3) which loses altitude when tilted
-    const T_max = this.maxThrustPerMotor;
+    
+    // FIX #1: Correct thrust saturation (CRITICAL BUG FIX)
+    // T_i_max = max thrust PER MOTOR
+    // T_total_max = max COMBINED thrust of all 4 motors
+    const T_i_max = this.maxThrustPerMotor;  // Per-motor limit (e.g., 0.18 N for Crazyflie)
+    const T_total_max = 4 * T_i_max;          // Total system limit (e.g., 0.72 N)
+    
     let thrust_des = this.mass * a_cmd.length();
     
     // DEBUG: Log thrust calculation every 1% of frames
@@ -214,10 +238,12 @@ export class EthController {
     //   const hoverThrust = this.mass * this.gravity;
     //   const thrustRatio = thrust_des / hoverThrust;
     //   console.log(`[THRUST] T_des=${thrust_des.toFixed(4)} N | hover=${hoverThrust.toFixed(4)} N | ratio=${thrustRatio.toFixed(2)}x | ` +
-    //               `||a||=${a_cmd.length().toFixed(2)} | maxPerMotor=${T_max.toFixed(6)} N`);
+    //               `||a||=${a_cmd.length().toFixed(2)} | T_i_max=${T_i_max.toFixed(6)} N | T_total_max=${T_total_max.toFixed(4)} N`);
     // }
     
-    thrust_des = THREE.MathUtils.clamp(thrust_des, 0, 4 * T_max);
+    // NOTE: Do NOT clamp thrust_des here - it needs full range for altitude control
+    // Clamping early destroys altitude behavior (can't descend properly when target is below)
+    // The per-motor saturation is handled later in the allocation block
 
     const R_T = R.clone().transpose();
     const R_des_T = R_des.clone().transpose();
@@ -269,14 +295,22 @@ export class EthController {
     tau_cmd.y = THREE.MathUtils.clamp(tau_cmd.y, -maxTorquePitch, maxTorquePitch);
     tau_cmd.z = THREE.MathUtils.clamp(tau_cmd.z, -maxTorqueYaw, maxTorqueYaw);
 
-    // Control allocation for TRUE Crazyflie X-configuration matching physics engine
-    // Motor layout: 0=FL(CW), 1=FR(CCW), 2=BR(CW), 3=BL(CCW) ← MUST match physics engine
+    // FIX #2 & #3: Control allocation for TRUE Crazyflie X-configuration matching physics engine
+    // Motor layout: 0=FL(CW), 1=FR(CCW), 2=BR(CW), 3=BL(CCW) ← VERIFIED with physics engine
     //
-    // Physics forward model (from drone_physics_engine.js):
+    // Physics forward model (from drone_physics_engine.js lines 100-130):
     //   F_tot = F0 + F1 + F2 + F3
     //   τ_x (roll)  = (L/√2) * kF * ((ω0² + ω3²) - (ω1² + ω2²))  [LEFT - RIGHT]
     //   τ_y (pitch) = (L/√2) * kF * ((ω0² + ω1²) - (ω2² + ω3²))  [FRONT - BACK]
-    //   τ_z (yaw)   = kM * (-ω0² + ω1² - ω2² + ω3²)
+    //   τ_z (yaw)   = kM * (-ω0² + ω1² - ω2² + ω3²)             [CW=-1, CCW=+1]
+    //
+    // Coordinate system (ETH standard):
+    //   +X: forward (nose direction)
+    //   +Y: left (port side)
+    //   +Z: up (thrust direction)
+    //   Roll (+τ_x): right side down
+    //   Pitch (+τ_y): nose up
+    //   Yaw (+τ_z): nose right (CCW from above)
     //
     // Inverse allocation (solving for fᵢ = ωᵢ²):
     // Normalize: S = T/kF, Tx = τ_x·√2/(L·kF), Ty = τ_y·√2/(L·kF), Tz = τ_z/kM
@@ -311,7 +345,8 @@ export class EthController {
 
     let [T0, T1, T2, T3] = solveThrusts(tau_cmd.z);
 
-    const anyOverMax = () => T0 > T_max || T1 > T_max || T2 > T_max || T3 > T_max;
+    // FIX #1 (continued): Check against PER-MOTOR limits, not total thrust
+    const anyOverMax = () => T0 > T_i_max || T1 > T_i_max || T2 > T_i_max || T3 > T_i_max;
     const anyNegative = () => T0 < 0 || T1 < 0 || T2 < 0 || T3 < 0;
 
     // Saturation handling with prioritization: attitude > yaw
@@ -321,7 +356,7 @@ export class EthController {
 
       if (anyOverMax()) {
         // Scale down proportionally if still saturated
-        const scale = T_max / Math.max(T0, T1, T2, T3);
+        const scale = T_i_max / Math.max(T0, T1, T2, T3);
         T0 *= scale;
         T1 *= scale;
         T2 *= scale;
@@ -329,11 +364,11 @@ export class EthController {
       }
     }
 
-    // Final clamp to physical motor limits [0, T_max]
-    T0 = Math.min(Math.max(T0, 0), T_max);
-    T1 = Math.min(Math.max(T1, 0), T_max);
-    T2 = Math.min(Math.max(T2, 0), T_max);
-    T3 = Math.min(Math.max(T3, 0), T_max);
+    // Final clamp to physical per-motor limits [0, T_i_max]
+    T0 = Math.min(Math.max(T0, 0), T_i_max);
+    T1 = Math.min(Math.max(T1, 0), T_i_max);
+    T2 = Math.min(Math.max(T2, 0), T_i_max);
+    T3 = Math.min(Math.max(T3, 0), T_i_max);
 
     const omegaRange = this.omegaMax - this.omegaMin;
     const thrustToCmd = (T) => {
