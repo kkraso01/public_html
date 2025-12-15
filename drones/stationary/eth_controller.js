@@ -21,6 +21,16 @@ export class EthController {
     // This matches the real thrust envelope of the simulator
     this.maxThrustPerMotor = params.maxThrustPerMotor ??
                               (this.kF * this.omegaMax * this.omegaMax);
+
+    // Log thrust envelope vs hover to verify descent authority
+    const Tmin_total = 4 * this.kF * this.omegaMin * this.omegaMin;
+    const Thover = this.mass * this.gravity;
+    if (!EthController._printedThrustLimits) {
+      console.log(
+        `[THRUST_LIMITS] Tmin_total=${Tmin_total.toFixed(6)} N | Thover=${Thover.toFixed(6)} N | ratio=${(Tmin_total / Thover).toFixed(3)}`
+      );
+      EthController._printedThrustLimits = true;
+    }
     
     // Store last valid nose-first heading to maintain orientation near waypoints
     this.lastNoseFirstYaw = 0;
@@ -49,6 +59,9 @@ export class EthController {
     this.maxAcc = 25.0; // m/s² - Crazyflie realistic max (T/W=2.62x gives ~16 m/s² + margin)
     this.maxTiltAngle = 35 * Math.PI / 180; // 35° - ETH default for safe aggressive flight
     this.reset();
+
+    // Logging throttles
+    this.lastCtrlZLog = 0;
   }
 
   reset() {
@@ -170,7 +183,15 @@ export class EthController {
     // }
     
     // Avoid upside-down ambiguity (thrust should point generally upward)
-    if (b3.z < 0) b3.negate();
+    if (b3.z < 0) {
+      console.warn(
+        '[B3_FLIP]',
+        'a_cmd=', a_cmd.toArray().map((v) => v.toFixed(3)),
+        'posErr.z=', posError.z.toFixed(3),
+        'velErr.z=', velError.z.toFixed(3)
+      );
+      b3.negate();
+    }
     
     // Desired heading in world frame (yaw) - body X should point this direction
     const b1_ref = new THREE.Vector3(Math.cos(yaw_des), Math.sin(yaw_des), 0);
@@ -232,6 +253,21 @@ export class EthController {
     const T_total_max = 4 * T_i_max;          // Total system limit (e.g., 0.72 N)
     
     let thrust_des = this.mass * a_cmd.length();
+
+    const now = performance.now?.() ?? Date.now();
+    if (now - this.lastCtrlZLog > 250) {
+      const Tmin_total = 4 * this.kF * this.omegaMin * this.omegaMin;
+      console.log(
+        '[CTRL_Z]',
+        'posErr.z=', posError.z.toFixed(3),
+        'velErr.z=', velError.z.toFixed(3),
+        'a_cmd.z=', a_cmd.z.toFixed(3),
+        '||a_cmd||=', a_cmd.length().toFixed(3),
+        'thrust_des=', thrust_des.toFixed(4),
+        'Tmin_total=', Tmin_total.toFixed(4)
+      );
+      this.lastCtrlZLog = now;
+    }
     
     // DEBUG: Log thrust calculation every 1% of frames
     // if (Math.random() < 0.01) {
@@ -627,3 +663,5 @@ export class EthController {
     };
   }
 }
+
+EthController._printedThrustLimits = false;
