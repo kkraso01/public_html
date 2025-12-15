@@ -639,6 +639,11 @@ class DroneCaveDemo {
     const minAltitude = this.floorHeight + 1.2; // Safety margin to prevent ground contact
     const maxAltitude = 7.0; // Increased to allow exploration of full cave height (walls are 8m)
 
+    if (!this.lastAltClampLog) {
+      this.lastAltClampLog = 0;
+      this.lastCtrlTargetLog = 0;
+    }
+
     const waypoint = this.path[this.pathIndex] || this.frontierInfo?.point || this.target;
     if (waypoint) {
       const rawWaypointZ = waypoint.z;
@@ -657,13 +662,15 @@ class DroneCaveDemo {
       const verticalDist = Math.abs(currentPos.z - this.target.z);
       const velocity = this.drone.state.velocity.length();
 
-      if (Math.random() < 0.05) {
+      const now = performance.now?.() ?? Date.now();
+      if (now - this.lastAltClampLog > 300) {
         console.log(
           '[ALT_CLAMP]',
           'waypoint.z=', rawWaypointZ.toFixed(2),
           'target.z=', this.target.z.toFixed(2),
           'current.z=', currentPos.z.toFixed(2)
         );
+        this.lastAltClampLog = now;
       }
       
       // Calculate if we're heading towards the waypoint
@@ -697,8 +704,10 @@ class DroneCaveDemo {
     const state = this.drone.getState();
     
     // DEBUG: Log target being sent to controller
-    if (Math.random() < 0.05) {
+    const now = performance.now?.() ?? Date.now();
+    if (now - this.lastCtrlTargetLog > 300) {
       console.log(`[CTRL_TARGET] Path index=${this.pathIndex}/${this.path.length} | Target: (${targetPos.x.toFixed(2)}, ${targetPos.y.toFixed(2)}, Z=${targetPos.z.toFixed(2)}m) | Drone pos: Z=${state.position.z.toFixed(2)}m`);
+      this.lastCtrlTargetLog = now;
     }
     
     // Compute desired velocity for smooth motion (like stationary demo)

@@ -25,9 +25,12 @@ export class EthController {
     // Log thrust envelope vs hover to verify descent authority
     const Tmin_total = 4 * this.kF * this.omegaMin * this.omegaMin;
     const Thover = this.mass * this.gravity;
-    console.log(
-      `[THRUST_LIMITS] Tmin_total=${Tmin_total.toFixed(6)} N | Thover=${Thover.toFixed(6)} N | ratio=${(Tmin_total / Thover).toFixed(3)}`
-    );
+    if (!EthController._printedThrustLimits) {
+      console.log(
+        `[THRUST_LIMITS] Tmin_total=${Tmin_total.toFixed(6)} N | Thover=${Thover.toFixed(6)} N | ratio=${(Tmin_total / Thover).toFixed(3)}`
+      );
+      EthController._printedThrustLimits = true;
+    }
     
     // Store last valid nose-first heading to maintain orientation near waypoints
     this.lastNoseFirstYaw = 0;
@@ -56,6 +59,9 @@ export class EthController {
     this.maxAcc = 25.0; // m/s² - Crazyflie realistic max (T/W=2.62x gives ~16 m/s² + margin)
     this.maxTiltAngle = 35 * Math.PI / 180; // 35° - ETH default for safe aggressive flight
     this.reset();
+
+    // Logging throttles
+    this.lastCtrlZLog = 0;
   }
 
   reset() {
@@ -248,7 +254,8 @@ export class EthController {
     
     let thrust_des = this.mass * a_cmd.length();
 
-    if (Math.random() < 0.02) {
+    const now = performance.now?.() ?? Date.now();
+    if (now - this.lastCtrlZLog > 250) {
       const Tmin_total = 4 * this.kF * this.omegaMin * this.omegaMin;
       console.log(
         '[CTRL_Z]',
@@ -259,6 +266,7 @@ export class EthController {
         'thrust_des=', thrust_des.toFixed(4),
         'Tmin_total=', Tmin_total.toFixed(4)
       );
+      this.lastCtrlZLog = now;
     }
     
     // DEBUG: Log thrust calculation every 1% of frames
@@ -655,3 +663,5 @@ export class EthController {
     };
   }
 }
+
+EthController._printedThrustLimits = false;
