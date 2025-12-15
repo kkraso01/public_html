@@ -34,6 +34,7 @@ export class EthController {
     
     // Store last valid nose-first heading to maintain orientation near waypoints
     this.lastNoseFirstYaw = 0;
+    this.lastValidHeading = new THREE.Vector3(1, 0, 0); // Stable fallback for heading projection
 
     // Diagonal inertia used by the geometric attitude controller
     this.inertia = new THREE.Vector3(params.inertia?.Jxx || 1.4e-5, params.inertia?.Jyy || 1.4e-5, params.inertia?.Jzz || 2.17e-5);
@@ -196,9 +197,18 @@ export class EthController {
     // Desired heading in world frame (yaw) - body X should point this direction
     const b1_ref = new THREE.Vector3(Math.cos(yaw_des), Math.sin(yaw_des), 0);
 
-    // Project b1_ref into the plane orthogonal to b3 to prevent Z leakage when the
-    // drone is heavily tilted. This keeps the thrust axis truly vertical in Z.
-    const b1_proj = b1_ref.clone().sub(b3.clone().multiplyScalar(b1_ref.dot(b3)));
+    // Robust Gram-Schmidt: project heading into plane orthogonal to thrust so R stays
+    // orthonormal even under aggressive tilt/yaw commands.
+    const projectHeading = (heading) => heading.clone().sub(b3.clone().multiplyScalar(heading.dot(b3)));
+
+    let b1_proj = projectHeading(b1_ref);
+
+    // If the heading is nearly parallel to thrust (projection collapses), reuse the
+    // last valid heading to preserve a consistent body frame.
+    if (b1_proj.lengthSq() < 1e-6) {
+      b1_proj = projectHeading(this.lastValidHeading);
+    }
+    b1_proj.normalize();
 
     // DEBUG: Check b1_ref computation
     if (Math.random() < 0.02) {
@@ -214,10 +224,11 @@ export class EthController {
       if (b2.lengthSq() < 1e-6) b2.set(1, 0, 0);
     }
     b2.normalize();
-    
+
     // Body X-axis: completes right-handed frame, guaranteed to point forward
     // b1 = b2 × b3 ensures X points in heading direction
     const b1 = new THREE.Vector3().crossVectors(b2, b3).normalize();
+    this.lastValidHeading.copy(b1);
 
     // DEBUG: Log b1, b2, b3 and yaw
     if (Math.random() < 0.01) {
