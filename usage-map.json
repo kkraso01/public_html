@@ -1,0 +1,108 @@
+{
+  "entrypoints": {
+    "home.html": {
+      "css": [
+        "inline",
+        "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"
+      ],
+      "js": [
+        "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4",
+        "https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js",
+        "viewport-observer.js",
+        "shared_bus.js",
+        "background.js",
+        "rag_pipeline.js",
+        "system_status.js",
+        "system_plugins.js",
+        "system_orchestrator.js",
+        "llm_viz.js",
+        "attention.js",
+        "line-follower/line_following.js",
+        "maze-solver/maze.js",
+        "maze-solver/solver.js",
+        "maze-solver/lpa-solver.js",
+        "maze-solver/motion-profile.js",
+        "maze-solver/path-planner-oblique.js",
+        "maze-solver/maze-explorer.js",
+        "maze-solver/path-planner.js",
+        "maze-solver/advanced-renderer.js",
+        "maze-solver/view.js",
+        "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "drones/race/drone_race_demo.js",
+        "drone-sim/ui/main_demo.js"
+      ],
+      "assets": [
+        "line-follower/ROBOT.png",
+        "KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf"
+      ]
+    },
+    "new/index.html": {
+      "css": ["new/hallucination.css"],
+      "js": ["new/dream.js"],
+      "assets": []
+    },
+    "drones/stationary/stationary_test.html": {
+      "css": ["inline"],
+      "js": [
+        "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+        "drones/stationary/stationary_test.js"
+      ],
+      "assets": []
+    }
+  },
+  "dependencies": {
+    "drones/stationary/stationary_test.js": [
+      "drones/physics/drone_physics_engine.js",
+      "drones/physics/params_crazyflie.js",
+      "drones/stationary/stationary_controller.js"
+    ],
+    "drones/stationary/stationary_controller.js": [
+      "drones/stationary/eth_controller.js"
+    ],
+    "drones/race/drone_race_demo.js": [
+      "drones/physics/drone_physics_engine.js",
+      "drones/physics/params_crazyflie.js",
+      "drones/race/race_controller.js",
+      "drones/race/track.js",
+      "drones/race/trajectory_optimizer.js",
+      "drones/race/race_ui_controller.js",
+      "drones/race/unified_hud.js"
+    ],
+    "drones/race/race_controller.js": [
+      "drones/stationary/eth_controller.js"
+    ],
+    "drones/race/race_ui_controller.js": [
+      "drones/race/race_controls_html.js",
+      "drones/race/unified_hud.js"
+    ],
+    "drone-sim/ui/main_demo.js": [
+      "drones/cave/drone_cave_demo.js",
+      "drones/obstacles/obstacle_sim.js"
+    ],
+    "drones/cave/drone_cave_demo.js": [
+      "drones/physics/drone_physics_engine.js",
+      "drones/physics/params_crazyflie.js",
+      "drones/stationary/eth_controller.js",
+      "drones/cave/cave_sim.js",
+      "drones/cave/lidar.js",
+      "drones/cave/mapping.js",
+      "drones/cave/tsdf_volume.js",
+      "drones/cave/icp_odometry.js",
+      "drones/cave/nbv.js"
+    ],
+    "drones/cave/icp_odometry.js": [
+      "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+    ],
+    "drones/cave/tsdf_volume.js": [
+      "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+    ],
+    "drones/cave/nbv.js": [
+      "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+    ],
+    "drones/obstacles/obstacle_sim.js": [
+      "drones/physics/drone_physics_engine.js",
+      "drones/obstacles/obstacle_manager.js",
+      "drones/obstacles/draggable_controls.js"
+    ]
+  }
+}
