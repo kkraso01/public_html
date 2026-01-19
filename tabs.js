@@ -1,7 +1,7 @@
 /**
  * Workspace Tabs System
- * Browser/IDE-style vertical tabs for organizing portfolio content
- * Preserves neon-lab aesthetic with smooth transitions
+ * Browser-style horizontal tabs for organizing portfolio content
+ * Positioned below hero, with keyboard navigation support
  */
 
 (function () {
@@ -25,6 +25,9 @@
 
     activeWorkspace = workspace;
     localStorage.setItem(STORAGE_KEY, workspace);
+
+    // Update body data attribute for potential canvas guards
+    document.body.dataset.workspace = workspace;
 
     // Update tab button states
     document.querySelectorAll('[data-tab]').forEach((tab) => {
@@ -59,13 +62,41 @@
       window.dispatchEvent(new Event('resize'));
     }, 100);
 
-    // Scroll to top of new workspace smoothly
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Scroll to tab bar smoothly
+    const tabBar = document.querySelector('.workspace-tabs-container');
+    if (tabBar) {
+      const offset = tabBar.offsetTop + tabBar.offsetHeight;
+      window.scrollTo({ top: offset, behavior: 'smooth' });
+    }
   }
 
   // Switch to a different workspace
   function switchWorkspace(workspace) {
     applyWorkspace(workspace);
+  }
+
+  // Keyboard navigation (Arrow Left/Right)
+  function handleKeyboardNav(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    
+    // Don't interfere with input fields
+    const activeTag = document.activeElement?.tagName?.toLowerCase();
+    if (activeTag === 'input' || activeTag === 'textarea') return;
+
+    const currentIndex = workspaces.indexOf(activeWorkspace);
+    let newIndex;
+
+    if (e.key === 'ArrowLeft') {
+      newIndex = currentIndex > 0 ? currentIndex - 1 : workspaces.length - 1;
+    } else {
+      newIndex = currentIndex < workspaces.length - 1 ? currentIndex + 1 : 0;
+    }
+
+    switchWorkspace(workspaces[newIndex]);
+    
+    // Focus the newly active tab
+    const activeTab = document.querySelector(`[data-tab="${workspaces[newIndex]}"]`);
+    if (activeTab) activeTab.focus();
   }
 
   // Initialize on DOM ready
@@ -78,6 +109,9 @@
         switchWorkspace(workspace);
       });
     });
+
+    // Add keyboard navigation
+    document.addEventListener('keydown', handleKeyboardNav);
 
     // Apply initial workspace
     applyWorkspace(activeWorkspace);
