@@ -422,6 +422,108 @@
       margin-top: 8px;
       border-radius: 4px;
     }
+
+    /* Workspace Tabs (Vertical Browser-Style Rail) */
+    .workspace-rail {
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px 12px;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.75) 100%);
+      backdrop-filter: blur(12px);
+      border-radius: 0 16px 16px 0;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-left: none;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      opacity: 0.3;
+      transition: opacity 0.3s ease;
+    }
+
+    .workspace-rail:hover,
+    .workspace-rail:focus-within {
+      opacity: 1;
+    }
+
+    .workspace-rail-label {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(129, 140, 248, 0.7);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .workspace-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: linear-gradient(120deg, rgba(15, 23, 42, 0.7), rgba(51, 65, 85, 0.4));
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #cbd5e1;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      text-decoration: none;
+    }
+
+    .workspace-tab:hover {
+      border-color: rgba(129, 140, 248, 0.7);
+      background: linear-gradient(120deg, rgba(30, 58, 138, 0.6), rgba(67, 56, 202, 0.4));
+      transform: translateX(4px);
+    }
+
+    .workspace-tab.active {
+      border-color: rgba(129, 140, 248, 1);
+      background: linear-gradient(135deg, rgba(79, 70, 229, 0.9) 0%, rgba(99, 102, 241, 0.8) 100%);
+      color: #e0e7ff;
+      box-shadow: 0 0 24px rgba(129, 140, 248, 0.5), 0 8px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .workspace-hidden {
+      display: none !important;
+    }
+
+    /* Mobile: Horizontal tabs at top */
+    @media (max-width: 768px) {
+      .workspace-rail {
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
+        transform: none;
+        flex-direction: row;
+        justify-content: center;
+        padding: 12px 16px;
+        border-radius: 0;
+        border: none;
+        border-bottom: 1px solid rgba(99, 102, 241, 0.4);
+        opacity: 1;
+        z-index: 100;
+      }
+
+      .workspace-rail-label {
+        display: none;
+      }
+
+      .workspace-tab {
+        font-size: 12px;
+        padding: 8px 12px;
+      }
+
+      .workspace-tab:hover {
+        transform: translateX(0) translateY(-2px);
+      }
+    }
   </style>
 </head>
 
@@ -443,25 +545,22 @@
     </div>
   </div> -->
 
-  <!-- Side Navigation (Command Links) -->
-  <nav class="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-3 hud-nav">
-    <div class="text-[11px] tracking-[0.3em] text-indigo-300/80 uppercase mb-2">Command</div>
-    <a href="#research-systems" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Research Systems
-      <span class="text-[11px] text-indigo-300/80 ml-2">⌥1</span></a>
-    <a href="#playful-demos" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Playful Demos
-      <span class="text-[11px] text-indigo-300/80 ml-2">⌥2</span></a>
-    <a href="#maze-solver" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Maze Solver
-      <span class="text-[11px] text-indigo-300/80 ml-2">⌥3</span></a>
-    <a href="#drone-race" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Drone Race
-      <span class="text-[11px] text-indigo-300/80 ml-2">⌥4</span></a>
-    <a href="drones/stationary/stationary_test.html" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Stability Demo
-      <span class="text-[11px] text-indigo-300/80 ml-2">⌥S</span></a>
-    <a href="#projects" class="nav-link px-4 py-2 rounded-xl text-sm text-gray-100">Projects
-      <span class="text-[11px] text-indigo-300/80 ml-2">⌥5</span></a>
+  <!-- Workspace Tab Rail (Browser-Style Vertical Tabs) -->
+  <nav class="workspace-rail" aria-label="Workspace Navigation">
+    <div class="workspace-rail-label">Workspaces</div>
+    <button class="workspace-tab" data-tab="llm" aria-selected="false" role="tab">
+      LLM Systems
+    </button>
+    <button class="workspace-tab" data-tab="autonomy" aria-selected="false" role="tab">
+      Autonomy Lab
+    </button>
+    <button class="workspace-tab" data-tab="profile" aria-selected="false" role="tab">
+      Profile
+    </button>
   </nav>
 
-  <!-- Hero -->
-  <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in">
+  <!-- Hero (visible in all workspaces) -->
+  <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in" data-workspace="llm" data-workspace-shared="true">
     <div class="max-w-3xl">
       <div id="system-status" class="text-xs text-indigo-300 mb-4 tracking-widest opacity-80">
         NODE STATUS: <span id="sys-state">ACTIVE</span> •
@@ -495,7 +594,7 @@
   </section>
 
   <!-- Research-First Systems -->
-  <section id="research-systems" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <section id="research-systems" data-workspace="llm" class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
       <p class="mission-brief text-indigo-300/80">Mission: Showcase production-grade, research-led LLM systems.</p>
       <h2 class="text-3xl font-bold">Industry-Lean Research Systems</h2>
@@ -582,7 +681,7 @@
   </section>
 
   <!-- Playful Lab -->
-  <section id="playful-demos" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <section id="playful-demos" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
       <p class="mission-brief text-indigo-300/80">Mission: A playful robotics demo that reuses the HUD + metrics fabric.
       </p>
@@ -761,7 +860,7 @@
   </section>
 
   <!-- Maze Solver Section -->
-  <section id="maze-solver" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <section id="maze-solver" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
       <p class="mission-brief text-indigo-300/80">Mission: Autonomous pathfinding and maze exploration algorithms.</p>
       <h2 class="text-3xl font-bold">Maze Solver: Micromouse Challenge</h2>
@@ -808,7 +907,7 @@
   </section>
 
   <!-- Drone Demos Section -->
-  <section id="drone-race" data-nav-section class="py-20 px-6 relative max-w-6xl mx-auto">
+  <section id="drone-race" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
     <!-- Drone Race Demo -->
     <div class="flex flex-col gap-3 mb-10">
       <p class="mission-brief text-indigo-300/80">Mission: Autonomous racing intelligence and flight control.</p>
@@ -816,6 +915,12 @@
       <p class="text-gray-400 max-w-3xl">
         A suite of autonomous flight demonstrations featuring racing intelligence, LiDAR-based cave exploration, and obstacle avoidance. Each demo showcases different aspects of drone control, perception, and autonomous decision-making.
       </p>
+      <div class="mt-4">
+        <a href="drones/stationary/stationary_test.html" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/30 hover:border-indigo-400 transition-colors text-sm">
+          <span>🎯</span>
+          <span>Hover Stability Demo (ETH Controller)</span>
+        </a>
+      </div>
     </div>
 
     <!-- Drone Race Demo -->
@@ -977,7 +1082,7 @@
   </section>
 
   <!-- About -->
-  <section id="about" class="max-w-4xl mx-auto py-20 px-6 relative">
+  <section id="about" data-workspace="profile" class="max-w-4xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-6">About Me</h2>
     
     <!-- Full narrative (default) -->
@@ -992,8 +1097,9 @@
       </p>
       <p class="text-gray-300 leading-relaxed mb-6">
         Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
-        infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration). The
-        <span class="text-indigo-400">robotics and autonomy projects</span> on this site are
+        infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration).
+        <span class="text-indigo-400">I build and test systems under constraints: latency, cost, reliability, and observability.</span>
+        The <span class="text-indigo-400">robotics and autonomy projects</span> on this site are
         <span class="text-indigo-400">simulation-first hobby work</span> — not formal coursework — demonstrating
         my interest in perception-to-control loops, planning, and physics-based systems.
       </p>
@@ -1073,10 +1179,10 @@
       </div>
     </div>
 
-    <!-- Graduate Focus (Applied) -->
+    <!-- Core AI Competencies -->
     <div class="mt-12 pt-8 border-t border-gray-700">
-      <h3 class="text-xl font-semibold mb-4 text-indigo-300">Graduate Focus (Applied)</h3>
-      <p class="text-gray-400 text-sm mb-6">Skills developed through advanced AI coursework, framed as deployment-ready capabilities.</p>
+      <h3 class="text-xl font-semibold mb-4 text-indigo-300">Core AI Competencies</h3>
+      <p class="text-gray-400 text-sm mb-6">Advanced capabilities spanning NLP, vision, ethics, and production-oriented system design.</p>
       <ul class="space-y-2 text-gray-300 text-sm">
         <li>• <strong>Design</strong> transformer-based NLP systems with attention to bias, robustness, and failure modes</li>
         <li>• <strong>Evaluate</strong> language models for societal impact: misinformation detection, hate speech classification, grounding accuracy</li>
@@ -1091,7 +1197,7 @@
   </section>
 
   <!-- Skills -->
-  <section id="skills" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 relative">
+  <section id="skills" data-workspace="profile" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 relative">
     <div class="max-w-4xl mx-auto">
       <h2 class="text-3xl font-bold mb-8">Technical Skills</h2>
 
@@ -1151,7 +1257,7 @@
   </section>
 
   <!-- Professional Experience -->
-  <section id="experience" class="max-w-5xl mx-auto py-20 px-6 relative">
+  <section id="experience" data-workspace="profile" class="max-w-5xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-10">Professional Experience</h2>
     <div class="space-y-8">
 
@@ -1197,7 +1303,7 @@
   </section>
 
   <!-- Projects -->
-  <section id="projects" data-nav-section class="max-w-5xl mx-auto py-20 px-6 relative">
+  <section id="projects" data-workspace="llm" class="max-w-5xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-10">Featured Projects</h2>
     <div class="grid md:grid-cols-2 gap-8">
       <!-- Project Card -->
@@ -1244,7 +1350,7 @@
   </section>
 
   <!-- Contact -->
-  <section id="contact" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 text-center relative">
+  <section id="contact" data-workspace="profile" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 text-center relative">
     <h2 class="text-3xl font-bold mb-6">Get in Touch</h2>
     <p class="text-gray-400 mb-6">
       Let's collaborate on AI research, software engineering, or innovative systems projects.
@@ -1265,7 +1371,7 @@
   </section>
 
   <!-- Education & Recognition -->
-  <section id="education" class="max-w-4xl mx-auto py-20 px-6 relative">
+  <section id="education" data-workspace="profile" class="max-w-4xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-10">Education &amp; Recognition</h2>
 
     <div class="mb-8">
@@ -1315,6 +1421,7 @@
   <!-- External JS for Background Animation -->
   <!-- Disabled old animations - using maze-solver instead -->
   <script src="recruiter_mode.js"></script>
+  <script src="tabs.js"></script>
   <script src="viewport-observer.js"></script>
   <script src="shared_bus.js"></script>
   <script src="background.js"></script>
@@ -1347,53 +1454,6 @@
   <script type="module" src="drone-sim/ui/main_demo.js"></script>
 
   <script>
-    // Navigation & interaction helpers
-    const navLinks = Array.from(document.querySelectorAll('.nav-link'));
-    const sections = Array.from(document.querySelectorAll('[data-nav-section]'));
-
-    const shortcutMap = new Map([
-      ['1', '#research-systems'],
-      ['2', '#playful-demos'],
-      ['3', '#maze-solver'],
-      ['4', '#drone-race'],
-      ['5', '#projects']
-    ]);
-
-    const activateLink = (id) => {
-      navLinks.forEach((link) => {
-        const target = link.getAttribute('href').replace('#', '');
-        link.classList.toggle('active', target === id);
-      });
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          activateLink(entry.target.id);
-        }
-      });
-    }, { threshold: 0.4 });
-
-    sections.forEach((section) => observer.observe(section));
-
-    // Keyboard shortcuts for quick navigation
-    document.addEventListener('keydown', (event) => {
-      if (!event.altKey || event.ctrlKey || event.metaKey) return;
-
-      const activeTag = document.activeElement?.tagName?.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea') return;
-
-      const targetSelector = shortcutMap.get(event.key);
-      if (!targetSelector) return;
-
-      const target = document.querySelector(targetSelector);
-      if (target) {
-        event.preventDefault();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        activateLink(target.id);
-      }
-    });
-
     // Fade interaction cues after first engagement
     const cueBadges = document.querySelectorAll('.cue-badge');
     cueBadges.forEach((badge) => {
