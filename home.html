@@ -357,6 +357,71 @@
     #maze-controls .checkbox-option:hover {
       background-color: rgba(99, 102, 241, 0.1);
     }
+
+    /* Recruiter Mode Styling */
+    body.recruiter-mode [data-recruiter="full"] {
+      display: none;
+    }
+
+    body:not(.recruiter-mode) [data-recruiter="summary"] {
+      display: none;
+    }
+
+    #recruiter-mode-toggle {
+      font-size: 0.75rem;
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(8px);
+    }
+
+    #recruiter-mode-toggle:hover {
+      border-color: rgba(129, 140, 248, 0.8);
+      background: rgba(79, 70, 229, 0.3);
+    }
+
+    .system-layer {
+      background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 12px;
+      padding: 12px 16px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .system-layer:hover {
+      border-color: rgba(129, 140, 248, 0.5);
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.15);
+    }
+
+    .layer-anchors a {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(79, 70, 229, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+      color: #a5b4fc;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .layer-anchors a:hover {
+      background: rgba(79, 70, 229, 0.3);
+      border-color: rgba(129, 140, 248, 0.6);
+    }
+
+    .industry-callout {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      background: rgba(15, 23, 42, 0.4);
+      border-left: 2px solid rgba(129, 140, 248, 0.5);
+      padding: 8px 12px;
+      margin-top: 8px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 
@@ -410,21 +475,21 @@
         Konstantin Krasovitskiy
       </h1>
       <p class="text-lg md:text-xl text-gray-300 mb-8">
-        MSc Artificial Intelligence &middot; AI Researcher &middot; QA & Systems Engineer
+        LLM Systems / Applied AI Engineer &middot; AI Systems & Reliability &middot; Simulation-First Autonomy (Hobby)
       </p>
       <div class="flex flex-wrap justify-center gap-4">
         <a href="#projects" class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
           View Projects
         </a>
-        <!-- Dont use this  -->
-        <!-- <a href="new/index.html"
-           class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
-          Dive In
-        </a> -->
         <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf"
           class="glass-outline px-6 py-3 border border-gray-500 rounded-full hover:bg-gray-800 transition-colors">
           Download CV
         </a>
+      </div>
+      <div class="mt-6">
+        <button id="recruiter-mode-toggle" aria-pressed="false">
+          Recruiter Mode: OFF
+        </button>
       </div>
     </div>
   </section>
@@ -451,6 +516,9 @@
           <h3 class="text-2xl font-semibold">RAG Mesh &amp; Context Flow</h3>
           <p class="text-gray-400">A clean view of the Retrieval-Augmented Generation (RAG) pipeline and how
             context moves through the system.</p>
+          <div class="industry-callout">
+            <strong>Industry relevance:</strong> Retrieval QA, chunking strategies, context grounding, hallucination reduction for production LLM systems.
+          </div>
         </div>
         <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
       </article>
@@ -464,6 +532,9 @@
           <h3 class="text-2xl font-semibold">Multi-LLM Orchestrator</h3>
           <p class="text-gray-400">Router-dispatch visualization showing vector DB lookups, model selection,
             and merge policies under latency/cost constraints.</p>
+          <div class="industry-callout">
+            <strong>Industry relevance:</strong> Router policies, cost/latency optimization, evaluation harness design, multi-model scoring and merge strategies.
+          </div>
         </div>
         <canvas id="orchestratorCanvas"
           class="w-full h-[320px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
@@ -480,6 +551,9 @@
           <h3 class="text-2xl font-semibold">Transformer Core Internals</h3>
           <p class="text-gray-400">Embeddings → multi-head attention → residual paths → logits, rendered with
             the same live metrics used across the portfolio.</p>
+          <div class="industry-callout">
+            <strong>Industry relevance:</strong> Debugging attention/residual flow dynamics, interpretability for transformer architectures, conceptual model introspection.
+          </div>
         </div>
         <canvas id="llm-viz" class="w-full h-[360px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
       </article>
@@ -493,6 +567,9 @@
           <h3 class="text-2xl font-semibold">Semantic Attention Map</h3>
           <p class="text-gray-400">Parallel attention heads computing token relationships and convergence
             patterns — the research signal that informs tuning.</p>
+          <div class="industry-callout">
+            <strong>Industry relevance:</strong> Interpretability insights, attention head behavior analysis, debugging multi-head attention convergence for production models.
+          </div>
         </div>
         <canvas id="attentionCanvas"
           class="w-full h-[300px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
@@ -902,18 +979,115 @@
   <!-- About -->
   <section id="about" class="max-w-4xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-6">About Me</h2>
-    <p class="text-gray-300 leading-relaxed mb-6">
-      I am an MSc Artificial Intelligence student at the University of Cyprus with research expertise in
-      <span class="text-indigo-400">multi-model LLM systems</span>,
-      <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
-      <span class="text-indigo-400">scalable AI architectures</span>.
-      Professionally, I bring hands-on experience in software engineering, QA automation, DevOps, and research
-      deployment.
-    </p>
-    <p class="text-gray-300 leading-relaxed">
-      My background spans full-stack development, infrastructure management, and collaborative research environments.
-      I focus on building maintainable systems, clear communication, and robust documentation.
-    </p>
+    
+    <!-- Full narrative (default) -->
+    <div data-recruiter="full">
+      <p class="text-gray-300 leading-relaxed mb-6">
+        I design end-to-end <span class="text-indigo-400">AI systems</span> that bridge research and production constraints.
+        My work centers on <span class="text-indigo-400">LLM orchestration</span>,
+        <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
+        <span class="text-indigo-400">multi-model routing</span> — systems that balance latency, cost, and accuracy
+        at scale. I approach AI with a <span class="text-indigo-400">reliability mindset</span>: monitoring, evaluation,
+        failure modes, and deployment tradeoffs are first-class concerns.
+      </p>
+      <p class="text-gray-300 leading-relaxed mb-6">
+        Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
+        infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration). The
+        <span class="text-indigo-400">robotics and autonomy projects</span> on this site are
+        <span class="text-indigo-400">simulation-first hobby work</span> — not formal coursework — demonstrating
+        my interest in perception-to-control loops, planning, and physics-based systems.
+      </p>
+      <p class="text-gray-300 leading-relaxed font-semibold">
+        I build AI as systems, not just models.
+      </p>
+    </div>
+
+    <!-- Recruiter Mode summary -->
+    <div data-recruiter="summary">
+      <ul class="space-y-3 text-gray-300">
+        <li>✦ <strong>LLM Systems Engineer</strong>: Multi-model orchestration, RAG pipelines, vector databases, latency/cost optimization</li>
+        <li>✦ <strong>Applied AI & Reliability</strong>: Evaluation harnesses, monitoring, failure mode analysis, deployment constraints</li>
+        <li>✦ <strong>Backend & Infrastructure</strong>: Python APIs, Docker, CI/CD, Linux, QA automation (Playwright, Selenium, K6)</li>
+        <li>✦ <strong>Research Deployment</strong>: Local LLM hosting, ChromaDB integration, lab infrastructure support</li>
+        <li>✦ <strong>Simulation & Autonomy (Hobby)</strong>: Perception, planning, control loops — demonstrated via interactive projects</li>
+      </ul>
+      <p class="text-gray-300 leading-relaxed font-semibold mt-6">
+        I build AI as systems, not just models.
+      </p>
+    </div>
+
+    <!-- System Layers micro-section -->
+    <div class="mt-12 pt-8 border-t border-gray-700">
+      <h3 class="text-xl font-semibold mb-4 text-indigo-300">System Layers</h3>
+      <p class="text-gray-400 text-sm mb-6">How this portfolio maps system-level AI thinking to interactive demonstrations.</p>
+      <div class="space-y-3">
+        <div class="system-layer">
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="text-sm font-semibold text-gray-200">Learning</h4>
+            <div class="layer-anchors flex gap-2">
+              <a href="#llm-viz">Transformer</a>
+              <a href="#attentionCanvas">Attention</a>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">Representation, attention mechanisms, token flow dynamics</p>
+        </div>
+        <div class="system-layer">
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="text-sm font-semibold text-gray-200">Retrieval</h4>
+            <div class="layer-anchors flex gap-2">
+              <a href="#ragCanvas">RAG Mesh</a>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">Context grounding, chunking strategies, hallucination reduction</p>
+        </div>
+        <div class="system-layer">
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="text-sm font-semibold text-gray-200">Orchestration</h4>
+            <div class="layer-anchors flex gap-2">
+              <a href="#orchestratorCanvas">Multi-LLM Router</a>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">Model selection, cost/latency routing, merge policies</p>
+        </div>
+        <div class="system-layer">
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="text-sm font-semibold text-gray-200">Interaction</h4>
+            <div class="layer-anchors flex gap-2">
+              <a href="#playful-demos">Line Follower</a>
+              <a href="#maze-solver">Maze</a>
+              <a href="#drone-race">Drones</a>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">Human-centered design, adaptive behavior, real-time feedback loops</p>
+        </div>
+        <div class="system-layer">
+          <div class="flex justify-between items-start mb-2">
+            <h4 class="text-sm font-semibold text-gray-200">Trust</h4>
+            <div class="layer-anchors flex gap-2">
+              <a href="#skills">Reliability</a>
+              <a href="#experience">QA</a>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">Testing, observability, interpretability, deployment safety</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Graduate Focus (Applied) -->
+    <div class="mt-12 pt-8 border-t border-gray-700">
+      <h3 class="text-xl font-semibold mb-4 text-indigo-300">Graduate Focus (Applied)</h3>
+      <p class="text-gray-400 text-sm mb-6">Skills developed through advanced AI coursework, framed as deployment-ready capabilities.</p>
+      <ul class="space-y-2 text-gray-300 text-sm">
+        <li>• <strong>Design</strong> transformer-based NLP systems with attention to bias, robustness, and failure modes</li>
+        <li>• <strong>Evaluate</strong> language models for societal impact: misinformation detection, hate speech classification, grounding accuracy</li>
+        <li>• <strong>Implement</strong> computer vision pipelines: detection, segmentation, reconstruction, generative models</li>
+        <li>• <strong>Integrate</strong> vision transformers and multi-modal architectures for graphics and perception tasks</li>
+        <li>• <strong>Audit</strong> AI systems for fairness, transparency, accountability, and explainability</li>
+        <li>• <strong>Navigate</strong> governance and compliance considerations for production AI deployment</li>
+        <li>• <strong>Prototype</strong> MVP systems with business model awareness and disciplined tradeoff analysis</li>
+        <li>• <strong>Communicate</strong> research findings through peer review, technical writing, and mathematical rigor</li>
+      </ul>
+    </div>
   </section>
 
   <!-- Skills -->
@@ -923,44 +1097,53 @@
 
       <div class="grid md:grid-cols-2 gap-8 mb-8">
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Backend & Web</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">LLM Systems & Retrieval</h3>
           <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Python (Flask/FastAPI)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">JavaScript</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">REST APIs</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Microservices</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">HTML5 &amp; CSS3</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Multi-Model Orchestration</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">RAG Pipelines</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vector Databases (ChromaDB)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Embedding Systems</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Prompt Engineering</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Latency/Cost Optimization</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">LLM Evaluation</span>
           </div>
         </div>
 
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">QA &amp; Automation</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI Engineering & Reliability</h3>
           <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Testing & QA Automation</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Playwright (C#)</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Selenium (Java)</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">K6 Performance Testing</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Test Design</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Observability Mindset</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Failure Mode Analysis</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Reproducibility</span>
           </div>
         </div>
 
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Infrastructure &amp; DevOps</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Backend & Infrastructure</h3>
           <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Docker &amp; Docker Swarm</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Linux &amp; Bash</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">VM Provisioning</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Python (Flask/FastAPI)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">REST APIs</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Microservices</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Docker & Docker Swarm</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Linux & Bash</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">CI/CD</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Nginx &amp; Apache</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SQL</span>
           </div>
         </div>
 
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI &amp; Data</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Perception & Simulation (Hobby)</h3>
           <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">LLMs &amp; RAG</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">ChromaDB</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SQL</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vector Databases</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Computer Vision Pipelines</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SLAM & Mapping</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Physics-Based Simulation</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Control Systems</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Three.js</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Canvas API</span>
           </div>
         </div>
       </div>
@@ -1131,6 +1314,7 @@
 
   <!-- External JS for Background Animation -->
   <!-- Disabled old animations - using maze-solver instead -->
+  <script src="recruiter_mode.js"></script>
   <script src="viewport-observer.js"></script>
   <script src="shared_bus.js"></script>
   <script src="background.js"></script>
