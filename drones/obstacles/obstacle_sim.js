@@ -211,7 +211,19 @@ class ObstacleDropDemo {
   }
 
   _loop(timestamp) {
-    if (this.userPaused || this.visibilityPaused) return;
+    // Early exit if paused or if parent section is in hidden workspace
+    if (this.userPaused || this.visibilityPaused) {
+      this._frameReq = requestAnimationFrame((t) => this._loop(t));
+      return;
+    }
+    
+    // Check if autonomy workspace is active (obstacle demo is in autonomy workspace)
+    const activeWorkspace = document.body.dataset.workspace;
+    if (activeWorkspace && activeWorkspace !== 'autonomy') {
+      this._frameReq = requestAnimationFrame((t) => this._loop(t));
+      return;
+    }
+    
     if (this.lastFrame === null) this.lastFrame = timestamp;
     const dt = (timestamp - this.lastFrame) / 1000;
     this.lastFrame = timestamp;

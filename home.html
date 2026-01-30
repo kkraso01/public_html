@@ -4,6 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Konstantin Krasovitskiy | AI Portfolio</title>
   <!--
     Entry assets:
@@ -24,9 +27,6 @@
 
   <!-- Tailwind CSS - Production via jsDelivr Play CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-
-  <!-- Lottie (kept from your template, currently unused but available) -->
-  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
 
   <!-- Custom styles for background + subtle polish -->
   <style>
@@ -358,32 +358,6 @@
       background-color: rgba(99, 102, 241, 0.1);
     }
 
-    /* Recruiter Mode Styling */
-    body.recruiter-mode [data-recruiter="full"] {
-      display: none;
-    }
-
-    body:not(.recruiter-mode) [data-recruiter="summary"] {
-      display: none;
-    }
-
-    #recruiter-mode-toggle {
-      font-size: 0.75rem;
-      padding: 0.5rem 1rem;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid rgba(99, 102, 241, 0.4);
-      color: #a5b4fc;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      backdrop-filter: blur(8px);
-    }
-
-    #recruiter-mode-toggle:hover {
-      border-color: rgba(129, 140, 248, 0.8);
-      background: rgba(79, 70, 229, 0.3);
-    }
-
     .system-layer {
       background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
       border: 1px solid rgba(99, 102, 241, 0.25);
@@ -424,27 +398,37 @@
     }
 
     /* Workspace Tabs (Horizontal Browser-Style) */
+    /* Positioned after hero but visually at bottom, becomes sticky when scrolled */
     .workspace-tabs-container {
       position: sticky;
       top: 0;
-      z-index: 100;
-      background: linear-gradient(180deg, rgba(2, 6, 23, 0.98) 0%, rgba(15, 23, 42, 0.95) 100%);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(99, 102, 241, 0.2);
-      padding: 0;
-      margin: 0;
+      width: 100%;
+      max-width: 800px;
+      margin: -80px auto 0 auto;
+      padding: 16px 0;
+      z-index: 999999;
+      background: transparent;
     }
-
+    
     .workspace-tabs {
       display: flex;
       gap: 4px;
-      max-width: 1280px;
+      width: 100%;
+      max-width: 800px;
       margin: 0 auto;
-      padding: 0 24px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+      pointer-events: auto;
+    }
+    
+    .workspace-tabs-container::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 0;
+      right: 0;
+      height: 8px;
+      background: linear-gradient(to bottom, rgba(15, 23, 42, 0.2), transparent);
+      pointer-events: none;
+      z-index: -1;
     }
 
     .workspace-tabs::-webkit-scrollbar {
@@ -461,38 +445,55 @@
     }
 
     .workspace-tab {
-      flex-shrink: 0;
-      display: inline-flex;
+      flex: 0.8;
+      display: flex;
       align-items: center;
       justify-content: center;
-      padding: 12px 24px;
-      border: 1px solid transparent;
-      border-bottom: none;
-      border-radius: 8px 8px 0 0;
-      background: rgba(30, 41, 59, 0.3);
-      color: #94a3b8;
-      font-size: 14px;
-      font-weight: 600;
+      padding: 8px 16px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      background: rgba(15, 23, 42, 0.95);
+      color: rgba(148, 163, 184, 0.7);
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
       white-space: nowrap;
       position: relative;
-      margin-bottom: -1px;
+      pointer-events: auto;
+      touch-action: manipulation;
     }
 
     .workspace-tab:hover {
-      background: rgba(51, 65, 85, 0.5);
-      color: #cbd5e1;
-      border-color: rgba(99, 102, 241, 0.4);
+      color: rgba(203, 213, 225, 0.9);
+      border-bottom-color: rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.05);
+      cursor: pointer !important;
     }
 
     .workspace-tab.active {
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%);
-      border-color: rgba(129, 140, 248, 0.6);
-      border-bottom-color: transparent;
+      flex: 1.4;
       color: #e0e7ff;
-      transform: translateY(-1px);
-      box-shadow: 0 -2px 12px rgba(129, 140, 248, 0.2);
+      border-bottom-color: rgba(129, 140, 248, 0.8);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    
+    /* Sticky state styles - when tabs are stuck to top */
+    @supports (position: sticky) {
+      .workspace-tab {
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      
+      .workspace-tab:hover {
+        background: rgba(30, 41, 59, 0.95) !important;
+      }
+      
+      .workspace-tab.active {
+        background: rgba(99, 102, 241, 0.25) !important;
+      }
     }
 
     .workspace-tab.active::after {
@@ -502,7 +503,8 @@
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(180deg, rgba(2, 6, 23, 0.98) 0%, rgba(15, 23, 42, 0.95) 100%);
+      background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.6), transparent);
+      box-shadow: 0 0 8px rgba(129, 140, 248, 0.4);
     }
 
     .workspace-hidden {
@@ -541,20 +543,9 @@
     </div>
   </div> -->
 
-  <!-- Neural Network / Constellation Background -->
-  <canvas id="nn-bg"></canvas>
-
   <!-- Hero (visible in all workspaces) -->
   <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in" data-workspace="llm" data-workspace-shared="true">
     <div class="max-w-3xl">
-      <div id="system-status" class="text-xs text-indigo-300 mb-4 tracking-widest opacity-80">
-        NODE STATUS: <span id="sys-state">ACTIVE</span> •
-        TOKENS/s: <span id="sys-tps">0</span> •
-        LAT: <span id="sys-lat">0</span>ms
-      </div>
-      <p class="text-xs tracking-[0.3em] uppercase text-indigo-300 mb-4">
-        Research Node • LLM Systems • Neural Architectures
-      </p>
       <h1 class="text-4xl sm:text-5xl md:text-6xl font-bold mb-4">
         Konstantin Krasovitskiy
       </h1>
@@ -570,15 +561,10 @@
           Download CV
         </a>
       </div>
-      <div class="mt-6">
-        <button id="recruiter-mode-toggle" aria-pressed="false">
-          Recruiter Mode: OFF
-        </button>
-      </div>
     </div>
   </section>
 
-  <!-- Workspace Tabs (Browser-Style Horizontal Bar) -->
+  <!-- Workspace Tabs (Browser-Style Horizontal Bar) - Outside hero for proper sticky behavior -->
   <div class="workspace-tabs-container">
     <nav class="workspace-tabs" role="tablist" aria-label="Content Workspaces">
       <button class="workspace-tab" data-tab="llm" aria-selected="false" role="tab" tabindex="0">
@@ -596,12 +582,9 @@
   <!-- Research-First Systems -->
   <section id="research-systems" data-workspace="llm" class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Mission: Showcase production-grade, research-led LLM systems.</p>
-      <h2 class="text-3xl font-bold">Industry-Lean Research Systems</h2>
+      <h2 class="text-3xl font-bold">LLM Systems Lab</h2>
       <p class="text-gray-400 max-w-3xl">
-        A focused selection of the most deployment-ready canvases — RAG mesh, LLM routing, and transformer
-        internals — grouped together so you can keep signal-dense, research-first visuals up front while the
-        playful lab lives separately.
+        RAG pipelines, multi-model routing, and transformer internals — visualized with live telemetry.
       </p>
     </div>
 
@@ -683,13 +666,9 @@
   <!-- Playful Lab -->
   <section id="playful-demos" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Mission: A playful robotics demo that reuses the HUD + metrics fabric.
-      </p>
-      <h2 class="text-3xl font-bold">Line-Following Robot Lab</h2>
+      <h2 class="text-3xl font-bold">Line-Following Robot</h2>
       <p class="text-gray-400 max-w-3xl">
-        Drag-and-drop the bot anywhere on the track, watch sixteen IR sensors sample the canvas, and follow the
-        PID loop as it keeps the rover locked on the black line. Metrics use the shared EventBus so the HUD
-        styling stays consistent with the research canvases.
+        Drag-and-drop the bot anywhere on the track. IR sensors sample the canvas in real-time as the PID loop keeps the rover locked on the black line.
       </p>
     </div>
 
@@ -862,7 +841,6 @@
   <!-- Maze Solver Section -->
   <section id="maze-solver" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Mission: Autonomous pathfinding and maze exploration algorithms.</p>
       <h2 class="text-3xl font-bold">Maze Solver: Micromouse Challenge</h2>
       <p class="text-gray-400 max-w-3xl">
         Micromouse-style exploration with dynamic flood-fill, intelligent dead-end pruning, and optional 8-directional sprinting. Watch the robot autonomously map walls, compute distances, and execute time-optimal racing strategies.
@@ -910,10 +888,9 @@
   <section id="drone-race" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
     <!-- Drone Race Demo -->
     <div class="flex flex-col gap-3 mb-10">
-      <p class="mission-brief text-indigo-300/80">Mission: Autonomous racing intelligence and flight control.</p>
-      <h2 class="text-3xl font-bold">Autonomous Drone Demos</h2>
+      <h2 class="text-3xl font-bold">Autonomous Drone Flight</h2>
       <p class="text-gray-400 max-w-3xl">
-        A suite of autonomous flight demonstrations featuring racing intelligence, LiDAR-based cave exploration, and obstacle avoidance. Each demo showcases different aspects of drone control, perception, and autonomous decision-making.
+        Racing, LiDAR-based cave exploration, and obstacle avoidance — all simulated with physics-based control.
       </p>
       <div class="mt-4">
         <a href="drones/stationary/stationary_test.html" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/30 hover:border-indigo-400 transition-colors text-sm">
@@ -926,7 +903,7 @@
     <!-- Drone Race Demo -->
     <div class="mb-12">
       <div class="flex flex-col gap-3 mb-6">
-        <h3 class="text-2xl font-semibold">AlphaPilot-Style Drone Race</h3>
+        <h3 class="text-2xl font-semibold">Autonomous Racing (Sim)</h3>
         <p class="text-gray-400 max-w-3xl">
           Autonomous racing drone flying a spline-planned indoor track with chase camera, gate timing, VIO noise, and PID control. Visualizes real-time trajectory tracking with live metrics and controller tuning.
         </p>
@@ -952,7 +929,7 @@
       <div class="flex flex-col gap-3 mb-6">
         <h3 class="text-2xl font-semibold">LiDAR Cave Exploration & Mapping</h3>
         <p class="text-gray-400 max-w-3xl">
-          Autonomous cave exploration using LiDAR-based SLAM and frontier-based exploration planning. The drone autonomously maps unknown cave environments, builds occupancy grids, and plans collision-free paths using Ammo.js physics simulation.
+          Autonomous cave exploration using LiDAR-based SLAM and frontier-based planning. The drone maps unknown environments, builds occupancy grids, and plans collision-free paths.
         </p>
       </div>
 
@@ -1085,146 +1062,93 @@
   <section id="about" data-workspace="profile" class="max-w-4xl mx-auto py-20 px-6 relative">
     <h2 class="text-3xl font-bold mb-6">About Me</h2>
     
-    <!-- Full narrative (default) -->
-    <div data-recruiter="full">
-      <p class="text-gray-300 leading-relaxed mb-6">
-        I design end-to-end <span class="text-indigo-400">AI systems</span> that bridge research and production constraints.
-        My work centers on <span class="text-indigo-400">LLM orchestration</span>,
-        <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
-        <span class="text-indigo-400">multi-model routing</span> — systems that balance latency, cost, and accuracy
-        at scale. I approach AI with a <span class="text-indigo-400">reliability mindset</span>: monitoring, evaluation,
-        failure modes, and deployment tradeoffs are first-class concerns.
-      </p>
-      <p class="text-gray-300 leading-relaxed mb-6">
-        Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
-        infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration).
-        <span class="text-indigo-400">I build and test systems under constraints: latency, cost, reliability, and observability.</span>
-        The <span class="text-indigo-400">robotics and autonomy projects</span> on this site are
-        <span class="text-indigo-400">simulation-first hobby work</span> — not formal coursework — demonstrating
-        my interest in perception-to-control loops, planning, and physics-based systems.
-      </p>
-      <p class="text-gray-300 leading-relaxed font-semibold">
-        I build AI as systems, not just models.
-      </p>
-    </div>
-
-    <!-- Recruiter Mode summary -->
-    <div data-recruiter="summary">
-      <ul class="space-y-3 text-gray-300">
-        <li>✦ <strong>LLM Systems Engineer</strong>: Multi-model orchestration, RAG pipelines, vector databases, latency/cost optimization</li>
-        <li>✦ <strong>Applied AI & Reliability</strong>: Evaluation harnesses, monitoring, failure mode analysis, deployment constraints</li>
-        <li>✦ <strong>Backend & Infrastructure</strong>: Python APIs, Docker, CI/CD, Linux, QA automation (Playwright, Selenium, K6)</li>
-        <li>✦ <strong>Research Deployment</strong>: Local LLM hosting, ChromaDB integration, lab infrastructure support</li>
-        <li>✦ <strong>Simulation & Autonomy (Hobby)</strong>: Perception, planning, control loops — demonstrated via interactive projects</li>
-      </ul>
-      <p class="text-gray-300 leading-relaxed font-semibold mt-6">
-        I build AI as systems, not just models.
-      </p>
-    </div>
-
-    <!-- System Layers micro-section -->
-    <div class="mt-12 pt-8 border-t border-gray-700">
-      <h3 class="text-xl font-semibold mb-4 text-indigo-300">System Layers</h3>
-      <p class="text-gray-400 text-sm mb-6">How this portfolio maps system-level AI thinking to interactive demonstrations.</p>
-      <div class="space-y-3">
-        <div class="system-layer">
-          <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-semibold text-gray-200">Learning</h4>
-            <div class="layer-anchors flex gap-2">
-              <a href="#llm-viz">Transformer</a>
-              <a href="#attentionCanvas">Attention</a>
-            </div>
-          </div>
-          <p class="text-xs text-gray-400">Representation, attention mechanisms, token flow dynamics</p>
-        </div>
-        <div class="system-layer">
-          <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-semibold text-gray-200">Retrieval</h4>
-            <div class="layer-anchors flex gap-2">
-              <a href="#ragCanvas">RAG Mesh</a>
-            </div>
-          </div>
-          <p class="text-xs text-gray-400">Context grounding, chunking strategies, hallucination reduction</p>
-        </div>
-        <div class="system-layer">
-          <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-semibold text-gray-200">Orchestration</h4>
-            <div class="layer-anchors flex gap-2">
-              <a href="#orchestratorCanvas">Multi-LLM Router</a>
-            </div>
-          </div>
-          <p class="text-xs text-gray-400">Model selection, cost/latency routing, merge policies</p>
-        </div>
-        <div class="system-layer">
-          <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-semibold text-gray-200">Interaction</h4>
-            <div class="layer-anchors flex gap-2">
-              <a href="#playful-demos">Line Follower</a>
-              <a href="#maze-solver">Maze</a>
-              <a href="#drone-race">Drones</a>
-            </div>
-          </div>
-          <p class="text-xs text-gray-400">Human-centered design, adaptive behavior, real-time feedback loops</p>
-        </div>
-        <div class="system-layer">
-          <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-semibold text-gray-200">Trust</h4>
-            <div class="layer-anchors flex gap-2">
-              <a href="#skills">Reliability</a>
-              <a href="#experience">QA</a>
-            </div>
-          </div>
-          <p class="text-xs text-gray-400">Testing, observability, interpretability, deployment safety</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Core AI Competencies -->
-    <div class="mt-12 pt-8 border-t border-gray-700">
-      <h3 class="text-xl font-semibold mb-4 text-indigo-300">Core AI Competencies</h3>
-      <p class="text-gray-400 text-sm mb-6">Advanced capabilities spanning NLP, vision, ethics, and production-oriented system design.</p>
-      <ul class="space-y-2 text-gray-300 text-sm">
-        <li>• <strong>Design</strong> transformer-based NLP systems with attention to bias, robustness, and failure modes</li>
-        <li>• <strong>Evaluate</strong> language models for societal impact: misinformation detection, hate speech classification, grounding accuracy</li>
-        <li>• <strong>Implement</strong> computer vision pipelines: detection, segmentation, reconstruction, generative models</li>
-        <li>• <strong>Integrate</strong> vision transformers and multi-modal architectures for graphics and perception tasks</li>
-        <li>• <strong>Audit</strong> AI systems for fairness, transparency, accountability, and explainability</li>
-        <li>• <strong>Navigate</strong> governance and compliance considerations for production AI deployment</li>
-        <li>• <strong>Prototype</strong> MVP systems with business model awareness and disciplined tradeoff analysis</li>
-        <li>• <strong>Communicate</strong> research findings through peer review, technical writing, and mathematical rigor</li>
-      </ul>
-    </div>
+    <p class="text-gray-300 leading-relaxed mb-6">
+      I design end-to-end <span class="text-indigo-400">AI systems</span> that bridge research and production constraints.
+      My work centers on <span class="text-indigo-400">LLM orchestration</span>,
+      <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
+      <span class="text-indigo-400">multi-model routing</span> — systems that balance latency, cost, and accuracy
+      at scale. I approach AI with a <span class="text-indigo-400">reliability mindset</span>: monitoring, evaluation,
+      failure modes, and deployment tradeoffs are first-class concerns.
+    </p>
+    <p class="text-gray-300 leading-relaxed mb-6">
+      Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
+      infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration).
+      <span class="text-indigo-400">I build and test systems under constraints: latency, cost, reliability, and observability.</span>
+      The <span class="text-indigo-400">robotics and autonomy projects</span> on this site are
+      <span class="text-indigo-400">simulation-first hobby work</span> — not formal coursework — demonstrating
+      my interest in perception-to-control loops, planning, and physics-based systems.
+    </p>
+    <p class="text-gray-300 leading-relaxed font-semibold">
+      I build AI as systems, not just models.
+    </p>
   </section>
 
   <!-- Skills -->
   <section id="skills" data-workspace="profile" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 relative">
     <div class="max-w-4xl mx-auto">
-      <h2 class="text-3xl font-bold mb-8">Technical Skills</h2>
+      <h2 class="text-3xl font-bold mb-8">Technical Skills & Expertise</h2>
 
       <div class="grid md:grid-cols-2 gap-8 mb-8">
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">LLM Systems & Retrieval</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI Systems & Architecture</h3>
           <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Multi-Model Orchestration</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">RAG Pipelines</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Multi-Model LLM Orchestration</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">RAG Pipeline Design</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vector Databases (ChromaDB)</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Embedding Systems</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Prompt Engineering</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Latency/Cost Optimization</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">LLM Evaluation</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Model Selection Strategies</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Distributed LLM Services</span>
           </div>
         </div>
 
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI Engineering & Reliability</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">NLP & Language Models</h3>
           <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Testing & QA Automation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Playwright (C#)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Selenium (Java)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">K6 Performance Testing</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Observability Mindset</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Transformer Architectures</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Attention Mechanisms</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Prompt Engineering</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">LLM Evaluation</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Bias & Robustness Analysis</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Hate Speech Detection</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Misinformation Detection</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Computer Vision & Graphics</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Object Detection</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Image Segmentation</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">3D Reconstruction</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vision Transformers</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Multi-Modal Architectures</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Generative Models</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SLAM & Mapping</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI Ethics & Governance</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Fairness Auditing</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Transparency & Explainability</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Accountability Frameworks</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Compliance & Regulation</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Societal Impact Assessment</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Grounding Accuracy</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Software Engineering & QA</h3>
+          <div class="flex flex-wrap gap-2">
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Test Automation (Playwright/Selenium)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Performance Testing (K6)</span>
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Failure Mode Analysis</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Reproducibility</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Observability & Monitoring</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">CI/CD Pipelines</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Reproducibility Engineering</span>
           </div>
         </div>
 
@@ -1232,24 +1156,34 @@
           <h3 class="text-lg font-semibold text-indigo-400 mb-3">Backend & Infrastructure</h3>
           <div class="flex flex-wrap gap-2">
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Python (Flask/FastAPI)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">REST APIs</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Microservices</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Docker & Docker Swarm</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Linux & Bash</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">CI/CD</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SQL</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">RESTful API Design</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Microservices Architecture</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Docker & Orchestration</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Linux System Administration</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Database Design (SQL)</span>
           </div>
         </div>
 
         <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Perception & Simulation (Hobby)</h3>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Research & Communication</h3>
           <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Computer Vision Pipelines</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SLAM & Mapping</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Academic Writing</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Peer Review</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Mathematical Rigor</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Technical Documentation</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">MVP Prototyping</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Tradeoff Analysis</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Robotics & Control (Hobby)</h3>
+          <div class="flex flex-wrap gap-2">
             <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Physics-Based Simulation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Control Systems</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Three.js</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Canvas API</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Control Systems (PID/MPC)</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Trajectory Optimization</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Path Planning</span>
+            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Three.js Visualization</span>
           </div>
         </div>
       </div>
@@ -1362,10 +1296,10 @@
       </p>
       <p>
         LinkedIn:
-        <a href="https://linkedin.com/" target="_blank" class="text-indigo-400 hover:underline">linkedin.com</a>
+        <a href="https://linkedin.com/in/konstantin-krasovitskiy" target="_blank" class="text-indigo-400 hover:underline">linkedin.com/in/konstantin-krasovitskiy</a>
         <span class="text-gray-500 mx-1">|</span>
         GitHub:
-        <a href="https://github.com/" target="_blank" class="text-indigo-400 hover:underline">github.com</a>
+        <a href="https://github.com/kkraso01" target="_blank" class="text-indigo-400 hover:underline">github.com/kkraso01</a>
       </p>
     </div>
   </section>
@@ -1415,12 +1349,11 @@
   </section>
 
   <footer class="py-6 text-center text-gray-600 bg-gray-950/90 relative">
-    © 2025 Konstantin Krasovitskiy
+    © 2026 Konstantin Krasovitskiy
   </footer>
 
   <!-- External JS for Background Animation -->
   <!-- Disabled old animations - using maze-solver instead -->
-  <script src="recruiter_mode.js"></script>
   <script src="tabs.js"></script>
   <script src="viewport-observer.js"></script>
   <script src="shared_bus.js"></script>

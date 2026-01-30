@@ -10,7 +10,7 @@
   const HIDDEN_CLASS = 'workspace-hidden';
 
   const workspaces = ['llm', 'autonomy', 'profile'];
-  let activeWorkspace = localStorage.getItem(STORAGE_KEY) || 'llm';
+  let activeWorkspace = localStorage.getItem(STORAGE_KEY) || 'profile';
 
   // Get all sections grouped by workspace
   function getSectionsByWorkspace(workspace) {
@@ -62,12 +62,14 @@
       window.dispatchEvent(new Event('resize'));
     }, 100);
 
-    // Scroll to tab bar smoothly
-    const tabBar = document.querySelector('.workspace-tabs-container');
-    if (tabBar) {
-      const offset = tabBar.offsetTop + tabBar.offsetHeight;
-      window.scrollTo({ top: offset, behavior: 'smooth' });
-    }
+    // Scroll to position tabs at top of viewport
+    setTimeout(() => {
+      const tabBar = document.querySelector('.workspace-tabs-container');
+      if (tabBar) {
+        const tabTop = tabBar.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: tabTop - 10, behavior: 'smooth' });
+      }
+    }, 150);
   }
 
   // Switch to a different workspace

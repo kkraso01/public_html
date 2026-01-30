@@ -57,7 +57,29 @@ class DroneCaveDemo {
     this._initDrone();
     this._initHUD();
     this._bindInputs();
+    this._setupPageVisibility();
     this.restart();
+  }
+
+  _setupPageVisibility() {
+    // Pause when browser tab is hidden
+    this._wasRunningBeforeHide = false;
+    this._handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Remember if it was running when we hide the tab
+        this._wasRunningBeforeHide = !!this._frameReq && !this.userPaused && !this.visibilityPaused;
+        if (this._wasRunningBeforeHide) {
+          this.pause(false);
+        }
+      } else {
+        // Only resume if it was running before we hid the tab
+        if (this._wasRunningBeforeHide) {
+          this.resume(false);
+          this._wasRunningBeforeHide = false;
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', this._handleVisibilityChange);
   }
 
   _initScene() {
@@ -437,11 +459,26 @@ class DroneCaveDemo {
 
   destroy() {
     this.pause(false);
+    if (this._handleVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+    }
     this.container.innerHTML = '';
   }
 
   _loop(timestamp) {
-    if (this.userPaused || this.visibilityPaused) return;
+    // Early exit if paused or if parent section is in hidden workspace
+    if (this.userPaused || this.visibilityPaused) {
+      this._frameReq = requestAnimationFrame((t) => this._loop(t));
+      return;
+    }
+    
+    // Check if autonomy workspace is active (cave demo is in autonomy workspace)
+    const activeWorkspace = document.body.dataset.workspace;
+    if (activeWorkspace && activeWorkspace !== 'autonomy') {
+      this._frameReq = requestAnimationFrame((t) => this._loop(t));
+      return;
+    }
+    
     if (this.lastFrame === null) this.lastFrame = timestamp;
     const dt = ((timestamp - this.lastFrame) / 1000) * this.timeScale;
     this.lastFrame = timestamp;

@@ -43,10 +43,11 @@ function setupDemo(containerId, demoFactory, controlsId, toggleBtnId, restartBtn
 
     visibilityObserver.observe(container);
 
-    const initiallyVisible = computeVisibility() && document.visibilityState === 'visible';
-    if (activeDemo.setPausedFromVisibility) activeDemo.setPausedFromVisibility(initiallyVisible);
-    else if (initiallyVisible) activeDemo.resume?.();
-    else activeDemo.pause?.();
+    // Don't auto-start on initial load - let user click the button
+    // const initiallyVisible = computeVisibility() && document.visibilityState === 'visible';
+    // if (activeDemo.setPausedFromVisibility) activeDemo.setPausedFromVisibility(initiallyVisible);
+    // else if (initiallyVisible) activeDemo.resume?.();
+    // else activeDemo.pause?.();
 
     visibilityHandler = () => {
       const visible = document.visibilityState === 'visible';

@@ -316,6 +316,10 @@ class DroneRaceDemo {
   }
 
   _loop(timestamp) {
+    // Check if autonomy workspace is active (race demo is in autonomy workspace)
+    const activeWorkspace = document.body.dataset.workspace;
+    const shouldPause = this.userPaused || this.visibilityPaused || (activeWorkspace && activeWorkspace !== 'autonomy');
+    
     if (this.lastFrame === null) this.lastFrame = timestamp;
     const dt = ((timestamp - this.lastFrame) / 1000) * this.timeScale;
     this.lastFrame = timestamp;
@@ -323,7 +327,7 @@ class DroneRaceDemo {
     const fixedDt = 1 / this.physicsRate;
     this.accumulator += dt;
     while (this.accumulator >= fixedDt) {
-      if (!this.userPaused && !this.visibilityPaused) {
+      if (!shouldPause) {
         this._stepPhysics(fixedDt);
       }
       this.accumulator -= fixedDt;
