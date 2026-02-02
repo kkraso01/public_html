@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,12 +9,43 @@
     JS: https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
         drones/stationary/stationary_test.js
   -->
+  <script>
+    (() => {
+      const stored = localStorage.getItem("theme");
+      const theme = stored === "dark" || stored === "light" ? stored : "light";
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="../../ui_theme.js"></script>
   <style>
+    :root {
+      --bg: #f6f6f6;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-elevated: rgba(255, 255, 255, 0.92);
+      --text: #1a1a1a;
+      --text-strong: #070707;
+      --muted: #5a5a5a;
+      --border: rgba(10, 10, 10, 0.14);
+      --accent: #ff2d2d;
+      --radius: 2px;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #060606;
+      --surface: rgba(12, 12, 12, 0.9);
+      --surface-elevated: rgba(18, 18, 18, 0.94);
+      --text: #d6d6d6;
+      --text-strong: #f5f5f5;
+      --muted: #9a9a9a;
+      --border: rgba(255, 255, 255, 0.14);
+      --accent: #ff2d2d;
+    }
+
     body {
       margin: 0;
-      background: #0b1220;
-      color: #e5e7eb;
+      background: var(--bg);
+      color: var(--text);
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
     }
     #app {
@@ -27,9 +58,9 @@
       position: absolute;
       top: 20px;
       right: 20px;
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(100, 116, 139, 0.3);
-      border-radius: 8px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
       padding: 16px;
       min-width: 200px;
       backdrop-filter: blur(10px);
@@ -39,7 +70,7 @@
       margin: 0 0 12px 0;
       font-size: 14px;
       font-weight: 600;
-      color: #f1f5f9;
+      color: var(--text-strong);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -52,41 +83,42 @@
     .input-group label {
       font-size: 13px;
       font-weight: 500;
-      color: #94a3b8;
+      color: var(--muted);
       width: 20px;
     }
     .input-group input {
       flex: 1;
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid rgba(71, 85, 105, 0.5);
-      border-radius: 4px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
       padding: 6px 10px;
-      color: #e2e8f0;
+      color: var(--text);
       font-size: 13px;
       font-family: 'Monaco', 'Courier New', monospace;
     }
     .input-group input:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
     }
     #waypoint-input button {
       width: 100%;
       margin-top: 8px;
       padding: 8px;
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
-      border: none;
-      border-radius: 4px;
-      color: white;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-strong);
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
     }
     #waypoint-input button:hover {
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border-color: var(--accent);
+      color: var(--accent);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+      box-shadow: none;
     }
     #waypoint-input button:active {
       transform: translateY(0);
@@ -110,7 +142,7 @@
       <input type="number" id="wp-z" step="0.1" value="0.6" />
     </div>
     <button id="set-waypoint-btn">Set Target</button>
-    <button id="toggle-nose-btn" style="margin-top: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed);">Nose-First: OFF</button>
+    <button id="toggle-nose-btn" style="margin-top: 12px;">Nose-First: OFF</button>
   </div>
   <script type="module">
     import { initStationaryHoverDemo } from './stationary_test.js';

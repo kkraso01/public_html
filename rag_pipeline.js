@@ -4,6 +4,7 @@ if (!ragCanvas) {
 } else {
   const ctx = ragCanvas.getContext("2d");
   const bus = window.EventBus;
+  const theme = window.UI_THEME;
 
   let w = 0;
   let h = 0;
@@ -13,23 +14,26 @@ if (!ragCanvas) {
   let speed = 1;
   let spikeLevel = 0;
   let highlightNode = null;
+  let lastMouse = null;
 
   const nodes = [
-    { id: "q", label: "Client Query", x: 0.08, y: 0.55, hue: 210, metric: "intent" },
-    { id: "emb", label: "Embed", x: 0.22, y: 0.55, hue: 250, metric: "768d" },
-    { id: "vdb", label: "Vector DB", x: 0.38, y: 0.35, hue: 140, metric: "Chroma" },
-    { id: "retr", label: "Retriever", x: 0.52, y: 0.55, hue: 280, metric: "top-k" },
-    { id: "llm", label: "LLM Pool", x: 0.70, y: 0.55, hue: 310, metric: "router" },
-    { id: "out", label: "Response", x: 0.88, y: 0.55, hue: 190, metric: "merge" }
+    { id: "client", label: "CLIENT", sub: "Query", x: 0.08, y: 0.55 },
+    { id: "router", label: "ROUTER", sub: "Policy", x: 0.22, y: 0.55 },
+    { id: "vector", label: "VECTOR DB", sub: "Chroma", x: 0.40, y: 0.35 },
+    { id: "retriever", label: "RETRIEVER", sub: "Top-K", x: 0.40, y: 0.72 },
+    { id: "context", label: "CONTEXT", sub: "Chunks", x: 0.58, y: 0.55 },
+    { id: "llm", label: "LLM", sub: "Pool", x: 0.74, y: 0.55 },
+    { id: "response", label: "RESPONSE", sub: "Stream", x: 0.90, y: 0.55 }
   ];
 
   const edges = [
-    { from: "q", to: "emb", latency: 12, score: 0.92 },
-    { from: "emb", to: "vdb", latency: 18, score: 0.88 },
-    { from: "emb", to: "retr", latency: 24, score: 0.81 },
-    { from: "vdb", to: "retr", latency: 30, score: 0.95 },
-    { from: "retr", to: "llm", latency: 36, score: 0.86 },
-    { from: "llm", to: "out", latency: 22, score: 0.93 }
+    { from: "client", to: "router", metric: "12ms" },
+    { from: "router", to: "vector", metric: "lookup" },
+    { from: "router", to: "retriever", metric: "rank" },
+    { from: "vector", to: "context", metric: "hits" },
+    { from: "retriever", to: "context", metric: "top-k" },
+    { from: "context", to: "llm", metric: "prompt" },
+    { from: "llm", to: "response", metric: "decode" }
   ];
 
   const retrievals = [
@@ -39,6 +43,13 @@ if (!ragCanvas) {
   ];
 
   function resizeRAG() {
+    if (theme) {
+      const metrics = theme.setDPR(ragCanvas, ctx);
+      w = metrics.width;
+      h = metrics.height;
+      dpr = metrics.dpr;
+      return;
+    }
     dpr = window.devicePixelRatio || 1;
     const rect = ragCanvas.getBoundingClientRect();
     w = rect.width;
@@ -50,6 +61,7 @@ if (!ragCanvas) {
 
   resizeRAG();
   window.addEventListener("resize", resizeRAG);
+  window.addEventListener("themechange", resizeRAG);
 
   // Viewport observer for performance
   const control = { isRunning: true };
@@ -78,23 +90,27 @@ if (!ragCanvas) {
     ctx.quadraticCurveTo(x, y, x + r, y);
   }
 
-  function drawBackground() {
-    ctx.fillStyle = "rgba(2,6,23,0.92)";
+  function palette() {
+    if (theme) return theme.palette();
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      surface: styles.getPropertyValue("--surface").trim(),
+      surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+      text: styles.getPropertyValue("--text").trim(),
+      textStrong: styles.getPropertyValue("--text-strong").trim(),
+      muted: styles.getPropertyValue("--muted").trim(),
+      border: styles.getPropertyValue("--border").trim(),
+      accent: styles.getPropertyValue("--accent").trim(),
+    };
+  }
+
+  function drawBackground(colors) {
+    ctx.fillStyle = colors.surface;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = "rgba(30,64,175,0.25)";
-    ctx.lineWidth = 1;
-    const step = 20;
-    ctx.beginPath();
-    for (let x = 0; x < w; x += step) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
+    if (theme) {
+      theme.drawGrid(ctx, 24, colors.border, theme.isDark() ? 0.12 : 0.08, w, h);
     }
-    for (let y = 0; y < h; y += step) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
-    ctx.stroke();
   }
 
   function nodePosition(id) {
@@ -102,77 +118,102 @@ if (!ragCanvas) {
     return { x: node.x * w, y: node.y * h };
   }
 
-  function drawEdge(edge, idx) {
+  function drawEdge(edge, idx, colors) {
     const from = nodePosition(edge.from);
     const to = nodePosition(edge.to);
-    const pulse = (t * 0.006 * speed + idx * 0.18) % 1;
+    const pulse = (t * 0.003 * speed + idx * 0.18) % 1;
+    const stepped = Math.floor(pulse * 6) / 6;
     const midX = lerp(from.x, to.x, 0.5);
     const midY = lerp(from.y, to.y, 0.5);
 
-    const hue = lerp(200, 320, idx / edges.length);
-    const alpha = 0.5 + spikeLevel * 0.2;
-    ctx.strokeStyle = `hsla(${hue}, 80%, 70%, ${alpha})`;
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.6 + spikeLevel * 0.05) : "rgba(148,163,184,0.6)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
 
-    const px = lerp(from.x, to.x, pulse);
-    const py = lerp(from.y, to.y, pulse);
-    ctx.fillStyle = `hsla(${hue}, 85%, 75%, ${0.65 + spikeLevel * 0.1})`;
-    ctx.beginPath();
-    ctx.arc(px, py, 5 + spikeLevel * 0.8, 0, Math.PI * 2);
-    ctx.fill();
+    const px = lerp(from.x, to.x, stepped);
+    const py = lerp(from.y, to.y, stepped);
+    ctx.fillStyle = theme ? theme.rgba(colors.muted, 0.8) : "rgba(148,163,184,0.8)";
+    ctx.fillRect(px - 3, py - 3, 6, 6);
 
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.font = "11px monospace";
+    ctx.fillStyle = theme ? theme.rgba(colors.muted, 0.9) : "rgba(148,163,184,0.9)";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`${edge.latency}ms • ${Math.round(edge.score * 100)}%`, midX, midY - 8);
+    ctx.fillText(edge.metric, midX, midY - 8);
   }
 
-  function drawNode(node) {
+  function drawNode(node, colors) {
     const x = node.x * w;
     const y = node.y * h;
+    const isActive = highlightNode === node.id;
 
-    ctx.fillStyle = highlightNode === node.id ? "rgba(52,211,153,0.95)" : `hsla(${node.hue}, 95%, 75%, 0.95)`;
-    ctx.strokeStyle = "rgba(226,232,240,0.4)";
-    ctx.lineWidth = 2;
+    ctx.fillStyle = colors.surfaceElevated;
+    ctx.strokeStyle = theme
+      ? theme.rgba(isActive ? colors.accent : colors.border, isActive ? 0.9 : 0.7)
+      : "rgba(226,232,240,0.4)";
+    ctx.lineWidth = isActive ? 1.5 : 1;
     ctx.beginPath();
-    drawRoundedRect(x - 50, y - 22, 100, 44, 10);
+    drawRoundedRect(x - 54, y - 22, 108, 44, 2);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(15,23,42,0.9)";
-    ctx.font = "12px monospace";
+    ctx.fillStyle = theme ? colors.textStrong : "rgba(15,23,42,0.9)";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.fillText(node.label, x, y - 2);
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.font = "11px monospace";
-    ctx.fillText(node.metric, x, y + 12);
+    ctx.fillStyle = theme ? colors.muted : "rgba(148,163,184,0.9)";
+    ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.fillText(node.sub, x, y + 12);
   }
 
-  function drawRetrievals() {
+  function drawRetrievals(colors) {
     ctx.save();
-    ctx.translate(w - 180, 16);
-    ctx.fillStyle = "rgba(15,23,42,0.8)";
-    ctx.strokeStyle = "rgba(129,140,248,0.5)";
-    ctx.lineWidth = 1.2;
+    ctx.translate(w - 190, 16);
+    ctx.fillStyle = colors.surfaceElevated;
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : "rgba(129,140,248,0.5)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    drawRoundedRect(0, 0, 170, 90, 10);
+    drawRoundedRect(0, 0, 180, 90, 2);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.font = "11px monospace";
+    ctx.fillStyle = theme ? colors.muted : "rgba(148,163,184,0.9)";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.fillText("Retrieval log", 14, 18);
     retrievals.forEach((item, i) => {
       const y = 36 + i * 18;
-      ctx.fillStyle = "rgba(226,232,240,0.92)";
+      ctx.fillStyle = theme ? colors.text : "rgba(226,232,240,0.92)";
       ctx.fillText(item.title, 14, y);
-      ctx.fillStyle = "rgba(52,211,153,0.9)";
-      ctx.fillText((item.score * 100).toFixed(0) + "%", 150, y);
+      ctx.fillStyle = theme ? colors.accent : "rgba(52,211,153,0.9)";
+      ctx.fillText((item.score * 100).toFixed(0) + "%", 160, y);
     });
+    ctx.restore();
+  }
+
+  function drawTooltip(node, colors, mouse) {
+    if (!node || !mouse) return;
+    const padding = 8;
+    const text = `${node.label} • ${node.sub}`;
+    ctx.save();
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    const metrics = ctx.measureText(text);
+    const width = metrics.width + padding * 2;
+    const height = 24;
+    const x = Math.min(mouse.x + 12, w - width - 8);
+    const y = Math.min(mouse.y + 12, h - height - 8);
+    ctx.fillStyle = colors.surfaceElevated;
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : "rgba(148,163,184,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    drawRoundedRect(x, y, width, height, 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = theme ? colors.textStrong : "rgba(226,232,240,0.9)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + padding, y + height / 2);
     ctx.restore();
   }
 
@@ -183,11 +224,13 @@ if (!ragCanvas) {
         spikeLevel = Math.max(0, spikeLevel - 0.01);
       }
 
+      const colors = palette();
       ctx.clearRect(0, 0, w, h);
-      drawBackground();
-      edges.forEach(drawEdge);
-      nodes.forEach(drawNode);
-      drawRetrievals();
+      drawBackground(colors);
+      edges.forEach((edge, idx) => drawEdge(edge, idx, colors));
+      nodes.forEach((node) => drawNode(node, colors));
+      drawRetrievals(colors);
+      drawTooltip(highlightNode ? nodes.find((n) => n.id === highlightNode) : null, colors, lastMouse);
     }
 
     requestAnimationFrame(draw);
@@ -213,6 +256,7 @@ if (!ragCanvas) {
     const rect = ragCanvas.getBoundingClientRect();
     const x = (evt.clientX - rect.left);
     const y = (evt.clientY - rect.top);
+    lastMouse = { x, y };
     let best = null;
     let bestDist = Infinity;
     nodes.forEach((n) => {
@@ -233,6 +277,16 @@ if (!ragCanvas) {
     highlightNode = n.id;
     spikeLevel = Math.min(3, spikeLevel + 0.6);
     if (bus) bus.emit("telemetry:spike", { source: "rag", node: n.id, metric: "latency" });
+  });
+
+  ragCanvas.addEventListener("mousemove", (evt) => {
+    const n = nearestNode(evt);
+    highlightNode = n ? n.id : null;
+  });
+
+  ragCanvas.addEventListener("mouseleave", () => {
+    highlightNode = null;
+    lastMouse = null;
   });
 
   if (bus) {

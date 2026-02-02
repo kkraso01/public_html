@@ -18,6 +18,7 @@
       this.maze = maze;
       this.solver = solver;
       this.deviceRatio = window.devicePixelRatio || 1;
+      this.theme = window.UI_THEME;
       
       // ==================== VISUALIZATION STATE ====================
       this.visualizationMode = "heatmap"; // heatmap, frontier, walls, velocity
@@ -50,16 +51,13 @@
       // Realistic IR sensor ranges based on actual micromouse hardware
       // 1 cell = 18 cm
       this.robotSensors = {
-        // Front sensors: 5-8 cm (0.28-0.44 cells) - sees current cell + tiny bit into next
-        front:      { angle: 0,                 distance: 0.4, color: "#00ffff", maxRange: 0.4 },
-        // Side sensors: 2-6 cm (0.11-0.33 cells) - sees current cell wall only
-        left:       { angle: Math.PI / 2,       distance: 0.3, color: "#00ff00", maxRange: 0.3 },
-        right:      { angle: -Math.PI / 2,      distance: 0.3, color: "#ff00ff", maxRange: 0.3 },
-        // Diagonal sensors: 8-14 cm (0.44-0.78 cells) - sees to next cell corner (~0.71 cells at 45°)
-        diagFL:     { angle: Math.PI / 4,       distance: 0.7, color: "#ffff00", maxRange: 0.7 },
-        diagFR:     { angle: -Math.PI / 4,      distance: 0.7, color: "#ffff00", maxRange: 0.7 },
-        diagRL:     { angle: (3 * Math.PI) / 4, distance: 0.7, color: "#ff8800", maxRange: 0.7 },
-        diagRR:     { angle: -(3 * Math.PI) / 4, distance: 0.7, color: "#ff8800", maxRange: 0.7 }
+        front: { angle: 0, distance: 0.4, color: "border", maxRange: 0.4 },
+        left: { angle: Math.PI / 2, distance: 0.3, color: "border", maxRange: 0.3 },
+        right: { angle: -Math.PI / 2, distance: 0.3, color: "border", maxRange: 0.3 },
+        diagFL: { angle: Math.PI / 4, distance: 0.7, color: "muted", maxRange: 0.7 },
+        diagFR: { angle: -Math.PI / 4, distance: 0.7, color: "muted", maxRange: 0.7 },
+        diagRL: { angle: (3 * Math.PI) / 4, distance: 0.7, color: "muted", maxRange: 0.7 },
+        diagRR: { angle: -(3 * Math.PI) / 4, distance: 0.7, color: "muted", maxRange: 0.7 }
       };
       this.showSensors = true;                // Toggle sensor visualization
       this.sensorRayLength = 0.8;             // Max raycast distance in cell units (realistic ~14cm max)
@@ -173,6 +171,7 @@
 
     _drawHeatmap() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
       
       // During racing phase, ONLY show racing path cells, ignore all old exploration data
@@ -189,13 +188,8 @@
         // Draw only cells that are in the racing path
         for (let i = 0; i < this.discreteOptimalPath.length; i++) {
           const cell = this.discreteOptimalPath[i];
-          const progress = i / (this.discreteOptimalPath.length - 1 || 1); // 0 at start, 1 at end
-          
-          // Heat gradient: cold (blue) -> hot (red)
-          const hue = 240 * (1 - progress); // 240=blue, 0=red
-          const brightness = 45 + 25 * (1 - progress);
-          const saturation = 80 + 20 * progress;
-          ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${brightness}%, 0.6)`;
+          const progress = i / (this.discreteOptimalPath.length - 1 || 1);
+          ctx.fillStyle = this._rgba(colors.accent, 0.18 + 0.35 * progress);
           ctx.fillRect(cell.x * cellSize, cell.y * cellSize, cellSize, cellSize);
         }
         return; // Exit early - don't draw old exploration data during racing
@@ -224,17 +218,13 @@
             
             const t = max === 0 ? 0 : val / max;
             
-            // Heat gradient: cold (blue) -> hot (red)
-            const hue = 240 * (1 - t); // 240=blue, 0=red
-            const brightness = 45 + 25 * (1 - t);
-            const saturation = 80 + 20 * t;
-            ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${brightness}%, 0.6)`;
+            ctx.fillStyle = this._rgba(colors.text, 0.08 + 0.35 * (1 - t));
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
             
             // Draw distance value
             if (Number.isFinite(val) && val < 30) {
-              ctx.fillStyle = `rgba(226, 232, 240, ${0.3 + 0.2 * (1 - t)})`;
-              ctx.font = `${Math.max(8, cellSize * 0.25)}px monospace`;
+              ctx.fillStyle = this._rgba(colors.text, 0.35 + 0.2 * (1 - t));
+              ctx.font = `${Math.max(8, cellSize * 0.25)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.fillText(Math.floor(val).toString(), x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
@@ -257,15 +247,13 @@
             
             const t = max === 0 ? 0 : d / max;
             
-            const hue = 240 * (1 - t);
-            const brightness = 45 + 25 * (1 - t);
-            ctx.fillStyle = `hsla(${hue}, 80%, ${brightness}%, 0.5)`;
+            ctx.fillStyle = this._rgba(colors.text, 0.08 + 0.3 * (1 - t));
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
             
             // Draw distance numbers
             if (d < 30 && Number.isFinite(d)) {
-              ctx.fillStyle = `rgba(226, 232, 240, ${0.3 + 0.2 * (1 - t)})`;
-              ctx.font = `${Math.max(8, cellSize * 0.25)}px monospace`;
+              ctx.fillStyle = this._rgba(colors.text, 0.35 + 0.2 * (1 - t));
+              ctx.font = `${Math.max(8, cellSize * 0.25)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.fillText(d.toString(), x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
@@ -279,6 +267,7 @@
       if (!this.wallUpdates || this.wallUpdates.length === 0) return;
       
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
       
       // Draw wall discovery events with fading effect
@@ -288,18 +277,18 @@
         const opacity = age * 0.8;
         
         // Highlight the cell where wall was discovered
-        ctx.fillStyle = `rgba(239, 68, 68, ${opacity * 0.4})`;
+        ctx.fillStyle = this._rgba(colors.accent, opacity * 0.3);
         const x = update.pos.x * cellSize;
         const y = update.pos.y * cellSize;
         ctx.fillRect(x, y, cellSize, cellSize);
         
         // Draw border
-        ctx.strokeStyle = `rgba(239, 68, 68, ${opacity})`;
+        ctx.strokeStyle = this._rgba(colors.accent, opacity);
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, cellSize, cellSize);
         
         // Draw pulsing circle at center
-        ctx.fillStyle = `rgba(239, 68, 68, ${opacity * 0.6})`;
+        ctx.fillStyle = this._rgba(colors.accent, opacity * 0.6);
         const pulse = Math.sin(Date.now() / 200) * 0.5 + 0.5;
         const radius = cellSize * 0.15 * (0.5 + pulse * 0.5);
         ctx.beginPath();
@@ -310,8 +299,9 @@
 
     _drawGrid() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
-      ctx.strokeStyle = "#0f172a";
+      ctx.strokeStyle = this._rgba(colors.border, 0.8);
       ctx.lineWidth = 1;
       for (let i = 0; i <= this.maze.size; i += 1) {
         ctx.beginPath();
@@ -327,8 +317,9 @@
 
     _drawWalls() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
-      ctx.strokeStyle = "#94a3b8";
+      ctx.strokeStyle = this._rgba(colors.textStrong, 0.9);
       ctx.lineWidth = 3;
       ctx.lineCap = "round";
       
@@ -368,8 +359,9 @@
 
     _drawGoals() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
-      ctx.fillStyle = "rgba(34,197,94,0.18)";
+      ctx.fillStyle = this._rgba(colors.accent, 0.18);
       this.maze.goalCells.forEach((key) => {
         const [x, y] = key.split(",").map(Number);
         ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -382,9 +374,10 @@
       if (this.currentPhase === "race") return;
 
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
 
-      ctx.strokeStyle = "rgba(168, 85, 247, 0.8)"; // Purple for planned path
+      ctx.strokeStyle = this._rgba(colors.accent, 0.6);
       ctx.lineWidth = cellSize * 0.4;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -418,6 +411,7 @@
      */
     _drawArcSegment(ctx, startPos, endPos, radius, ccw, mode, cellSize) {
       if (!startPos || !endPos || radius <= 0) return;
+      const colors = this._palette();
 
       // Convert cell coordinates to canvas pixels
       const x1 = startPos.x * cellSize + cellSize / 2;
@@ -449,7 +443,7 @@
       const angle2 = Math.atan2(y2 - centerY, x2 - centerX);
 
       // Draw the arc
-      ctx.strokeStyle = "rgba(34, 197, 94, 0.85)"; // Green for arcs
+      ctx.strokeStyle = this._rgba(colors.accent, 0.7);
       ctx.lineWidth = cellSize * 0.4;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -466,13 +460,14 @@
      */
     _drawLineSegment(ctx, startPos, endPos, cellSize) {
       if (!startPos || !endPos) return;
+      const colors = this._palette();
 
       const x1 = startPos.x * cellSize + cellSize / 2;
       const y1 = startPos.y * cellSize + cellSize / 2;
       const x2 = endPos.x * cellSize + cellSize / 2;
       const y2 = endPos.y * cellSize + cellSize / 2;
 
-      ctx.strokeStyle = "rgba(239, 68, 68, 0.85)"; // Red for lines
+      ctx.strokeStyle = this._rgba(colors.muted, 0.8);
       ctx.lineWidth = cellSize * 0.35;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -496,6 +491,7 @@
       if (this.currentPhase !== "race") return;
 
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
 
       console.log(`[Renderer._drawRacingSegments] Drawing ${this.racingSegments.length} segments`);
@@ -512,7 +508,7 @@
         if (segment.type === "line") {
           // Line segments are just visual guides (actual trajectory is through waypoints)
           // Draw as light dashed line
-          ctx.strokeStyle = "rgba(100, 150, 255, 0.4)"; // Light blue
+          ctx.strokeStyle = this._rgba(colors.border, 0.4);
           ctx.lineWidth = cellSize * 0.15;
           ctx.setLineDash([cellSize * 0.3, cellSize * 0.3]);
           ctx.lineCap = "round";
@@ -536,16 +532,8 @@
             const arcRadius = radius * cellSize;
 
             // Draw arc segment with distinctive color based on turn mode
-            let arcColor = "rgba(255, 100, 0, 0.8)";  // Orange for generic arcs
-            if (mode === "corner45Left" || mode === "corner45Right") {
-              arcColor = "rgba(100, 200, 255, 0.85)"; // Light blue for 45°
-            } else if (mode === "corner90Left" || mode === "corner90Right") {
-              arcColor = "rgba(255, 200, 0, 0.85)";   // Gold for 90°
-            } else if (mode === "corner135Left" || mode === "corner135Right") {
-              arcColor = "rgba(255, 100, 150, 0.85)"; // Pink for 135°
-            }
-
-            ctx.strokeStyle = arcColor;
+            const colors = this._palette();
+            ctx.strokeStyle = this._rgba(colors.accent, 0.75);
             ctx.lineWidth = cellSize * 0.4;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
@@ -563,7 +551,7 @@
             ctx.stroke();
 
             // Draw arc center point (small circle) for debugging
-            ctx.fillStyle = "rgba(255, 100, 0, 0.3)";
+            ctx.fillStyle = this._rgba(colors.muted, 0.2);
             ctx.beginPath();
             ctx.arc(arcCenterX, arcCenterY, cellSize * 0.08, 0, Math.PI * 2);
             ctx.fill();
@@ -574,12 +562,12 @@
             const endX = arcCenterX + arcRadius * Math.cos(endAngle);
             const endY = arcCenterY + arcRadius * Math.sin(endAngle);
 
-            ctx.fillStyle = "rgba(100, 200, 0, 0.6)";
+            ctx.fillStyle = this._rgba(colors.accent, 0.6);
             ctx.beginPath();
             ctx.arc(startX, startY, cellSize * 0.12, 0, Math.PI * 2);
             ctx.fill();
 
-            ctx.fillStyle = "rgba(200, 100, 0, 0.6)";
+            ctx.fillStyle = this._rgba(colors.accent, 0.4);
             ctx.beginPath();
             ctx.arc(endX, endY, cellSize * 0.12, 0, Math.PI * 2);
             ctx.fill();
@@ -601,6 +589,7 @@
       if (this.currentPhase !== "race") return;
 
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
 
       // CRITICAL FIX: Use only discovered walls (raceWalls or knownWalls), NEVER the perfect maze
@@ -751,20 +740,20 @@
 
       // Draw background: YELLOW for skipped cells (interpolated), RED for planned waypoints
       // First pass: draw all cells yellow (skipped interpolated cells)
-      ctx.fillStyle = "rgba(234, 179, 8, 0.35)"; // Yellow for skipped cells
+      ctx.fillStyle = this._rgba(colors.border, 0.25);
       for (const cell of fullPath) {
         // Draw with slight overlap to eliminate seams
         ctx.fillRect(cell.x * cellSize - 0.5, cell.y * cellSize - 0.5, cellSize + 1, cellSize + 1);
       }
 
       // Second pass: overlay RED for planned waypoints
-      ctx.fillStyle = "rgba(239, 68, 68, 0.45)"; // Red for planned cells
+      ctx.fillStyle = this._rgba(colors.accent, 0.25);
       for (const cell of waypoints) {
         ctx.fillRect(cell.x * cellSize - 0.5, cell.y * cellSize - 0.5, cellSize + 1, cellSize + 1);
       }
 
       // Draw the optimized racing path (waypoints only) with connecting lines
-      ctx.strokeStyle = "rgba(239, 68, 68, 0.95)"; // Red line for racing path (planned waypoints)
+      ctx.strokeStyle = this._rgba(colors.accent, 0.9);
       ctx.lineWidth = cellSize * 0.35;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -780,7 +769,7 @@
       ctx.stroke();
 
       // Draw waypoint markers (compressed path decision points) - RED for planned
-      ctx.fillStyle = "rgba(239, 68, 68, 1.0)";
+      ctx.fillStyle = this._rgba(colors.accent, 0.9);
       for (let i = 0; i < waypoints.length; i++) {
         const cell = waypoints[i];
         const radius = cellSize * 0.15;
@@ -789,7 +778,7 @@
         ctx.fill();
 
         // Outline for waypoints
-        ctx.strokeStyle = "rgba(220, 38, 38, 0.9)";
+        ctx.strokeStyle = this._rgba(colors.accent, 0.9);
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -800,27 +789,27 @@
         const progress = this.racingPathIndex / fullPath.length;
 
         // Highlight current cell with extended borders (no gaps)
-        ctx.fillStyle = `rgba(239, 68, 68, ${0.55 + progress * 0.45})`;
+        ctx.fillStyle = this._rgba(colors.accent, 0.55 + progress * 0.35);
         ctx.fillRect(currentCell.x * cellSize - 0.5, currentCell.y * cellSize - 0.5, cellSize + 1, cellSize + 1);
 
         // Robot position marker - bright and visible (red)
-        ctx.fillStyle = "#ef4444";
+        ctx.fillStyle = colors.accent;
         ctx.beginPath();
         ctx.arc(currentCell.x * cellSize + cellSize / 2, currentCell.y * cellSize + cellSize / 2, cellSize * 0.38, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = "#dc2626";
+        ctx.strokeStyle = this._rgba(colors.accent, 0.9);
         ctx.lineWidth = 3;
         ctx.stroke();
 
         // Inner highlight circle
-        ctx.fillStyle = "#fca5a5";
+        ctx.fillStyle = this._rgba(colors.textStrong, 0.6);
         ctx.beginPath();
         ctx.arc(currentCell.x * cellSize + cellSize / 2, currentCell.y * cellSize + cellSize / 2, cellSize * 0.2, 0, Math.PI * 2);
         ctx.fill();
 
         // Progress text badge with dark background
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillStyle = this._rgba(colors.surfaceElevated, 0.9);
         const progressText = `${this.racingPathIndex}/${fullPath.length}`;
         ctx.font = `bold ${Math.max(12, cellSize * 0.38)}px Arial`;
         const textMetrics = ctx.measureText(progressText);
@@ -834,7 +823,7 @@
           textHeight + 6
         );
 
-        ctx.fillStyle = "#ef4444";
+        ctx.fillStyle = colors.textStrong;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(progressText, currentCell.x * cellSize + cellSize / 2, currentCell.y * cellSize + cellSize / 2);
@@ -860,7 +849,7 @@
         const centerY = cell.y * cellSize + cellSize / 2;
         const arrowSize = cellSize * 0.22;
 
-        ctx.fillStyle = "rgba(34, 197, 94, 1.0)";
+        ctx.fillStyle = this._rgba(colors.accent, 0.8);
         ctx.beginPath();
         ctx.moveTo(centerX + Math.cos(angle) * arrowSize, centerY + Math.sin(angle) * arrowSize);
         ctx.lineTo(
@@ -890,11 +879,11 @@
         const bgHeight = fontSize + cellSize * 0.35;
 
         // Draw background with slight rounding effect
-        ctx.fillStyle = this.racingPlannerMode === '8D' ? "rgba(34, 197, 94, 0.98)" : "rgba(59, 130, 246, 0.98)";
+        ctx.fillStyle = this._rgba(colors.accent, 0.85);
         ctx.fillRect(bgX - 5, bgY, bgWidth + 10, bgHeight);
 
         // Text
-        ctx.fillStyle = "rgba(255, 255, 255, 1.0)";
+        ctx.fillStyle = colors.textStrong;
         ctx.textAlign = "right";
         ctx.textBaseline = "top";
         ctx.fillText(modeText, this.canvas.width - cellSize * 0.35, cellSize * 0.4);
@@ -904,6 +893,7 @@
 
     _drawRobot() {
       const { ctx } = this;
+      const colors = this._palette();
       // Use the current solver (could be FloodSolver or LPASolver)
       const solver = this.currentSolver || this.solver;
       const { x, y } = solver.position;
@@ -915,7 +905,7 @@
       // Draw path trails with different colors for phases
       // Forward path (TO-GOAL) - Blue
       if (this.forwardPath.length > 1) {
-        ctx.strokeStyle = "rgba(59, 90, 246, 0.5)";  // Blue
+        ctx.strokeStyle = this._rgba(colors.border, 0.5);
         ctx.lineWidth = cellSize * 0.15;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
@@ -931,7 +921,7 @@
 
       // Backward path (RETURN) - Red
       if (this.backwardPath.length > 1) {
-        ctx.strokeStyle = "rgba(239, 68, 68, 0.5)";  // Red
+        ctx.strokeStyle = this._rgba(colors.muted, 0.45);
         ctx.lineWidth = cellSize * 0.15;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
@@ -947,7 +937,7 @@
 
       // Racing path (RACE) - Green
       if (this.racingPath.length > 1) {
-        ctx.strokeStyle = "rgba(16, 185, 129, 0.6)";  // Green
+        ctx.strokeStyle = this._rgba(colors.accent, 0.45);
         ctx.lineWidth = cellSize * 0.2;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
@@ -966,14 +956,14 @@
       const startCenterY = 0 * cellSize + cellSize / 2;
       
       // Draw start marker circle
-      ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
+      ctx.fillStyle = this._rgba(colors.border, 0.2);
       ctx.beginPath();
       ctx.arc(startCenterX, startCenterY, cellSize * 0.35, 0, Math.PI * 2);
       ctx.fill();
       
       // Draw robot body
-      ctx.fillStyle = "#fbbf24";
-      ctx.strokeStyle = "#f59e0b";
+      ctx.fillStyle = colors.textStrong;
+      ctx.strokeStyle = colors.border;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
@@ -989,7 +979,7 @@
         west: Math.PI
       }[dir] ?? 0;
       
-      ctx.strokeStyle = "#1e293b";
+      ctx.strokeStyle = colors.muted;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
@@ -1010,11 +1000,17 @@
      */
     _drawSensorRays(robotX, robotY, robotHeading, cellSize) {
       const { ctx } = this;
+      const colors = this._palette();
       const robotCenterX = robotX * cellSize + cellSize / 2;
       const robotCenterY = robotY * cellSize + cellSize / 2;
 
       // Draw each sensor ray
       for (const [name, sensor] of Object.entries(this.robotSensors)) {
+        const sensorColor = {
+          border: colors.border,
+          muted: colors.muted,
+          accent: colors.accent
+        }[sensor.color] || colors.border;
         const rayAngle = robotHeading + sensor.angle;
         const rayDx = Math.cos(rayAngle);
         const rayDy = Math.sin(rayAngle);
@@ -1028,7 +1024,7 @@
         
         // Draw max range boundary (faint cone)
         const maxRayDist = maxRangeCells * cellSize;
-        ctx.strokeStyle = sensor.color;
+        ctx.strokeStyle = this._rgba(sensorColor, 0.2);
         ctx.lineWidth = 0.8;
         ctx.globalAlpha = 0.15;
         ctx.beginPath();
@@ -1037,7 +1033,7 @@
         ctx.globalAlpha = 1.0;
         
         // Draw detected ray line
-        ctx.strokeStyle = sensor.color;
+        ctx.strokeStyle = this._rgba(sensorColor, 0.7);
         ctx.lineWidth = 2.2;
         ctx.globalAlpha = 0.85;
         ctx.beginPath();
@@ -1047,7 +1043,7 @@
         ctx.globalAlpha = 1.0;
         
         // Draw endpoint marker
-        ctx.fillStyle = sensor.color;
+        ctx.fillStyle = this._rgba(sensorColor, 0.8);
         ctx.globalAlpha = 0.9;
         ctx.beginPath();
         ctx.arc(endX, endY, 2.5, 0, Math.PI * 2);
@@ -1058,7 +1054,7 @@
         const labelOffsetX = endX + rayDx * cellSize * 0.15;
         const labelOffsetY = endY + rayDy * cellSize * 0.15;
         
-        ctx.fillStyle = sensor.color;
+        ctx.fillStyle = this._rgba(sensorColor, 0.9);
         ctx.globalAlpha = 0.9;
         ctx.font = "bold 11px monospace";
         ctx.textAlign = "center";
@@ -1078,6 +1074,24 @@
       }
     }
 
+    _palette() {
+      if (this.theme) return this.theme.palette();
+      const styles = getComputedStyle(document.documentElement);
+      return {
+        surface: styles.getPropertyValue("--surface").trim(),
+        surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+        text: styles.getPropertyValue("--text").trim(),
+        textStrong: styles.getPropertyValue("--text-strong").trim(),
+        muted: styles.getPropertyValue("--muted").trim(),
+        border: styles.getPropertyValue("--border").trim(),
+        accent: styles.getPropertyValue("--accent").trim(),
+      };
+    }
+
+    _rgba(color, alpha) {
+      return this.theme ? this.theme.rgba(color, alpha) : color;
+    }
+
     draw() {
       const { ctx } = this;
       
@@ -1085,7 +1099,8 @@
       // Full canvas clear in physical coordinates to ensure no artifacts
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = "rgba(15, 23, 42, 1.0)"; // Dark background (#0f172a)
+      const colors = this._palette();
+      ctx.fillStyle = colors.surface;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       ctx.restore();
       

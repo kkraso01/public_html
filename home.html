@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
 <head>
   <meta charset="UTF-8" />
@@ -32,17 +32,26 @@
     rel="stylesheet"
   />
 
+  <script>
+    (() => {
+      const stored = localStorage.getItem("theme");
+      const theme = stored === "dark" || stored === "light" ? stored : "light";
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+
   <!-- Custom styles for background + subtle polish -->
   <style>
     :root {
-      --bg: #060606;
-      --surface: rgba(12, 12, 12, 0.9);
-      --surface-elevated: rgba(18, 18, 18, 0.94);
-      --text: #d6d6d6;
-      --text-strong: #f5f5f5;
-      --muted: #9a9a9a;
-      --border: rgba(255, 255, 255, 0.14);
+      --bg: #f6f6f6;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-elevated: rgba(255, 255, 255, 0.92);
+      --text: #1a1a1a;
+      --text-strong: #070707;
+      --muted: #5a5a5a;
+      --border: rgba(10, 10, 10, 0.14);
       --accent: #ff2d2d;
+      --bg-overlay: radial-gradient(circle at 50% 20%, rgba(246, 246, 246, 0.55), rgba(246, 246, 246, 0.78));
       --radius: 2px;
       --shadow: none;
       --space-1: 4px;
@@ -55,6 +64,18 @@
       --space-8: 64px;
       --font-heading: "Space Grotesk", "Inter", sans-serif;
       --font-body: "Inter", "Helvetica Neue", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #060606;
+      --surface: rgba(12, 12, 12, 0.9);
+      --surface-elevated: rgba(18, 18, 18, 0.94);
+      --text: #d6d6d6;
+      --text-strong: #f5f5f5;
+      --muted: #9a9a9a;
+      --border: rgba(255, 255, 255, 0.14);
+      --accent: #ff2d2d;
+      --bg-overlay: radial-gradient(circle at 50% 20%, rgba(6, 6, 6, 0.72), rgba(6, 6, 6, 0.9));
     }
 
     * {
@@ -70,7 +91,7 @@
       min-height: 100vh;
       font-family: var(--font-body);
       color: var(--text);
-      background: transparent;
+      background: var(--bg);
       line-height: 1.6;
       position: relative;
     }
@@ -79,7 +100,7 @@
       content: "";
       position: fixed;
       inset: 0;
-      background: rgba(6, 6, 6, 0.84);
+      background: var(--bg-overlay);
       z-index: -1;
       pointer-events: none;
     }
@@ -116,11 +137,13 @@
       text-decoration: none;
     }
 
+    .ui-link,
     a.link {
       position: relative;
       color: var(--text-strong);
     }
 
+    .ui-link::after,
     a.link::after {
       content: "";
       position: absolute;
@@ -132,11 +155,14 @@
       transition: width 0.18s ease;
     }
 
+    .ui-link:hover::after,
+    .ui-link:focus-visible::after,
     a.link:hover::after,
     a.link:focus-visible::after {
       width: 100%;
     }
 
+    .ui-link--accent,
     a.link--accent {
       color: var(--accent);
     }
@@ -178,7 +204,7 @@
       position: sticky;
       top: 0;
       z-index: 10;
-      background: rgba(6, 6, 6, 0.9);
+      background: var(--surface-elevated);
       border-bottom: 1px solid var(--border);
     }
 
@@ -277,6 +303,7 @@
       gap: var(--space-4);
     }
 
+    .ui-btn,
     .btn {
       display: inline-flex;
       align-items: center;
@@ -292,17 +319,22 @@
       transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
     }
 
+    .ui-btn:hover,
+    .ui-btn:focus-visible,
     .btn:hover,
     .btn:focus-visible {
       border-color: var(--accent);
       color: var(--accent);
     }
 
+    .ui-btn--solid,
     .btn--solid {
       border-color: var(--accent);
       color: var(--accent);
     }
 
+    .ui-btn--solid:hover,
+    .ui-btn--solid:focus-visible,
     .btn--solid:hover,
     .btn--solid:focus-visible {
       background: var(--accent);
@@ -346,6 +378,7 @@
       background: var(--border);
     }
 
+    .ui-panel,
     .panel {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -361,6 +394,7 @@
       background: var(--surface-elevated);
     }
 
+    .ui-chip,
     .chip {
       display: inline-flex;
       align-items: center;
@@ -374,11 +408,14 @@
       color: var(--muted);
     }
 
+    .ui-chip--accent,
     .chip--accent {
       color: var(--accent);
-      border-color: rgba(255, 45, 45, 0.4);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     }
 
+    .ui-chip:hover,
+    .ui-chip:focus-visible,
     .chip:hover,
     .chip:focus-visible {
       border-color: var(--accent);
@@ -392,18 +429,112 @@
       color: var(--muted);
     }
 
+    .ui-canvas-frame,
     .canvas-frame {
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: rgba(6, 6, 6, 0.35);
+      background: var(--surface);
       overflow: hidden;
+    }
+
+    .ui-canvas-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.65rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .ui-input,
+    select,
+    input[type="text"],
+    input[type="number"],
+    input[type="range"] {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
+    .ui-input:focus,
+    select:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    input[type="range"]:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      height: 2px;
+      padding: 0;
+      background: var(--border);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: var(--radius);
+      background: var(--text-strong);
+      border: 1px solid var(--border);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: var(--radius);
+      background: var(--text-strong);
+      border: 1px solid var(--border);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 2px;
+      background: var(--border);
+      border: none;
+    }
+
+    .ui-control,
+    #maze-controls .radio-option,
+    #maze-controls .checkbox-option {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .ui-control.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .ui-control.is-active .meta {
+      color: var(--accent);
     }
 
     .workspace-tabs-container {
       position: sticky;
       top: 64px;
       z-index: 9;
-      background: rgba(6, 6, 6, 0.9);
+      background: var(--surface-elevated);
       border-bottom: 1px solid var(--border);
     }
 
@@ -548,7 +679,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(6, 6, 6, 0.32);
+      background: color-mix(in srgb, var(--bg) 60%, transparent);
       pointer-events: none;
       z-index: 2;
     }
@@ -557,7 +688,7 @@
       position: absolute;
       inset: -8px;
       border-radius: 50%;
-      border: 1px dashed rgba(255, 45, 45, 0.5);
+      border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
       animation: pulse 2.4s ease-in-out infinite;
       z-index: 1;
       pointer-events: none;
@@ -582,7 +713,7 @@
       border: 1px solid var(--border);
       padding: var(--space-3);
       text-align: center;
-      background: rgba(10, 10, 10, 0.7);
+      background: var(--surface);
     }
 
     .sensor-value {
@@ -601,40 +732,6 @@
       color: var(--muted);
     }
 
-    #maze-controls select,
-    #maze-controls input[type="range"] {
-      width: 100%;
-      padding: 8px 10px;
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-size: 0.85rem;
-    }
-
-    #maze-controls select:focus,
-    #maze-controls input[type="range"]:focus {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-    }
-
-    #maze-controls input[type="radio"],
-    #maze-controls input[type="checkbox"] {
-      accent-color: var(--accent);
-      width: 16px;
-      height: 16px;
-    }
-
-    #maze-controls .radio-option,
-    #maze-controls .checkbox-option {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding: var(--space-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-    }
-
     #maze-controls .radio-group {
       display: grid;
       gap: var(--space-2);
@@ -650,7 +747,7 @@
       border: 1px solid var(--border);
       padding: var(--space-3);
       border-radius: var(--radius);
-      background: rgba(10, 10, 10, 0.6);
+      background: var(--surface);
       transition: border-color 0.18s ease;
     }
 
@@ -679,6 +776,134 @@
       border-left: 2px solid var(--accent);
       padding-left: var(--space-3);
       margin-top: var(--space-3);
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: 0.6rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .theme-toggle-label {
+      color: var(--text-strong);
+    }
+
+    .theme-toggle-buttons {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .theme-toggle button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 10px;
+      font-size: 0.6rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .theme-toggle button.is-active {
+      color: var(--text-strong);
+      background: color-mix(in srgb, var(--surface-elevated) 80%, transparent);
+    }
+
+    .cue-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--surface);
+    }
+
+    .metric-flash {
+      color: var(--accent);
+    }
+
+    .hud-panel {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .hud-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hud-section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-3);
+      background: var(--surface-elevated);
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    .hud-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-2);
+      font-size: 0.7rem;
+    }
+
+    .hud-label {
+      color: var(--muted);
+    }
+
+    .hud-value {
+      color: var(--text-strong);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 600;
+    }
+
+    .hud-controls {
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    .hud-button-row {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    .hud-controls label {
+      display: grid;
+      grid-template-columns: 64px 1fr 56px;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: 0.7rem;
+      color: var(--muted);
     }
 
     .workspace-hidden {
@@ -753,35 +978,29 @@
     <div class="container site-header-inner">
       <span class="site-logo">Konstantin Krasovitskiy</span>
       <nav class="site-nav" aria-label="Primary">
-        <a class="link" href="#research-systems">Systems</a>
-        <a class="link" href="#projects">Projects</a>
-        <a class="link" href="#experience">Experience</a>
-        <a class="link" href="#contact">Contact</a>
+        <a class="ui-link link" href="#research-systems">Systems</a>
+        <a class="ui-link link" href="#projects">Projects</a>
+        <a class="ui-link link" href="#experience">Experience</a>
+        <a class="ui-link link" href="#contact">Contact</a>
       </nav>
+      <div class="theme-toggle" role="group" aria-label="Mode">
+        <span class="theme-toggle-label">Mode</span>
+        <div class="theme-toggle-buttons">
+          <button type="button" data-theme-toggle="light">Light</button>
+          <button type="button" data-theme-toggle="dark">Dark</button>
+        </div>
+      </div>
       <details class="mobile-nav">
         <summary>Menu</summary>
         <nav aria-label="Mobile">
-          <a class="link" href="#research-systems">Systems</a>
-          <a class="link" href="#projects">Projects</a>
-          <a class="link" href="#experience">Experience</a>
-          <a class="link" href="#contact">Contact</a>
+          <a class="ui-link link" href="#research-systems">Systems</a>
+          <a class="ui-link link" href="#projects">Projects</a>
+          <a class="ui-link link" href="#experience">Experience</a>
+          <a class="ui-link link" href="#contact">Contact</a>
         </nav>
       </details>
     </div>
   </header>
-
-  <!-- System Dashboard Overlay (Disabled) -->
-  <!-- <div id="sys-dashboard" class="fixed top-4 right-4
-      bg-gray-900/60 backdrop-blur-lg px-6 py-4 rounded-2xl border border-gray-700 shadow-lg z-50">
-    <h3 class="text-indigo-300 text-sm mb-2 tracking-widest">SYSTEM STATUS</h3>
-    <div class="space-y-1 text-gray-200 text-xs font-mono">
-      <p>Node: <span id="hud-node" class="text-green-400">ACTIVE</span></p>
-      <p>Latency: <span id="hud-lat">0</span>ms</p>
-      <p>Token/s: <span id="hud-tps">0</span></p>
-      <p>GPU Load: <span id="hud-gpu">0</span>%</p>
-      <p>Vector Ops: <span id="hud-vops">0</span>/s</p>
-    </div>
-  </div> -->
 
   <!-- Hero (visible in all workspaces) -->
   <section class="hero" data-workspace="llm" data-workspace-shared="true">
@@ -793,8 +1012,8 @@
         <span>Simulation-First Autonomy (Hobby)</span>
       </div>
       <div class="hero-actions">
-        <a href="#projects" class="btn btn--solid">View Projects</a>
-        <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf" class="btn">Download CV</a>
+        <a href="#projects" class="ui-btn ui-btn--solid btn btn--solid">View Projects</a>
+        <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf" class="ui-btn btn">Download CV</a>
       </div>
     </div>
   </section>
@@ -839,7 +1058,10 @@
               <strong>Industry relevance:</strong> Retrieval QA, chunking strategies, context grounding, hallucination reduction for production LLM systems.
             </div>
           </div>
-          <div class="canvas-frame" style="margin-top: var(--space-5);">
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Rag Mesh</span>
+            </div>
             <canvas id="ragCanvas" style="width: 100%; height: 256px;"></canvas>
           </div>
         </article>
@@ -857,7 +1079,10 @@
               <strong>Industry relevance:</strong> Router policies, cost/latency optimization, evaluation harness design, multi-model scoring and merge strategies.
             </div>
           </div>
-          <div class="canvas-frame" style="margin-top: var(--space-5);">
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Orchestrator</span>
+            </div>
             <canvas id="orchestratorCanvas" style="width: 100%; height: 320px;"></canvas>
           </div>
           <p class="meta" style="margin-top: var(--space-2);">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge →
@@ -877,7 +1102,10 @@
               <strong>Industry relevance:</strong> Debugging attention/residual flow dynamics, interpretability for transformer architectures, conceptual model introspection.
             </div>
           </div>
-          <div class="canvas-frame" style="margin-top: var(--space-5);">
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Transformer Core</span>
+            </div>
             <canvas id="llm-viz" style="width: 100%; height: 360px;"></canvas>
           </div>
         </article>
@@ -895,7 +1123,10 @@
               <strong>Industry relevance:</strong> Interpretability insights, attention head behavior analysis, debugging multi-head attention convergence for production models.
             </div>
           </div>
-          <div class="canvas-frame" style="margin-top: var(--space-5);">
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Attention Map</span>
+            </div>
             <canvas id="attentionCanvas" style="width: 100%; height: 300px;"></canvas>
           </div>
         </article>
@@ -923,7 +1154,10 @@
           <span class="chip">Draggable Bot</span>
           <span class="chip">Grab to reposition on the track</span>
         </div>
-        <div class="canvas-frame" style="position: relative;">
+        <div class="ui-canvas-frame canvas-frame" style="position: relative;">
+          <div class="ui-canvas-title">
+            <span>Line Lab</span>
+          </div>
           <canvas id="line-following-canvas" style="width: 100%; height: 480px;"></canvas>
           <div id="line-following-robot" class="lf-robot" title="Drag me">
             <div class="lf-robot-core" aria-hidden="true"></div>
@@ -941,49 +1175,49 @@
                 <label class="meta">Proportional</label>
                 <span id="kp-value" class="meta" style="color: var(--accent);">1.30</span>
               </div>
-              <input id="kp-slider" type="range" min="0" max="3" step="0.01" value="1.3">
+              <input id="kp-slider" class="ui-input" type="range" min="0" max="3" step="0.01" value="1.3">
             </div>
             <div class="panel panel--tight" style="grid-column: span 3;">
               <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
                 <label class="meta">Integral</label>
                 <span id="ki-value" class="meta" style="color: var(--accent);">0.42</span>
               </div>
-              <input id="ki-slider" type="range" min="0" max="1" step="0.01" value="0.42">
+              <input id="ki-slider" class="ui-input" type="range" min="0" max="1" step="0.01" value="0.42">
             </div>
             <div class="panel panel--tight" style="grid-column: span 3;">
               <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
                 <label class="meta">Derivative</label>
                 <span id="kd-value" class="meta" style="color: var(--accent);">0.32</span>
               </div>
-              <input id="kd-slider" type="range" min="0" max="1" step="0.01" value="0.32">
+              <input id="kd-slider" class="ui-input" type="range" min="0" max="1" step="0.01" value="0.32">
             </div>
             <div class="panel panel--tight" style="grid-column: span 2;">
               <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
                 <label class="meta">Speed</label>
                 <span id="speed-value" class="meta" style="color: var(--accent);">120 px/s</span>
               </div>
-              <input id="speed-slider" type="range" min="45" max="300" step="5" value="120">
+              <input id="speed-slider" class="ui-input" type="range" min="45" max="300" step="5" value="120">
             </div>
-            <button id="pid-reset-btn" class="btn" style="grid-column: span 1; align-self: end;">⟲ Reset</button>
+            <button id="pid-reset-btn" class="ui-btn btn" style="grid-column: span 1; align-self: end;">⟲ Reset</button>
           </div>
         </div>
 
         <div>
           <h3 class="meta" style="margin-bottom: var(--space-3);">Advanced</h3>
           <div class="grid-12">
-            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
               <input id="noise-toggle" type="checkbox">
               <span class="meta" style="letter-spacing: 0.12em;">Sensor Noise</span>
             </label>
-            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
               <input id="anti-windup-toggle" type="checkbox" checked>
               <span class="meta" style="letter-spacing: 0.12em;">Anti-Windup</span>
             </label>
-            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
               <input id="d-filter-toggle" type="checkbox">
               <span class="meta" style="letter-spacing: 0.12em;">D-Filter</span>
             </label>
-            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
               <input id="adaptive-speed-toggle" type="checkbox">
               <span class="meta" style="letter-spacing: 0.12em;">Adaptive Speed</span>
             </label>
@@ -1086,17 +1320,20 @@
             </p>
 
             <div class="hero-actions" style="gap: var(--space-2);">
-              <button id="maze-generate" class="btn">Generate Maze</button>
-              <button id="maze-run" class="btn btn--solid">Run</button>
-              <button id="maze-step" class="btn">Step</button>
-              <button id="maze-reset" class="btn">Reset</button>
+              <button id="maze-generate" class="ui-btn btn">Generate Maze</button>
+              <button id="maze-run" class="ui-btn ui-btn--solid btn btn--solid">Run</button>
+              <button id="maze-step" class="ui-btn btn">Step</button>
+              <button id="maze-reset" class="ui-btn btn">Reset</button>
             </div>
 
             <div id="maze-controls" class="panel panel--tight" style="display: grid; gap: var(--space-3); margin-top: var(--space-4);"></div>
           </div>
 
           <div class="section-column-right">
-            <div class="canvas-frame">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Maze Grid</span>
+              </div>
               <canvas id="maze-canvas" style="width: 100%; height: 520px;"></canvas>
             </div>
           </div>
@@ -1116,7 +1353,7 @@
         Racing, LiDAR-based cave exploration, and obstacle avoidance — all simulated with physics-based control.
       </p>
       <div style="margin-bottom: var(--space-6);">
-        <a href="drones/stationary/stationary_test.html" class="btn btn--solid">Hover Stability Demo (ETH Controller)</a>
+        <a href="drones/stationary/stationary_test.html" class="ui-btn ui-btn--solid btn btn--solid">Hover Stability Demo (ETH Controller)</a>
       </div>
 
       <div style="margin-bottom: var(--space-6);">
@@ -1129,13 +1366,16 @@
       <div class="section-columns" style="margin-bottom: var(--space-7);">
         <div id="drone-race-controls-container" class="section-column-left panel panel--elevated"></div>
         <div class="section-column-right">
-          <div class="canvas-frame">
-            <div id="drone-race-demo" style="width: 100%; height: 520px;"></div>
-            <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
-              Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Race Sim</span>
+              </div>
+              <div id="drone-race-demo" style="width: 100%; height: 520px;"></div>
+              <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+                Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
+              </div>
             </div>
           </div>
-        </div>
       </div>
 
     <!-- Cave Explorer Demo -->
@@ -1161,8 +1401,8 @@
             </div>
 
             <div style="display: grid; gap: var(--space-2);">
-              <button id="drone-cave-toggle" class="btn btn--solid">Start Exploration</button>
-              <button id="drone-cave-restart" class="btn">Reset Map</button>
+              <button id="drone-cave-toggle" class="ui-btn ui-btn--solid btn btn--solid">Start Exploration</button>
+              <button id="drone-cave-restart" class="ui-btn btn">Reset Map</button>
             </div>
 
             <div>
@@ -1196,7 +1436,10 @@
           </div>
 
           <div class="section-column-right">
-            <div class="canvas-frame">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Cave Map</span>
+              </div>
               <div id="drone-cave-demo" style="width: 100%; height: 520px;"></div>
               <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
                 Real-time LiDAR point cloud and occupancy grid visualization with frontier exploration overlay.
@@ -1229,10 +1472,10 @@
             </div>
 
             <div style="display: grid; gap: var(--space-2);">
-              <button id="drone-obstacle-spawn-boulder" class="btn btn--solid">Add Boulder</button>
-              <button id="drone-obstacle-spawn-wall" class="btn">Add Wall</button>
-              <button id="drone-obstacle-spawn-sphere" class="btn">Add Sphere</button>
-              <button id="drone-obstacle-reset" class="btn">Clear All Obstacles</button>
+              <button id="drone-obstacle-spawn-boulder" class="ui-btn ui-btn--solid btn btn--solid">Add Boulder</button>
+              <button id="drone-obstacle-spawn-wall" class="ui-btn btn">Add Wall</button>
+              <button id="drone-obstacle-spawn-sphere" class="ui-btn btn">Add Sphere</button>
+              <button id="drone-obstacle-reset" class="ui-btn btn">Clear All Obstacles</button>
             </div>
 
             <div>
@@ -1249,7 +1492,10 @@
           </div>
 
           <div class="section-column-right">
-            <div class="canvas-frame">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Obstacle Field</span>
+              </div>
               <div id="drone-obstacle-demo" style="width: 100%; height: 520px;"></div>
               <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
                 Interactive 3D environment with real-time obstacle physics and drone avoidance visualization.
@@ -1546,15 +1792,15 @@
         </p>
         <div style="display: grid; gap: var(--space-2);">
           <p class="meta">Email</p>
-          <a href="mailto:kkraso01@ucy.ac.cy" class="link link--accent">kkraso01@ucy.ac.cy</a>
+          <a href="mailto:kkraso01@ucy.ac.cy" class="ui-link link link--accent">kkraso01@ucy.ac.cy</a>
         </div>
         <div style="display: grid; gap: var(--space-2);">
           <p class="meta">LinkedIn</p>
-          <a href="https://linkedin.com/in/konstantin-krasovitskiy" target="_blank" class="link link--accent">linkedin.com/in/konstantin-krasovitskiy</a>
+          <a href="https://linkedin.com/in/konstantin-krasovitskiy" target="_blank" class="ui-link link link--accent">linkedin.com/in/konstantin-krasovitskiy</a>
         </div>
         <div style="display: grid; gap: var(--space-2);">
           <p class="meta">GitHub</p>
-          <a href="https://github.com/kkraso01" target="_blank" class="link link--accent">github.com/kkraso01</a>
+          <a href="https://github.com/kkraso01" target="_blank" class="ui-link link link--accent">github.com/kkraso01</a>
         </div>
       </div>
     </div>
@@ -1620,6 +1866,7 @@
   <script src="tabs.js"></script>
   <script src="viewport-observer.js"></script>
   <script src="shared_bus.js"></script>
+  <script src="ui_theme.js"></script>
   <script src="background.js"></script>
   <script src="rag_pipeline.js"></script>
   <script src="system_status.js"></script>
@@ -1650,6 +1897,27 @@
   <script type="module" src="drone-sim/ui/main_demo.js"></script>
 
   <script>
+    const themeButtons = document.querySelectorAll("[data-theme-toggle]");
+    const applyTheme = (theme) => {
+      const nextTheme = theme === "dark" ? "dark" : "light";
+      document.documentElement.dataset.theme = nextTheme;
+      localStorage.setItem("theme", nextTheme);
+      themeButtons.forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.themeToggle === nextTheme);
+      });
+      window.dispatchEvent(new Event("themechange"));
+      if (typeof window.refreshCanvases === "function") {
+        window.refreshCanvases();
+      }
+    };
+
+    themeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => applyTheme(btn.dataset.themeToggle));
+    });
+
+    const storedTheme = localStorage.getItem("theme");
+    applyTheme(storedTheme === "dark" ? "dark" : "light");
+
     // Fade interaction cues after first engagement
     const cueBadges = document.querySelectorAll('.cue-badge');
     cueBadges.forEach((badge) => {

@@ -6,6 +6,43 @@ function clamp(x, min, max) {
   return Math.min(Math.max(x, min), max);
 }
 
+function parseColor(value) {
+  if (!value) return { r: 0, g: 0, b: 0 };
+  const trimmed = value.trim();
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.replace("#", "");
+    const size = hex.length === 3 ? 1 : 2;
+    const read = (idx) => parseInt(hex.substr(idx * size, size).padEnd(2, hex[idx] || "0"), 16);
+    return { r: read(0), g: read(1), b: read(2) };
+  }
+  const match = trimmed.match(/rgba?\(([^)]+)\)/);
+  if (match) {
+    const parts = match[1].split(",").map((part) => parseFloat(part.trim()));
+    return { r: parts[0] ?? 0, g: parts[1] ?? 0, b: parts[2] ?? 0 };
+  }
+  return { r: 0, g: 0, b: 0 };
+}
+
+function toThreeColor(value) {
+  const parsed = window.UI_THEME?.parseColor ? window.UI_THEME.parseColor(value) : parseColor(value);
+  return new THREE.Color(parsed.r / 255, parsed.g / 255, parsed.b / 255);
+}
+
+function readThemePalette() {
+  if (window.UI_THEME) return window.UI_THEME.palette();
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    bg: styles.getPropertyValue("--bg").trim(),
+    surface: styles.getPropertyValue("--surface").trim(),
+    surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+    text: styles.getPropertyValue("--text").trim(),
+    textStrong: styles.getPropertyValue("--text-strong").trim(),
+    muted: styles.getPropertyValue("--muted").trim(),
+    border: styles.getPropertyValue("--border").trim(),
+    accent: styles.getPropertyValue("--accent").trim(),
+  };
+}
+
 export function initObstacleDropDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
     console.warn('Obstacle demo requires a valid container and Three.js');
@@ -41,12 +78,15 @@ class ObstacleDropDemo {
     this._initObstacles();
     this._initHUD();
     this._bindInputs();
+    this._applyTheme();
+    window.addEventListener('themechange', () => this._applyTheme());
     this.restart();
   }
 
   _initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b1220);
+    const palette = readThemePalette();
+    this.scene.background = toThreeColor(palette.bg);
     const aspect = this.options.width / this.options.height;
     this.chaseCamera = new THREE.PerspectiveCamera(60, aspect, 0.05, 200);
     this.chaseCamera.position.set(4, 4, 8);
@@ -61,22 +101,24 @@ class ObstacleDropDemo {
     this.container.innerHTML = '';
     this.container.appendChild(this.renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0x475569, 0.4);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-    dir.position.set(5, 8, 5);
-    dir.castShadow = true;
-    this.scene.add(ambient, dir);
+    this.ambient = new THREE.AmbientLight(toThreeColor(palette.text), 0.35);
+    this.dir = new THREE.DirectionalLight(new THREE.Color(1, 1, 1), 0.9);
+    this.dir.position.set(5, 8, 5);
+    this.dir.castShadow = true;
+    this.scene.add(this.ambient, this.dir);
 
+    this.groundMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.surface), roughness: 0.8 });
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(40, 40),
-      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 }),
+      this.groundMat,
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = this.floorHeight;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
+    this.wallMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.surfaceElevated), roughness: 0.9 });
+    const wallMat = this.wallMat;
     const north = new THREE.Mesh(new THREE.BoxGeometry(40, 6, 0.5), wallMat);
     north.position.set(0, 3, -20);
     const south = north.clone();
@@ -94,19 +136,20 @@ class ObstacleDropDemo {
   _initDrone() {
     this.drone = new DronePhysicsEngine({ floorHeight: this.floorHeight });
     this.drone.reset({ position: new THREE.Vector3(0, 1.4, 0) });
+    const palette = readThemePalette();
 
     const body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.3, 1.0, 12, 16),
-      new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.25, roughness: 0.45 }),
+      new THREE.MeshStandardMaterial({ color: toThreeColor(palette.textStrong), metalness: 0.25, roughness: 0.45 }),
     );
     const arms = new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 0.12, 0.12),
-      new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x0ea5e9 }),
+      new THREE.MeshStandardMaterial({ color: toThreeColor(palette.text), emissive: toThreeColor(palette.border) }),
     );
     arms.castShadow = true;
     const rings = new THREE.Mesh(
       new THREE.RingGeometry(0.16, 0.26, 18),
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      new THREE.MeshBasicMaterial({ color: toThreeColor(palette.border) }),
     );
     rings.rotation.x = Math.PI / 2;
     this.droneMesh = new THREE.Group();
@@ -124,9 +167,10 @@ class ObstacleDropDemo {
 
   _initObstacles() {
     this.manager = new ObstacleManager(this.scene);
-    this.manager.addObstacle(new THREE.Vector3(1.5, 0.4, 0), 0.5, 0xf97316);
-    this.manager.addObstacle(new THREE.Vector3(-1.2, 0.4, -1.5), 0.45, 0x22c55e);
-    this.manager.addObstacle(new THREE.Vector3(0, 0.4, 1.8), 0.55, 0x10b981);
+    const palette = readThemePalette();
+    this.manager.addObstacle(new THREE.Vector3(1.5, 0.4, 0), 0.5, toThreeColor(palette.textStrong).getHex());
+    this.manager.addObstacle(new THREE.Vector3(-1.2, 0.4, -1.5), 0.45, toThreeColor(palette.muted).getHex());
+    this.manager.addObstacle(new THREE.Vector3(0, 0.4, 1.8), 0.55, toThreeColor(palette.border).getHex());
     this.controls = new DraggableControls(this.chaseCamera, this.renderer.domElement, this.manager, {
       onDragEnd: () => {
         // nudge the controller so the vehicle reacts to the new obstacle position
@@ -138,9 +182,9 @@ class ObstacleDropDemo {
   _initHUD() {
     this.overlay = document.createElement('div');
     this.overlay.style.cssText =
-      'position:absolute; top:8px; left:8px; background:rgba(11,17,32,0.85); color:#e2e8f0; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(14,165,233,0.35); border-radius:8px; z-index:5;';
+      'position:absolute; top:8px; left:8px; background:var(--surface-elevated); color:var(--text); padding:10px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; border:1px solid var(--border); border-radius:var(--radius); z-index:5;';
     this.overlay.innerHTML = `
-      <div style="font-size:12px; color:#7dd3fc;">Obstacle Avoider</div>
+      <div style="font-size:12px; color:var(--text-strong);">Obstacle Avoider</div>
       <div id="obsState" style="font-size:12px;">Hovering + avoiding</div>
       <div id="obsAlt" style="font-size:12px;">Alt: 0.0 m</div>
     `;
@@ -149,15 +193,31 @@ class ObstacleDropDemo {
 
     this.debugPanel = document.createElement('div');
     this.debugPanel.style.cssText =
-      'position:absolute; top:8px; right:8px; background:rgba(8,10,18,0.85); color:#cbd5f5; padding:10px; font-family:"Fira Code", monospace; border:1px solid rgba(56,189,248,0.35); border-radius:8px; z-index:6; display:none; min-width:220px;';
+      'position:absolute; top:8px; right:8px; background:var(--surface-elevated); color:var(--text); padding:10px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; border:1px solid var(--border); border-radius:var(--radius); z-index:6; display:none; min-width:220px;';
     this.debugPanel.innerHTML = `
-      <div style="font-size:12px; color:#38bdf8; margin-bottom:4px;">Debug</div>
+      <div style="font-size:12px; color:var(--text-strong); margin-bottom:4px;">Debug</div>
       <div id="dbgPos" style="font-size:12px;">Pos: 0,0,0</div>
       <div id="dbgVel" style="font-size:12px;">Vel: 0</div>
       <div id="dbgRPM" style="font-size:12px;">RPM: 0|0|0|0</div>
       <div id="dbgThrust" style="font-size:12px;">Thrust: 0</div>
     `;
     this.container.appendChild(this.debugPanel);
+  }
+
+  _applyTheme() {
+    const palette = readThemePalette();
+    if (this.scene) {
+      this.scene.background = toThreeColor(palette.bg);
+    }
+    if (this.ambient) {
+      this.ambient.color = toThreeColor(palette.text);
+    }
+    if (this.groundMat) {
+      this.groundMat.color = toThreeColor(palette.surface);
+    }
+    if (this.wallMat) {
+      this.wallMat.color = toThreeColor(palette.surfaceElevated);
+    }
   }
 
   _bindInputs() {

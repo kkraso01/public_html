@@ -60,16 +60,12 @@ export class RaceUIController {
 
     const updateButtonStates = (activeMode) => {
       [geometricBtn, timeoptBtn].forEach(btn => {
-        if (btn) btn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
-        if (btn) btn.classList.add('bg-gray-700', 'hover:bg-gray-600');
+        if (btn) btn.classList.remove('ui-btn--solid');
       });
-
       if (activeMode === 'geometric' && geometricBtn) {
-        geometricBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
-        geometricBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+        geometricBtn.classList.add('ui-btn--solid');
       } else if (activeMode === 'time-optimal' && timeoptBtn) {
-        timeoptBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
-        timeoptBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+        timeoptBtn.classList.add('ui-btn--solid');
       }
     };
     
