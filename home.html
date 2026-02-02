@@ -25,118 +25,497 @@
     Assets: line-follower/ROBOT.png, KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf
   -->
 
-  <!-- Tailwind CSS - Production via jsDelivr Play CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
 
   <!-- Custom styles for background + subtle polish -->
   <style>
-    /* Fullscreen canvas for NN / constellation background */
+    :root {
+      --bg: #060606;
+      --surface: rgba(12, 12, 12, 0.9);
+      --surface-elevated: rgba(18, 18, 18, 0.94);
+      --text: #d6d6d6;
+      --text-strong: #f5f5f5;
+      --muted: #9a9a9a;
+      --border: rgba(255, 255, 255, 0.14);
+      --accent: #ff2d2d;
+      --radius: 2px;
+      --shadow: none;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --space-7: 48px;
+      --space-8: 64px;
+      --font-heading: "Space Grotesk", "Inter", sans-serif;
+      --font-body: "Inter", "Helvetica Neue", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-body);
+      color: var(--text);
+      background: transparent;
+      line-height: 1.6;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 6, 6, 0.84);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-heading);
+      color: var(--text-strong);
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 6vw, 4.8rem);
+      line-height: 1.05;
+      font-weight: 700;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+      font-weight: 600;
+    }
+
+    h3 {
+      font-size: clamp(1.2rem, 2.2vw, 1.6rem);
+      font-weight: 600;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a.link {
+      position: relative;
+      color: var(--text-strong);
+    }
+
+    a.link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -2px;
+      height: 1px;
+      width: 0;
+      background: var(--accent);
+      transition: width 0.18s ease;
+    }
+
+    a.link:hover::after,
+    a.link:focus-visible::after {
+      width: 100%;
+    }
+
+    a.link--accent {
+      color: var(--accent);
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
     #nn-bg {
       position: fixed;
       inset: 0;
       width: 100%;
       height: 100%;
-      z-index: -1;
-      background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #020617 100%);
+      z-index: -2;
+      background: transparent;
       pointer-events: none;
     }
 
-    /* Slight glass effect for hero buttons when over the animated background */
-    .glass-btn {
-      backdrop-filter: blur(8px);
-      background-color: rgba(79, 70, 229, 0.85);
+    .page {
+      position: relative;
+      z-index: 0;
     }
 
-    .glass-outline {
-      backdrop-filter: blur(8px);
-      background-color: rgba(15, 23, 42, 0.7);
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 var(--space-6);
     }
 
-    /* Optional: subtle fade-in for hero */
-    .fade-in {
-      animation: fadeIn 1.2s ease-out forwards;
-      opacity: 0;
+    .grid-12 {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: var(--space-6);
     }
 
-    @keyframes fadeIn {
-      to {
-        opacity: 1;
-      }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(6, 6, 6, 0.9);
+      border-bottom: 1px solid var(--border);
     }
 
-    /* HUD side navigation */
-    .hud-nav {
-      opacity: 0.25;
-      transition: opacity 0.4s ease;
+    .site-header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-4) 0;
     }
 
-    .hud-nav:hover,
-    .hud-nav:focus-within {
-      opacity: 1;
+    .site-logo {
+      font-family: var(--font-heading);
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      color: var(--text-strong);
     }
 
-    .hud-nav .nav-link {
-      backdrop-filter: blur(10px);
-      background: linear-gradient(120deg, rgba(15, 23, 42, 0.65), rgba(51, 65, 85, 0.4));
-      border: 1px solid rgba(99, 102, 241, 0.35);
-      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    .site-nav {
+      display: flex;
+      gap: var(--space-5);
+      font-size: 0.7rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
     }
 
-    .hud-nav .nav-link:hover {
-      border-color: rgba(129, 140, 248, 0.9);
-      transform: translateX(2px);
+    .site-nav a {
+      color: var(--muted);
     }
 
-    .hud-nav .nav-link.active {
-      border-color: rgba(129, 140, 248, 1);
-      box-shadow: 0 15px 40px rgba(99, 102, 241, 0.35);
+    .site-nav a:hover,
+    .site-nav a:focus-visible {
+      color: var(--text-strong);
     }
 
-    .hud-chip {
+    .site-nav a.active {
+      color: var(--accent);
+    }
+
+    .mobile-nav {
+      display: none;
+    }
+
+    .mobile-nav summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: 0.7rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--text-strong);
+    }
+
+    .mobile-nav[open] summary {
+      color: var(--accent);
+    }
+
+    .mobile-nav nav {
+      display: grid;
+      gap: var(--space-3);
+      margin-top: var(--space-3);
+    }
+
+    .hero {
+      padding: calc(var(--space-8) + 32px) 0 var(--space-8);
+    }
+
+    .hero-inner {
+      display: grid;
+      gap: var(--space-5);
+    }
+
+    .hero-subline {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 52ch;
+    }
+
+    .status-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .status-line span {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 0.7rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-strong);
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+
+    .btn:hover,
+    .btn:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn--solid {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn--solid:hover,
+    .btn--solid:focus-visible {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .section {
+      padding: var(--space-8) 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-header {
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      align-items: center;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+
+    .section-number {
+      font-family: var(--font-heading);
+      font-size: 1.1rem;
+      color: var(--accent);
+      letter-spacing: 0.2em;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.32em;
+      color: var(--muted);
+    }
+
+    .section-title::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-6);
+    }
+
+    .panel--tight {
+      padding: var(--space-4);
+    }
+
+    .panel--elevated {
+      background: var(--surface-elevated);
+    }
+
+    .chip {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(79, 70, 229, 0.12);
-      border: 1px solid rgba(129, 140, 248, 0.35);
-      font-size: 12px;
-      letter-spacing: 0.08em;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
+      color: var(--muted);
     }
 
-    .mission-brief {
-      font-size: 12px;
-      letter-spacing: 0.12em;
+    .chip--accent {
+      color: var(--accent);
+      border-color: rgba(255, 45, 45, 0.4);
+    }
+
+    .chip:hover,
+    .chip:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .meta {
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
       text-transform: uppercase;
+      color: var(--muted);
     }
 
-    .cue-badge {
-      font-size: 11px;
-      border-radius: 999px;
-      background: rgba(148, 163, 184, 0.14);
-      border: 1px dashed rgba(148, 163, 184, 0.5);
-      padding: 6px 10px;
-      transition: opacity 0.3s ease;
+    .canvas-frame {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(6, 6, 6, 0.35);
+      overflow: hidden;
     }
 
-    .metric-flash {
-      animation: flash 0.6s ease;
+    .workspace-tabs-container {
+      position: sticky;
+      top: 64px;
+      z-index: 9;
+      background: rgba(6, 6, 6, 0.9);
+      border-bottom: 1px solid var(--border);
     }
 
-    @keyframes flash {
-      0% {
-        color: #a5b4fc;
-      }
+    .workspace-tabs {
+      display: flex;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+    }
 
-      50% {
-        color: #22c55e;
-      }
+    .workspace-tab {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.65rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
 
-      100% {
-        color: #e5e7eb;
-      }
+    .workspace-tab:hover,
+    .workspace-tab:focus-visible {
+      border-color: var(--border);
+      color: var(--text-strong);
+      transform: translateY(-2px);
+    }
+
+    .workspace-tab.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .section-columns {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: var(--space-6);
+    }
+
+    .section-column-left {
+      grid-column: span 4;
+    }
+
+    .section-column-right {
+      grid-column: span 8;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: var(--space-5);
+      padding-top: var(--space-5);
+      border-top: 1px solid var(--border);
+    }
+
+    .list-row:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .list-row-title {
+      font-size: 1.1rem;
+      margin-bottom: var(--space-2);
+    }
+
+    .project-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 180px;
+      gap: var(--space-5);
+      padding: var(--space-5) 0;
+      border-top: 1px solid var(--border);
+      align-items: start;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+
+    .project-row:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .project-row:hover {
+      transform: translateX(2px);
+      border-top-color: var(--accent);
+    }
+
+    .project-links {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
+
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: var(--space-4) 0;
+      text-align: center;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
     }
 
     .lf-robot {
@@ -145,7 +524,6 @@
       left: 50%;
       width: 56px;
       height: 56px;
-      /* border-radius: 50%; */
       transform: translate(-50%, -50%);
       display: grid;
       place-items: center;
@@ -157,35 +535,29 @@
       position: relative;
       width: 46px;
       height: 46px;
-      border-radius: 0;
+      border-radius: var(--radius);
       overflow: hidden;
       background-image: url("line-follower/ROBOT.png");
       background-size: cover;
       background-position: center;
-      box-shadow: 0 2px 12px 0 rgba(30, 41, 59, 0.18);
+      border: 1px solid var(--border);
       z-index: 2;
     }
 
-    /* Dimming overlay for robot image */
     .lf-robot-core::before {
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(17, 24, 39, 0.32);
+      background: rgba(6, 6, 6, 0.32);
       pointer-events: none;
       z-index: 2;
-    }
-
-    .lf-robot-core::after {
-      display: none;
     }
 
     .lf-robot-ring {
       position: absolute;
       inset: -8px;
       border-radius: 50%;
-      border: 1px dashed rgba(129, 140, 248, 0.35);
-      box-shadow: 0 0 24px 8px rgba(129, 140, 248, 0.25), 0 0 0 2px rgba(79, 70, 229, 0.12);
+      border: 1px dashed rgba(255, 45, 45, 0.5);
       animation: pulse 2.4s ease-in-out infinite;
       z-index: 1;
       pointer-events: none;
@@ -194,341 +566,209 @@
     @keyframes pulse {
       0% {
         transform: scale(0.92);
-        opacity: 0.7;
+        opacity: 0.6;
       }
-
       50% {
-        transform: scale(1.05);
-        opacity: 0.4;
+        transform: scale(1.02);
+        opacity: 0.35;
       }
-
       100% {
         transform: scale(0.92);
-        opacity: 0.7;
+        opacity: 0.6;
       }
     }
 
     .sensor-pill {
-      background: rgba(17, 24, 39, 0.6);
-      border: 1px solid rgba(75, 85, 99, 0.6);
-      border-radius: 14px;
-      padding: 10px 12px;
+      border: 1px solid var(--border);
+      padding: var(--space-3);
+      text-align: center;
+      background: rgba(10, 10, 10, 0.7);
     }
 
     .sensor-value {
-      font-family: "IBM Plex Mono", "Fira Code", monospace;
+      font-family: var(--font-body);
       font-weight: 600;
-      color: #a5b4fc;
-    }
-
-    /* Maze Controls Styling */
-    #maze-controls {
-      font-size: 0.875rem;
+      color: var(--text-strong);
     }
 
     #maze-controls label {
       display: block;
       font-weight: 600;
-      margin-bottom: 8px;
-      color: #cbd5e1;
-      font-size: 0.9rem;
+      margin-bottom: var(--space-2);
+      font-size: 0.75rem;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
     }
 
-    #maze-controls select {
+    #maze-controls select,
+    #maze-controls input[type="range"] {
       width: 100%;
-      padding: 8px 12px;
-      background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-      border: 1px solid rgba(99, 102, 241, 0.5);
-      border-radius: 8px;
-      color: #e2e8f0;
-      font-size: 0.875rem;
-      cursor: pointer;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      padding: 8px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.85rem;
     }
 
-    #maze-controls select:hover {
-      border-color: rgba(129, 140, 248, 0.8);
-      box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+    #maze-controls select:focus,
+    #maze-controls input[type="range"]:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
     }
 
-    #maze-controls select:focus {
-      outline: none;
-      border-color: rgba(129, 140, 248, 1);
-      box-shadow: 0 0 16px rgba(99, 102, 241, 0.5);
+    #maze-controls input[type="radio"],
+    #maze-controls input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
     }
 
-    #speed-fast,
-    #speed-normal,
-    #speed-slow,
-    #speed-slowest {
-      padding: 8px 12px;
-      font-size: 0.8rem;
-      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-      border: 1px solid rgba(99, 102, 241, 0.6);
-      border-radius: 6px;
-      color: #e2e8f0;
-      cursor: pointer;
-      font-weight: 600;
-      transition: all 0.2s ease;
-    }
-
-    #speed-fast:hover,
-    #speed-normal:hover,
-    #speed-slow:hover,
-    #speed-slowest:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-    }
-
-    #speed-normal {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
-    }
-
-    #maze-stats {
-      font-size: 12px;
-      color: #64748b;
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 8px;
-      font-family: "IBM Plex Mono", "Fira Code", monospace;
-    }
-
-    #maze-stats p {
-      margin: 4px 0;
-    }
-
-    /* Radio Button Styling */
-    #maze-controls .radio-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    #maze-controls .radio-option {
+    #maze-controls .radio-option,
+    #maze-controls .checkbox-option {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
+      gap: var(--space-2);
+      padding: var(--space-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
     }
 
-    #maze-controls .radio-option:hover {
-      background-color: rgba(99, 102, 241, 0.1);
-    }
-
-    #maze-controls input[type="radio"] {
-      cursor: pointer;
-      width: 16px;
-      height: 16px;
-      accent-color: #4f46e5;
-    }
-
-    #maze-controls input[type="checkbox"] {
-      cursor: pointer;
-      width: 16px;
-      height: 16px;
-      accent-color: #4f46e5;
+    #maze-controls .radio-group {
+      display: grid;
+      gap: var(--space-2);
     }
 
     #maze-controls .checkbox-group {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    #maze-controls .checkbox-option {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      font-size: 0.85rem;
-    }
-
-    #maze-controls .checkbox-option:hover {
-      background-color: rgba(99, 102, 241, 0.1);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-2);
     }
 
     .system-layer {
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
-      border: 1px solid rgba(99, 102, 241, 0.25);
-      border-radius: 12px;
-      padding: 12px 16px;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      border: 1px solid var(--border);
+      padding: var(--space-3);
+      border-radius: var(--radius);
+      background: rgba(10, 10, 10, 0.6);
+      transition: border-color 0.18s ease;
     }
 
     .system-layer:hover {
-      border-color: rgba(129, 140, 248, 0.5);
-      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.15);
+      border-color: var(--accent);
     }
 
     .layer-anchors a {
-      font-size: 11px;
+      font-size: 0.65rem;
       padding: 4px 8px;
-      border-radius: 6px;
-      background: rgba(79, 70, 229, 0.15);
-      border: 1px solid rgba(129, 140, 248, 0.3);
-      color: #a5b4fc;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      color: var(--muted);
       text-decoration: none;
-      transition: all 0.15s ease;
+      transition: border-color 0.18s ease, color 0.18s ease;
     }
 
     .layer-anchors a:hover {
-      background: rgba(79, 70, 229, 0.3);
-      border-color: rgba(129, 140, 248, 0.6);
+      border-color: var(--accent);
+      color: var(--accent);
     }
 
     .industry-callout {
       font-size: 0.8rem;
-      color: #94a3b8;
-      background: rgba(15, 23, 42, 0.4);
-      border-left: 2px solid rgba(129, 140, 248, 0.5);
-      padding: 8px 12px;
-      margin-top: 8px;
-      border-radius: 4px;
-    }
-
-    /* Workspace Tabs (Horizontal Browser-Style) */
-    /* Positioned after hero but visually at bottom, becomes sticky when scrolled */
-    .workspace-tabs-container {
-      position: sticky;
-      top: 0;
-      width: 100%;
-      max-width: 800px;
-      margin: -80px auto 0 auto;
-      padding: 16px 0;
-      z-index: 999999;
-      background: transparent;
-    }
-    
-    .workspace-tabs {
-      display: flex;
-      gap: 4px;
-      width: 100%;
-      max-width: 800px;
-      margin: 0 auto;
-      pointer-events: auto;
-    }
-    
-    .workspace-tabs-container::after {
-      content: '';
-      position: absolute;
-      bottom: -8px;
-      left: 0;
-      right: 0;
-      height: 8px;
-      background: linear-gradient(to bottom, rgba(15, 23, 42, 0.2), transparent);
-      pointer-events: none;
-      z-index: -1;
-    }
-
-    .workspace-tabs::-webkit-scrollbar {
-      height: 4px;
-    }
-
-    .workspace-tabs::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .workspace-tabs::-webkit-scrollbar-thumb {
-      background: rgba(99, 102, 241, 0.3);
-      border-radius: 2px;
-    }
-
-    .workspace-tab {
-      flex: 0.8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 8px 16px;
-      border: none;
-      border-bottom: 2px solid transparent;
-      border-radius: 0;
-      background: rgba(15, 23, 42, 0.95);
-      color: rgba(148, 163, 184, 0.7);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-      white-space: nowrap;
-      position: relative;
-      pointer-events: auto;
-      touch-action: manipulation;
-    }
-
-    .workspace-tab:hover {
-      color: rgba(203, 213, 225, 0.9);
-      border-bottom-color: rgba(99, 102, 241, 0.3);
-      background: rgba(99, 102, 241, 0.05);
-      cursor: pointer !important;
-    }
-
-    .workspace-tab.active {
-      flex: 1.4;
-      color: #e0e7ff;
-      border-bottom-color: rgba(129, 140, 248, 0.8);
-      background: rgba(99, 102, 241, 0.08);
-    }
-    
-    /* Sticky state styles - when tabs are stuck to top */
-    @supports (position: sticky) {
-      .workspace-tab {
-        background: rgba(15, 23, 42, 0.95);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-      }
-      
-      .workspace-tab:hover {
-        background: rgba(30, 41, 59, 0.95) !important;
-      }
-      
-      .workspace-tab.active {
-        background: rgba(99, 102, 241, 0.25) !important;
-      }
-    }
-
-    .workspace-tab.active::after {
-      content: '';
-      position: absolute;
-      bottom: -2px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.6), transparent);
-      box-shadow: 0 0 8px rgba(129, 140, 248, 0.4);
+      color: var(--muted);
+      border-left: 2px solid var(--accent);
+      padding-left: var(--space-3);
+      margin-top: var(--space-3);
     }
 
     .workspace-hidden {
       display: none !important;
     }
 
-    /* Mobile: allow horizontal scroll */
-    @media (max-width: 768px) {
-      .workspace-tabs {
-        padding: 0 16px;
+    @media (max-width: 960px) {
+      .container {
+        padding: 0 var(--space-4);
       }
 
-      .workspace-tab {
-        font-size: 13px;
-        padding: 10px 16px;
+      .site-nav {
+        display: none;
+      }
+
+      .mobile-nav {
+        display: block;
+      }
+
+      .section-column-left,
+      .section-column-right {
+        grid-column: span 12;
+      }
+
+      .project-row {
+        grid-template-columns: 1fr;
+      }
+
+      .list-row {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-tabs-container {
+        top: 56px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero {
+        padding-top: var(--space-7);
+      }
+
+      .section-header {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title::after {
+        display: none;
+      }
+
+      .workspace-tabs {
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
       }
     }
   </style>
 </head>
 
-<body class="bg-gray-950 text-gray-100 font-sans scroll-smooth">
+<body class="page">
 
   <!-- Neural Network / Constellation Background -->
   <canvas id="nn-bg"></canvas>
+
+  <header class="site-header">
+    <div class="container site-header-inner">
+      <span class="site-logo">Konstantin Krasovitskiy</span>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="link" href="#research-systems">Systems</a>
+        <a class="link" href="#projects">Projects</a>
+        <a class="link" href="#experience">Experience</a>
+        <a class="link" href="#contact">Contact</a>
+      </nav>
+      <details class="mobile-nav">
+        <summary>Menu</summary>
+        <nav aria-label="Mobile">
+          <a class="link" href="#research-systems">Systems</a>
+          <a class="link" href="#projects">Projects</a>
+          <a class="link" href="#experience">Experience</a>
+          <a class="link" href="#contact">Contact</a>
+        </nav>
+      </details>
+    </div>
+  </header>
 
   <!-- System Dashboard Overlay (Disabled) -->
   <!-- <div id="sys-dashboard" class="fixed top-4 right-4
@@ -544,29 +784,24 @@
   </div> -->
 
   <!-- Hero (visible in all workspaces) -->
-  <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative fade-in" data-workspace="llm" data-workspace-shared="true">
-    <div class="max-w-3xl">
-      <h1 class="text-4xl sm:text-5xl md:text-6xl font-bold mb-4">
-        Konstantin Krasovitskiy
-      </h1>
-      <p class="text-lg md:text-xl text-gray-300 mb-8">
-        LLM Systems / Applied AI Engineer &middot; AI Systems & Reliability &middot; Simulation-First Autonomy (Hobby)
-      </p>
-      <div class="flex flex-wrap justify-center gap-4">
-        <a href="#projects" class="glass-btn px-6 py-3 rounded-full shadow-lg hover:bg-indigo-500 transition-colors">
-          View Projects
-        </a>
-        <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf"
-          class="glass-outline px-6 py-3 border border-gray-500 rounded-full hover:bg-gray-800 transition-colors">
-          Download CV
-        </a>
+  <section class="hero" data-workspace="llm" data-workspace-shared="true">
+    <div class="container hero-inner">
+      <h1>Konstantin Krasovitskiy</h1>
+      <p class="hero-subline">LLM Systems / Applied AI Engineer</p>
+      <div class="status-line">
+        <span>AI Systems &amp; Reliability</span>
+        <span>Simulation-First Autonomy (Hobby)</span>
+      </div>
+      <div class="hero-actions">
+        <a href="#projects" class="btn btn--solid">View Projects</a>
+        <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf" class="btn">Download CV</a>
       </div>
     </div>
   </section>
 
   <!-- Workspace Tabs (Browser-Style Horizontal Bar) - Outside hero for proper sticky behavior -->
   <div class="workspace-tabs-container">
-    <nav class="workspace-tabs" role="tablist" aria-label="Content Workspaces">
+    <nav class="workspace-tabs container" role="tablist" aria-label="Content Workspaces">
       <button class="workspace-tab" data-tab="llm" aria-selected="false" role="tab" tabindex="0">
         LLM Systems
       </button>
@@ -580,477 +815,445 @@
   </div>
 
   <!-- Research-First Systems -->
-  <section id="research-systems" data-workspace="llm" class="py-20 px-6 relative max-w-6xl mx-auto">
-    <div class="flex flex-col gap-3 mb-10">
-      <h2 class="text-3xl font-bold">LLM Systems Lab</h2>
-      <p class="text-gray-400 max-w-3xl">
+  <section id="research-systems" data-workspace="llm" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">01</span>
+        <div class="section-title">LLM Systems Lab</div>
+      </div>
+      <div class="hero-subline" style="margin-bottom: var(--space-6);">
         RAG pipelines, multi-model routing, and transformer internals — visualized with live telemetry.
-      </p>
-    </div>
+      </div>
 
-    <div class="grid grid-cols-1 gap-12">
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-        <div class="flex items-center gap-3">
-          <span class="hud-chip">Signal Routing</span>
-          <span class="cue-badge">Hover to trace retrieval hops</span>
-        </div>
-        <div>
-          <h3 class="text-2xl font-semibold">RAG Mesh &amp; Context Flow</h3>
-          <p class="text-gray-400">A clean view of the Retrieval-Augmented Generation (RAG) pipeline and how
-            context moves through the system.</p>
-          <div class="industry-callout">
-            <strong>Industry relevance:</strong> Retrieval QA, chunking strategies, context grounding, hallucination reduction for production LLM systems.
+      <div class="grid-12">
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Signal Routing</span>
+            <span class="chip">Hover to trace retrieval hops</span>
           </div>
-        </div>
-        <canvas id="ragCanvas" class="w-full h-64 bg-gray-950/40 rounded-xl border border-gray-700"></canvas>
-      </article>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>RAG Mesh &amp; Context Flow</h3>
+            <p>A clean view of the Retrieval-Augmented Generation (RAG) pipeline and how
+              context moves through the system.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Retrieval QA, chunking strategies, context grounding, hallucination reduction for production LLM systems.
+            </div>
+          </div>
+          <div class="canvas-frame" style="margin-top: var(--space-5);">
+            <canvas id="ragCanvas" style="width: 100%; height: 256px;"></canvas>
+          </div>
+        </article>
 
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-        <div class="flex items-center gap-3">
-          <span class="hud-chip">Router Status</span>
-          <span class="cue-badge">Hover to watch dispatch logic</span>
-        </div>
-        <div>
-          <h3 class="text-2xl font-semibold">Multi-LLM Orchestrator</h3>
-          <p class="text-gray-400">Router-dispatch visualization showing vector DB lookups, model selection,
-            and merge policies under latency/cost constraints.</p>
-          <div class="industry-callout">
-            <strong>Industry relevance:</strong> Router policies, cost/latency optimization, evaluation harness design, multi-model scoring and merge strategies.
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Router Status</span>
+            <span class="chip">Hover to watch dispatch logic</span>
           </div>
-        </div>
-        <canvas id="orchestratorCanvas"
-          class="w-full h-[320px] rounded-2xl bg-gray-950/60 border border-gray-700"></canvas>
-        <p class="mt-1 text-xs text-gray-500">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge →
-          Response</p>
-      </article>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>Multi-LLM Orchestrator</h3>
+            <p>Router-dispatch visualization showing vector DB lookups, model selection,
+              and merge policies under latency/cost constraints.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Router policies, cost/latency optimization, evaluation harness design, multi-model scoring and merge strategies.
+            </div>
+          </div>
+          <div class="canvas-frame" style="margin-top: var(--space-5);">
+            <canvas id="orchestratorCanvas" style="width: 100%; height: 320px;"></canvas>
+          </div>
+          <p class="meta" style="margin-top: var(--space-2);">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge →
+            Response</p>
+        </article>
 
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-        <div class="flex items-center gap-3">
-          <span class="hud-chip">Token Flow</span>
-          <span class="cue-badge">Hover to reveal head activity</span>
-        </div>
-        <div>
-          <h3 class="text-2xl font-semibold">Transformer Core Internals</h3>
-          <p class="text-gray-400">Embeddings → multi-head attention → residual paths → logits, rendered with
-            the same live metrics used across the portfolio.</p>
-          <div class="industry-callout">
-            <strong>Industry relevance:</strong> Debugging attention/residual flow dynamics, interpretability for transformer architectures, conceptual model introspection.
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Token Flow</span>
+            <span class="chip">Hover to reveal head activity</span>
           </div>
-        </div>
-        <canvas id="llm-viz" class="w-full h-[360px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
-      </article>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>Transformer Core Internals</h3>
+            <p>Embeddings → multi-head attention → residual paths → logits, rendered with
+              the same live metrics used across the portfolio.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Debugging attention/residual flow dynamics, interpretability for transformer architectures, conceptual model introspection.
+            </div>
+          </div>
+          <div class="canvas-frame" style="margin-top: var(--space-5);">
+            <canvas id="llm-viz" style="width: 100%; height: 360px;"></canvas>
+          </div>
+        </article>
 
-      <article class="space-y-4 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-        <div class="flex items-center gap-3">
-          <span class="hud-chip">Attention Field</span>
-          <span class="cue-badge">Hover to expose head weights</span>
-        </div>
-        <div>
-          <h3 class="text-2xl font-semibold">Semantic Attention Map</h3>
-          <p class="text-gray-400">Parallel attention heads computing token relationships and convergence
-            patterns — the research signal that informs tuning.</p>
-          <div class="industry-callout">
-            <strong>Industry relevance:</strong> Interpretability insights, attention head behavior analysis, debugging multi-head attention convergence for production models.
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Attention Field</span>
+            <span class="chip">Hover to expose head weights</span>
           </div>
-        </div>
-        <canvas id="attentionCanvas"
-          class="w-full h-[300px] rounded-2xl bg-gray-950/40 border border-gray-700"></canvas>
-      </article>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>Semantic Attention Map</h3>
+            <p>Parallel attention heads computing token relationships and convergence
+              patterns — the research signal that informs tuning.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Interpretability insights, attention head behavior analysis, debugging multi-head attention convergence for production models.
+            </div>
+          </div>
+          <div class="canvas-frame" style="margin-top: var(--space-5);">
+            <canvas id="attentionCanvas" style="width: 100%; height: 300px;"></canvas>
+          </div>
+        </article>
 
       <!-- Hidden 2D & 3D System Visualizers (for plugin system - Disabled) -->
       <!-- <canvas id="viz2d" style="display:none;"></canvas>
       <canvas id="viz3d" style="display:none;"></canvas> -->
+      </div>
     </div>
   </section>
 
   <!-- Playful Lab -->
-  <section id="playful-demos" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
-    <div class="flex flex-col gap-3 mb-10">
-      <h2 class="text-3xl font-bold">Line-Following Robot</h2>
-      <p class="text-gray-400 max-w-3xl">
+  <section id="playful-demos" data-workspace="autonomy" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">02</span>
+        <div class="section-title">Line-Following Robot</div>
+      </div>
+      <p class="hero-subline" style="margin-bottom: var(--space-6);">
         Drag-and-drop the bot anywhere on the track. IR sensors sample the canvas in real-time as the PID loop keeps the rover locked on the black line.
       </p>
-    </div>
 
-    <!-- Line Following Robot Demo -->
-    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 relative overflow-hidden mb-12">
-      <div class="flex items-center gap-3 mb-3">
-        <span class="hud-chip">Draggable Bot</span>
-        <span class="cue-badge">Grab to reposition on the track</span>
-      </div>
-      <div class="relative">
-        <canvas id="line-following-canvas"
-          class="w-full h-[480px] bg-gray-950/50 rounded-xl border border-gray-800"></canvas>
-        <div id="line-following-robot" class="lf-robot" title="Drag me">
-          <div class="lf-robot-core" aria-hidden="true"></div>
-          <div class="lf-robot-ring"></div>
+      <div class="panel panel--elevated" style="margin-bottom: var(--space-6);">
+        <div class="tag-list" style="margin-bottom: var(--space-4);">
+          <span class="chip">Draggable Bot</span>
+          <span class="chip">Grab to reposition on the track</span>
+        </div>
+        <div class="canvas-frame" style="position: relative;">
+          <canvas id="line-following-canvas" style="width: 100%; height: 480px;"></canvas>
+          <div id="line-following-robot" class="lf-robot" title="Drag me">
+            <div class="lf-robot-core" aria-hidden="true"></div>
+            <div class="lf-robot-ring"></div>
+          </div>
         </div>
       </div>
-    </div>
 
-
-    <!-- Control Panel Below Track -->
-    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-4 space-y-4">
-      <!-- PID Tuning Controls Grid -->
-      <div>
-        <h3 class="text-sm font-semibold text-indigo-300 mb-3 uppercase tracking-wide">🎛️ PID Tuning</h3>
-
-        <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
-          <!-- Kp -->
-          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-semibold text-gray-300">Proportional</label>
-              <span id="kp-value" class="text-sm font-mono text-indigo-400 font-bold">1.30</span>
+      <div class="panel panel--elevated" style="display: grid; gap: var(--space-5);">
+        <div>
+          <h3 class="meta" style="margin-bottom: var(--space-3);">PID Tuning</h3>
+          <div class="grid-12">
+            <div class="panel panel--tight" style="grid-column: span 3;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Proportional</label>
+                <span id="kp-value" class="meta" style="color: var(--accent);">1.30</span>
+              </div>
+              <input id="kp-slider" type="range" min="0" max="3" step="0.01" value="1.3">
             </div>
-            <input id="kp-slider" type="range" min="0" max="3" step="0.01" value="1.3" class="pid-slider w-full accent-indigo-500">
-          </div>
-
-          <!-- Ki -->
-          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-semibold text-gray-300">Integral</label>
-              <span id="ki-value" class="text-sm font-mono text-indigo-400 font-bold">0.42</span>
+            <div class="panel panel--tight" style="grid-column: span 3;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Integral</label>
+                <span id="ki-value" class="meta" style="color: var(--accent);">0.42</span>
+              </div>
+              <input id="ki-slider" type="range" min="0" max="1" step="0.01" value="0.42">
             </div>
-            <input id="ki-slider" type="range" min="0" max="1" step="0.01" value="0.42" class="pid-slider w-full accent-indigo-500">
-          </div>
-
-          <!-- Kd -->
-          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-semibold text-gray-300">Derivative</label>
-              <span id="kd-value" class="text-sm font-mono text-indigo-400 font-bold">0.32</span>
+            <div class="panel panel--tight" style="grid-column: span 3;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Derivative</label>
+                <span id="kd-value" class="meta" style="color: var(--accent);">0.32</span>
+              </div>
+              <input id="kd-slider" type="range" min="0" max="1" step="0.01" value="0.32">
             </div>
-            <input id="kd-slider" type="range" min="0" max="1" step="0.01" value="0.32" class="pid-slider w-full accent-indigo-500">
-          </div>
-
-          <!-- Speed -->
-          <div class="bg-gray-950/40 border border-gray-800 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-semibold text-gray-300">Speed</label>
-              <span id="speed-value" class="text-sm font-mono text-emerald-400 font-bold">120 px/s</span>
+            <div class="panel panel--tight" style="grid-column: span 2;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Speed</label>
+                <span id="speed-value" class="meta" style="color: var(--accent);">120 px/s</span>
+              </div>
+              <input id="speed-slider" type="range" min="45" max="300" step="5" value="120">
             </div>
-            <input id="speed-slider" type="range" min="45" max="300" step="5" value="120" class="pid-slider w-full accent-emerald-500">
-          </div>
-
-          <!-- Reset Button -->
-          <button id="pid-reset-btn"
-            class="py-2 px-3 bg-gradient-to-r from-rose-900/40 to-rose-800/40 hover:from-rose-900/60 hover:to-rose-800/60 border border-rose-700/50 rounded-lg transition text-xs font-bold text-rose-300 uppercase tracking-wide self-end">
-            ⟲ Reset
-          </button>
-        </div>
-      </div>
-
-      <!-- Advanced Options -->
-      <div class="pt-3 border-t border-gray-700">
-        <h4 class="text-xs font-semibold text-indigo-300 mb-3 uppercase tracking-wide">⚙️ Advanced</h4>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-indigo-600/50 hover:bg-indigo-900/10 transition">
-            <input id="noise-toggle" type="checkbox" class="pid-checkbox accent-indigo-500">
-            <span class="text-xs font-medium text-gray-300">Sensor Noise</span>
-          </label>
-
-          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-emerald-600/50 hover:bg-emerald-900/10 transition">
-            <input id="anti-windup-toggle" type="checkbox" checked class="pid-checkbox accent-emerald-500">
-            <span class="text-xs font-medium text-gray-300">Anti-Windup</span>
-          </label>
-
-          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-amber-600/50 hover:bg-amber-900/10 transition">
-            <input id="d-filter-toggle" type="checkbox" class="pid-checkbox accent-amber-500">
-            <span class="text-xs font-medium text-gray-300">D-Filter</span>
-          </label>
-
-          <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-800 hover:border-cyan-600/50 hover:bg-cyan-900/10 transition">
-            <input id="adaptive-speed-toggle" type="checkbox" class="pid-checkbox accent-cyan-500">
-            <span class="text-xs font-medium text-gray-300">Adaptive Speed</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Telemetry Section -->
-      <div class="pt-3 border-t border-gray-700">
-        <h3 class="text-xs font-semibold text-indigo-300 mb-3 uppercase tracking-wide">📊 Telemetry</h3>
-        <div class="grid grid-cols-5 gap-2">
-          <div class="bg-gradient-to-br from-indigo-900/30 to-indigo-900/10 rounded-lg border border-indigo-700/50 p-2 text-center">
-            <p class="text-xs text-gray-400 font-semibold">P</p>
-            <p id="pid-p" class="text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="bg-gradient-to-br from-indigo-900/30 to-indigo-900/10 rounded-lg border border-indigo-700/50 p-2 text-center">
-            <p class="text-xs text-gray-400 font-semibold">I</p>
-            <p id="pid-i" class="text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="bg-gradient-to-br from-indigo-900/30 to-indigo-900/10 rounded-lg border border-indigo-700/50 p-2 text-center">
-            <p class="text-xs text-gray-400 font-semibold">D</p>
-            <p id="pid-d" class="text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="bg-gradient-to-br from-rose-900/30 to-rose-900/10 rounded-lg border border-rose-700/50 p-2 text-center">
-            <p class="text-xs text-gray-400 font-semibold">Error</p>
-            <p id="pid-error" class="text-sm font-mono text-rose-300 font-bold">0.00</p>
-          </div>
-          <div class="bg-gradient-to-br from-emerald-900/30 to-emerald-900/10 rounded-lg border border-emerald-700/50 p-2 text-center">
-            <p class="text-xs text-gray-400 font-semibold">Speed</p>
-            <p id="pid-speed" class="text-sm font-mono text-emerald-300 font-bold">0.00</p>
+            <button id="pid-reset-btn" class="btn" style="grid-column: span 1; align-self: end;">⟲ Reset</button>
           </div>
         </div>
-      </div>
 
-      <!-- Sensor Array (8 sensors) -->
-      <div class="pt-3 border-t border-gray-700">
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="text-xs font-semibold text-indigo-300 uppercase tracking-wide">👀 IR Sensors (8×)</h4>
-          <span class="text-xs text-gray-500">Left ← Center → Right</span>
+        <div>
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Advanced</h3>
+          <div class="grid-12">
+            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+              <input id="noise-toggle" type="checkbox">
+              <span class="meta" style="letter-spacing: 0.12em;">Sensor Noise</span>
+            </label>
+            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+              <input id="anti-windup-toggle" type="checkbox" checked>
+              <span class="meta" style="letter-spacing: 0.12em;">Anti-Windup</span>
+            </label>
+            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+              <input id="d-filter-toggle" type="checkbox">
+              <span class="meta" style="letter-spacing: 0.12em;">D-Filter</span>
+            </label>
+            <label class="panel panel--tight" style="grid-column: span 3; display: flex; align-items: center; gap: var(--space-2);">
+              <input id="adaptive-speed-toggle" type="checkbox">
+              <span class="meta" style="letter-spacing: 0.12em;">Adaptive Speed</span>
+            </label>
+          </div>
         </div>
-        <div class="grid grid-cols-8 gap-2">
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S1</p>
-            <p data-sensor-index="0" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
+
+        <div>
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Telemetry</h3>
+          <div class="grid-12">
+            <div class="panel panel--tight" style="grid-column: span 2; text-align: center;">
+              <p class="meta">P</p>
+              <p id="pid-p" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 2; text-align: center;">
+              <p class="meta">I</p>
+              <p id="pid-i" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 2; text-align: center;">
+              <p class="meta">D</p>
+              <p id="pid-d" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 3; text-align: center;">
+              <p class="meta">Error</p>
+              <p id="pid-error" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 3; text-align: center;">
+              <p class="meta">Speed</p>
+              <p id="pid-speed" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
           </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S2</p>
-            <p data-sensor-index="1" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
+        </div>
+
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+            <h3 class="meta">IR Sensors (8×)</h3>
+            <span class="meta">Left ← Center → Right</span>
           </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S3</p>
-            <p data-sensor-index="2" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S4</p>
-            <p data-sensor-index="3" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S5</p>
-            <p data-sensor-index="4" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S6</p>
-            <p data-sensor-index="5" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S7</p>
-            <p data-sensor-index="6" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
-          </div>
-          <div class="sensor-pill bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center hover:border-indigo-600/50 transition">
-            <p class="text-xs text-gray-400 font-semibold">S8</p>
-            <p data-sensor-index="7" class="sensor-value text-sm font-mono text-indigo-300 font-bold">0.00</p>
+          <div class="grid-12" style="gap: var(--space-2);">
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S1</p>
+              <p data-sensor-index="0" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S2</p>
+              <p data-sensor-index="1" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S3</p>
+              <p data-sensor-index="2" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S4</p>
+              <p data-sensor-index="3" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S5</p>
+              <p data-sensor-index="4" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S6</p>
+              <p data-sensor-index="5" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S7</p>
+              <p data-sensor-index="6" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S8</p>
+              <p data-sensor-index="7" class="sensor-value">0.00</p>
+            </div>
           </div>
         </div>
       </div>
     </div>
-
   </section>
 
   <!-- Maze Solver Section -->
-  <section id="maze-solver" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
-    <div class="flex flex-col gap-3 mb-10">
-      <h2 class="text-3xl font-bold">Maze Solver: Micromouse Challenge</h2>
-      <p class="text-gray-400 max-w-3xl">
+  <section id="maze-solver" data-workspace="autonomy" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">03</span>
+        <div class="section-title">Maze Solver: Micromouse Challenge</div>
+      </div>
+      <p class="hero-subline" style="margin-bottom: var(--space-6);">
         Micromouse-style exploration with dynamic flood-fill, intelligent dead-end pruning, and optional 8-directional sprinting. Watch the robot autonomously map walls, compute distances, and execute time-optimal racing strategies.
       </p>
-    </div>
 
-    <div class="bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-6">
-      <div class="flex items-center gap-3 mb-4 flex-wrap">
-        <span class="hud-chip">Micromouse-Style Flood Fill</span>
-        <span class="cue-badge">Top-down idealized robot, 16×16 grid</span>
-        <span class="cue-badge">Center goal (2×2)</span>
-      </div>
-
-      <div class="flex flex-col lg:flex-row gap-8 items-start">
-        <div class="lg:w-96 space-y-3">
-          <h3 class="text-2xl font-semibold">Flood-Fill Pathfinding</h3>
-          <p class="text-gray-400 text-sm leading-relaxed">
-            The robot autonomously explores the maze, builds a distance map, and finds the shortest path to the center goal. With multiple algorithms and visualization options, you can watch different exploration strategies in real-time.
-          </p>
-
-          <div class="flex flex-wrap gap-2">
-            <button id="maze-generate"
-              class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Generate
-              Maze</button>
-            <button id="maze-run"
-              class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">Run</button>
-            <button id="maze-step"
-              class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Step</button>
-            <button id="maze-reset"
-              class="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-400 text-sm">Reset</button>
-          </div>
-
-          <!-- Maze Controls Container for Speed, Algorithm, and Visualization Options -->
-          <div id="maze-controls" class="space-y-3 mt-4 pt-4 border-t border-gray-700"></div>
+      <div class="panel panel--elevated">
+        <div class="tag-list" style="margin-bottom: var(--space-4);">
+          <span class="chip">Micromouse-Style Flood Fill</span>
+          <span class="chip">Top-down idealized robot, 16×16 grid</span>
+          <span class="chip">Center goal (2×2)</span>
         </div>
 
-        <div class="flex-1 bg-gray-950/60 border border-gray-800 overflow-hidden flex items-center justify-center">
-          <canvas id="maze-canvas" class="w-full h-[520px] bg-gray-900 block"></canvas>
+        <div class="section-columns">
+          <div class="section-column-left" style="display: grid; gap: var(--space-3);">
+            <h3>Flood-Fill Pathfinding</h3>
+            <p>
+              The robot autonomously explores the maze, builds a distance map, and finds the shortest path to the center goal. With multiple algorithms and visualization options, you can watch different exploration strategies in real-time.
+            </p>
+
+            <div class="hero-actions" style="gap: var(--space-2);">
+              <button id="maze-generate" class="btn">Generate Maze</button>
+              <button id="maze-run" class="btn btn--solid">Run</button>
+              <button id="maze-step" class="btn">Step</button>
+              <button id="maze-reset" class="btn">Reset</button>
+            </div>
+
+            <div id="maze-controls" class="panel panel--tight" style="display: grid; gap: var(--space-3); margin-top: var(--space-4);"></div>
+          </div>
+
+          <div class="section-column-right">
+            <div class="canvas-frame">
+              <canvas id="maze-canvas" style="width: 100%; height: 520px;"></canvas>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Drone Demos Section -->
-  <section id="drone-race" data-workspace="autonomy" class="py-20 px-6 relative max-w-6xl mx-auto">
-    <!-- Drone Race Demo -->
-    <div class="flex flex-col gap-3 mb-10">
-      <h2 class="text-3xl font-bold">Autonomous Drone Flight</h2>
-      <p class="text-gray-400 max-w-3xl">
+  <section id="drone-race" data-workspace="autonomy" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">04</span>
+        <div class="section-title">Autonomous Drone Flight</div>
+      </div>
+      <p class="hero-subline" style="margin-bottom: var(--space-5);">
         Racing, LiDAR-based cave exploration, and obstacle avoidance — all simulated with physics-based control.
       </p>
-      <div class="mt-4">
-        <a href="drones/stationary/stationary_test.html" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/30 hover:border-indigo-400 transition-colors text-sm">
-          <span>🎯</span>
-          <span>Hover Stability Demo (ETH Controller)</span>
-        </a>
+      <div style="margin-bottom: var(--space-6);">
+        <a href="drones/stationary/stationary_test.html" class="btn btn--solid">Hover Stability Demo (ETH Controller)</a>
       </div>
-    </div>
 
-    <!-- Drone Race Demo -->
-    <div class="mb-12">
-      <div class="flex flex-col gap-3 mb-6">
-        <h3 class="text-2xl font-semibold">Autonomous Racing (Sim)</h3>
-        <p class="text-gray-400 max-w-3xl">
+      <div style="margin-bottom: var(--space-6);">
+        <h3 style="margin-bottom: var(--space-2);">Autonomous Racing (Sim)</h3>
+        <p class="hero-subline">
           Autonomous racing drone flying a spline-planned indoor track with chase camera, gate timing, VIO noise, and PID control. Visualizes real-time trajectory tracking with live metrics and controller tuning.
         </p>
       </div>
 
-    <div class="flex gap-4 flex-col lg:flex-row">
-      <!-- Controls Sidebar (Left) - drone-race-controls will be injected here -->
-      <div id="drone-race-controls-container" class="lg:w-80 flex-shrink-0"></div>
-
-      <!-- Canvas Area (Center/Right) -->
-      <div class="flex-1">
-        <div class="bg-gradient-to-br from-gray-900/80 via-slate-900/80 to-gray-950/90 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
-          <div id="drone-race-demo" class="w-full h-[520px]"></div>
-          <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
-            Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
+      <div class="section-columns" style="margin-bottom: var(--space-7);">
+        <div id="drone-race-controls-container" class="section-column-left panel panel--elevated"></div>
+        <div class="section-column-right">
+          <div class="canvas-frame">
+            <div id="drone-race-demo" style="width: 100%; height: 520px;"></div>
+            <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+              Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
     <!-- Cave Explorer Demo -->
-    <div class="mt-16 pt-12 border-t border-gray-700">
-      <div class="flex flex-col gap-3 mb-6">
-        <h3 class="text-2xl font-semibold">LiDAR Cave Exploration & Mapping</h3>
-        <p class="text-gray-400 max-w-3xl">
-          Autonomous cave exploration using LiDAR-based SLAM and frontier-based planning. The drone maps unknown environments, builds occupancy grids, and plans collision-free paths.
-        </p>
-      </div>
-
-      <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
-        <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-          <div class="flex items-center gap-3">
-            <span class="hud-chip">SLAM & Exploration</span>
-            <span class="cue-badge opacity-60">LiDAR mapping · Frontier planning · Physics</span>
-          </div>
-          <div class="space-y-3">
-            <h4 class="text-lg font-semibold">Autonomous Mapping</h4>
-            <p class="text-gray-400 text-sm">
-              Real-time LiDAR point cloud processing, occupancy grid updates, and frontier-based exploration for autonomous cave discovery.
-            </p>
-          </div>
-
-          <div class="flex flex-col gap-3 pt-4 border-t border-gray-700">
-            <button id="drone-cave-toggle" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors">
-              Start Exploration
-            </button>
-            <button id="drone-cave-restart" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-semibold text-sm transition-colors border border-gray-700">
-              Reset Map
-            </button>
-          </div>
-
-          <div class="pt-4 border-t border-gray-700">
-            <h4 class="text-xs font-semibold text-emerald-300 uppercase tracking-wide mb-3">📊 Exploration Stats</h4>
-            <div class="space-y-2 text-xs text-gray-300 font-mono">
-              <div class="flex justify-between">
-                <span>Grid Explored:</span>
-                <span id="cave-grid-explored" class="text-emerald-300 font-semibold">0%</span>
-              </div>
-              <div class="flex justify-between">
-                <span>Cells Visited:</span>
-                <span id="cave-cells-visited" class="text-emerald-300 font-semibold">0</span>
-              </div>
-              <div class="flex justify-between">
-                <span>Obstacles Detected:</span>
-                <span id="cave-obstacles" class="text-amber-300 font-semibold">0</span>
-              </div>
-              <div class="flex justify-between">
-                <span>Frontier Nodes:</span>
-                <span id="cave-frontiers" class="text-indigo-300 font-semibold">0</span>
-              </div>
-            </div>
-          </div>
-
-          <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside pt-4 border-t border-gray-700">
-            <li>LiDAR-based SLAM mapping</li>
-            <li>Frontier-based exploration strategy</li>
-            <li>Real-time occupancy grid updates</li>
-            <li>Physics-based collision detection</li>
-          </ul>
+      <div style="border-top: 1px solid var(--border); padding-top: var(--space-6);">
+        <div style="margin-bottom: var(--space-4);">
+          <h3 style="margin-bottom: var(--space-2);">LiDAR Cave Exploration &amp; Mapping</h3>
+          <p class="hero-subline">
+            Autonomous cave exploration using LiDAR-based SLAM and frontier-based planning. The drone maps unknown environments, builds occupancy grids, and plans collision-free paths.
+          </p>
         </div>
 
-        <div class="lg:col-span-3">
-          <div class="bg-gradient-to-br from-gray-900/80 via-slate-900/80 to-gray-950/90 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
-            <div id="drone-cave-demo" class="w-full h-[520px]"></div>
-            <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
-              Real-time LiDAR point cloud and occupancy grid visualization with frontier exploration overlay.
+        <div class="section-columns">
+          <div class="section-column-left panel panel--elevated" style="display: grid; gap: var(--space-4);">
+            <div class="tag-list">
+              <span class="chip">SLAM &amp; Exploration</span>
+              <span class="chip">LiDAR mapping · Frontier planning · Physics</span>
+            </div>
+            <div>
+              <h4>Autonomous Mapping</h4>
+              <p>
+                Real-time LiDAR point cloud processing, occupancy grid updates, and frontier-based exploration for autonomous cave discovery.
+              </p>
+            </div>
+
+            <div style="display: grid; gap: var(--space-2);">
+              <button id="drone-cave-toggle" class="btn btn--solid">Start Exploration</button>
+              <button id="drone-cave-restart" class="btn">Reset Map</button>
+            </div>
+
+            <div>
+              <h4 class="meta" style="margin-bottom: var(--space-3);">Exploration Stats</h4>
+              <div style="display: grid; gap: var(--space-2);">
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Grid Explored:</span>
+                  <span id="cave-grid-explored" class="meta" style="color: var(--accent);">0%</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Cells Visited:</span>
+                  <span id="cave-cells-visited" class="meta" style="color: var(--accent);">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Obstacles Detected:</span>
+                  <span id="cave-obstacles" class="meta" style="color: var(--accent);">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Frontier Nodes:</span>
+                  <span id="cave-frontiers" class="meta" style="color: var(--accent);">0</span>
+                </div>
+              </div>
+            </div>
+
+            <ul style="margin: 0; padding-left: 18px; display: grid; gap: var(--space-2);">
+              <li>LiDAR-based SLAM mapping</li>
+              <li>Frontier-based exploration strategy</li>
+              <li>Real-time occupancy grid updates</li>
+              <li>Physics-based collision detection</li>
+            </ul>
+          </div>
+
+          <div class="section-column-right">
+            <div class="canvas-frame">
+              <div id="drone-cave-demo" style="width: 100%; height: 520px;"></div>
+              <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+                Real-time LiDAR point cloud and occupancy grid visualization with frontier exploration overlay.
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
     <!-- Obstacle Drop Demo -->
-    <div class="mt-16 pt-12 border-t border-gray-700">
-      <div class="flex flex-col gap-3 mb-6">
-        <h3 class="text-2xl font-semibold">Dynamic Obstacle Avoidance</h3>
-        <p class="text-gray-400 max-w-3xl">
-          Interactive obstacle placement and avoidance demonstration. Spawn various obstacle types, watch the drone dynamically recalculate paths, and observe collision avoidance in real-time with physics-based simulation.
-        </p>
-      </div>
-
-      <div class="grid grid-cols-1 gap-8 lg:grid-cols-5">
-        <div class="lg:col-span-2 space-y-5 bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
-          <div class="flex items-center gap-3">
-            <span class="hud-chip">Dynamic Avoidance</span>
-            <span class="cue-badge opacity-60">Interactive obstacles · Real-time replanning</span>
-          </div>
-          <div class="space-y-3">
-            <h4 class="text-lg font-semibold">Spawn & Observe</h4>
-            <p class="text-gray-400 text-sm">
-              Interactively add obstacles to the environment and watch the drone intelligently avoid them using trajectory replanning.
-            </p>
-          </div>
-
-          <div class="flex flex-col gap-3 pt-4 border-t border-gray-700">
-            <button id="drone-obstacle-spawn-boulder" class="px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">
-              Add Boulder
-            </button>
-            <button id="drone-obstacle-spawn-wall" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors">
-              Add Wall
-            </button>
-            <button id="drone-obstacle-spawn-sphere" class="px-3 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white font-semibold text-sm transition-colors">
-              Add Sphere
-            </button>
-            <button id="drone-obstacle-reset" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-semibold text-sm transition-colors border border-gray-700">
-              Clear All Obstacles
-            </button>
-          </div>
-
-          <div class="pt-4 border-t border-gray-700">
-            <h4 class="text-xs font-semibold text-amber-300 uppercase tracking-wide mb-3">📍 Obstacle Count</h4>
-            <div class="text-2xl font-mono text-amber-300 font-bold" id="obstacle-count">0</div>
-          </div>
-
-          <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside pt-4 border-t border-gray-700">
-            <li>Real-time obstacle spawning</li>
-            <li>Dynamic trajectory replanning</li>
-            <li>Physics-based collision response</li>
-            <li>Smooth avoidance maneuvers</li>
-          </ul>
+      <div style="border-top: 1px solid var(--border); padding-top: var(--space-6);">
+        <div style="margin-bottom: var(--space-4);">
+          <h3 style="margin-bottom: var(--space-2);">Dynamic Obstacle Avoidance</h3>
+          <p class="hero-subline">
+            Interactive obstacle placement and avoidance demonstration. Spawn various obstacle types, watch the drone dynamically recalculate paths, and observe collision avoidance in real-time with physics-based simulation.
+          </p>
         </div>
 
-        <div class="lg:col-span-3">
-          <div class="bg-gradient-to-br from-gray-900/80 via-slate-900/80 to-gray-950/90 rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
-            <div id="drone-obstacle-demo" class="w-full h-[520px]"></div>
-            <div class="px-5 py-3 text-xs text-gray-400 border-t border-gray-800 bg-gray-950/60">
-              Interactive 3D environment with real-time obstacle physics and drone avoidance visualization.
+        <div class="section-columns">
+          <div class="section-column-left panel panel--elevated" style="display: grid; gap: var(--space-4);">
+            <div class="tag-list">
+              <span class="chip">Dynamic Avoidance</span>
+              <span class="chip">Interactive obstacles · Real-time replanning</span>
+            </div>
+            <div>
+              <h4>Spawn &amp; Observe</h4>
+              <p>
+                Interactively add obstacles to the environment and watch the drone intelligently avoid them using trajectory replanning.
+              </p>
+            </div>
+
+            <div style="display: grid; gap: var(--space-2);">
+              <button id="drone-obstacle-spawn-boulder" class="btn btn--solid">Add Boulder</button>
+              <button id="drone-obstacle-spawn-wall" class="btn">Add Wall</button>
+              <button id="drone-obstacle-spawn-sphere" class="btn">Add Sphere</button>
+              <button id="drone-obstacle-reset" class="btn">Clear All Obstacles</button>
+            </div>
+
+            <div>
+              <h4 class="meta" style="margin-bottom: var(--space-3);">Obstacle Count</h4>
+              <div class="meta" id="obstacle-count" style="font-size: 1.5rem; color: var(--accent);">0</div>
+            </div>
+
+            <ul style="margin: 0; padding-left: 18px; display: grid; gap: var(--space-2);">
+              <li>Real-time obstacle spawning</li>
+              <li>Dynamic trajectory replanning</li>
+              <li>Physics-based collision response</li>
+              <li>Smooth avoidance maneuvers</li>
+            </ul>
+          </div>
+
+          <div class="section-column-right">
+            <div class="canvas-frame">
+              <div id="drone-obstacle-demo" style="width: 100%; height: 520px;"></div>
+              <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+                Interactive 3D environment with real-time obstacle physics and drone avoidance visualization.
+              </div>
             </div>
           </div>
         </div>
@@ -1059,131 +1262,145 @@
   </section>
 
   <!-- About -->
-  <section id="about" data-workspace="profile" class="max-w-4xl mx-auto py-20 px-6 relative">
-    <h2 class="text-3xl font-bold mb-6">About Me</h2>
-    
-    <p class="text-gray-300 leading-relaxed mb-6">
-      I design end-to-end <span class="text-indigo-400">AI systems</span> that bridge research and production constraints.
-      My work centers on <span class="text-indigo-400">LLM orchestration</span>,
-      <span class="text-indigo-400">retrieval-augmented generation (RAG)</span>, and
-      <span class="text-indigo-400">multi-model routing</span> — systems that balance latency, cost, and accuracy
-      at scale. I approach AI with a <span class="text-indigo-400">reliability mindset</span>: monitoring, evaluation,
-      failure modes, and deployment tradeoffs are first-class concerns.
-    </p>
-    <p class="text-gray-300 leading-relaxed mb-6">
-      Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
-      infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration).
-      <span class="text-indigo-400">I build and test systems under constraints: latency, cost, reliability, and observability.</span>
-      The <span class="text-indigo-400">robotics and autonomy projects</span> on this site are
-      <span class="text-indigo-400">simulation-first hobby work</span> — not formal coursework — demonstrating
-      my interest in perception-to-control loops, planning, and physics-based systems.
-    </p>
-    <p class="text-gray-300 leading-relaxed font-semibold">
-      I build AI as systems, not just models.
-    </p>
+  <section id="about" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">05</span>
+        <div class="section-title">About Me</div>
+      </div>
+      <div class="section-columns">
+        <div class="section-column-left">
+          <p class="meta" style="margin-bottom: var(--space-3);">Profile</p>
+          <p>
+            I design end-to-end AI systems that bridge research and production constraints.
+            My work centers on LLM orchestration,
+            retrieval-augmented generation (RAG), and
+            multi-model routing — systems that balance latency, cost, and accuracy
+            at scale. I approach AI with a reliability mindset: monitoring, evaluation,
+            failure modes, and deployment tradeoffs are first-class concerns.
+          </p>
+        </div>
+        <div class="section-column-right" style="display: grid; gap: var(--space-4);">
+          <p>
+            Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
+            infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration).
+            I build and test systems under constraints: latency, cost, reliability, and observability.
+            The robotics and autonomy projects on this site are
+            simulation-first hobby work — not formal coursework — demonstrating
+            my interest in perception-to-control loops, planning, and physics-based systems.
+          </p>
+          <p style="font-weight: 600; color: var(--text-strong);">
+            I build AI as systems, not just models.
+          </p>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- Skills -->
-  <section id="skills" data-workspace="profile" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 relative">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="text-3xl font-bold mb-8">Technical Skills & Expertise</h2>
+  <section id="skills" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">06</span>
+        <div class="section-title">Technical Skills &amp; Expertise</div>
+      </div>
 
-      <div class="grid md:grid-cols-2 gap-8 mb-8">
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI Systems & Architecture</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Multi-Model LLM Orchestration</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">RAG Pipeline Design</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vector Databases (ChromaDB)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Embedding Systems</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Latency/Cost Optimization</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Model Selection Strategies</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Distributed LLM Services</span>
+      <div class="grid-12">
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">AI Systems &amp; Architecture</h3>
+          <div class="tag-list">
+            <span class="chip">Multi-Model LLM Orchestration</span>
+            <span class="chip">RAG Pipeline Design</span>
+            <span class="chip">Vector Databases (ChromaDB)</span>
+            <span class="chip">Embedding Systems</span>
+            <span class="chip">Latency/Cost Optimization</span>
+            <span class="chip">Model Selection Strategies</span>
+            <span class="chip">Distributed LLM Services</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">NLP & Language Models</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Transformer Architectures</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Attention Mechanisms</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Prompt Engineering</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">LLM Evaluation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Bias & Robustness Analysis</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Hate Speech Detection</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Misinformation Detection</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">NLP &amp; Language Models</h3>
+          <div class="tag-list">
+            <span class="chip">Transformer Architectures</span>
+            <span class="chip">Attention Mechanisms</span>
+            <span class="chip">Prompt Engineering</span>
+            <span class="chip">LLM Evaluation</span>
+            <span class="chip">Bias &amp; Robustness Analysis</span>
+            <span class="chip">Hate Speech Detection</span>
+            <span class="chip">Misinformation Detection</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Computer Vision & Graphics</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Object Detection</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Image Segmentation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">3D Reconstruction</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Vision Transformers</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Multi-Modal Architectures</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Generative Models</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">SLAM & Mapping</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Computer Vision &amp; Graphics</h3>
+          <div class="tag-list">
+            <span class="chip">Object Detection</span>
+            <span class="chip">Image Segmentation</span>
+            <span class="chip">3D Reconstruction</span>
+            <span class="chip">Vision Transformers</span>
+            <span class="chip">Multi-Modal Architectures</span>
+            <span class="chip">Generative Models</span>
+            <span class="chip">SLAM &amp; Mapping</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">AI Ethics & Governance</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Fairness Auditing</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Transparency & Explainability</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Accountability Frameworks</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Compliance & Regulation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Societal Impact Assessment</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Grounding Accuracy</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">AI Ethics &amp; Governance</h3>
+          <div class="tag-list">
+            <span class="chip">Fairness Auditing</span>
+            <span class="chip">Transparency &amp; Explainability</span>
+            <span class="chip">Accountability Frameworks</span>
+            <span class="chip">Compliance &amp; Regulation</span>
+            <span class="chip">Societal Impact Assessment</span>
+            <span class="chip">Grounding Accuracy</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Software Engineering & QA</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Test Automation (Playwright/Selenium)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Performance Testing (K6)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Failure Mode Analysis</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Observability & Monitoring</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">CI/CD Pipelines</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Reproducibility Engineering</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Software Engineering &amp; QA</h3>
+          <div class="tag-list">
+            <span class="chip">Test Automation (Playwright/Selenium)</span>
+            <span class="chip">Performance Testing (K6)</span>
+            <span class="chip">Failure Mode Analysis</span>
+            <span class="chip">Observability &amp; Monitoring</span>
+            <span class="chip">CI/CD Pipelines</span>
+            <span class="chip">Reproducibility Engineering</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Backend & Infrastructure</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Python (Flask/FastAPI)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">RESTful API Design</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Microservices Architecture</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Docker & Orchestration</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Linux System Administration</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Database Design (SQL)</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Backend &amp; Infrastructure</h3>
+          <div class="tag-list">
+            <span class="chip">Python (Flask/FastAPI)</span>
+            <span class="chip">RESTful API Design</span>
+            <span class="chip">Microservices Architecture</span>
+            <span class="chip">Docker &amp; Orchestration</span>
+            <span class="chip">Linux System Administration</span>
+            <span class="chip">Database Design (SQL)</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Research & Communication</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Academic Writing</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Peer Review</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Mathematical Rigor</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Technical Documentation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">MVP Prototyping</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Tradeoff Analysis</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Research &amp; Communication</h3>
+          <div class="tag-list">
+            <span class="chip">Academic Writing</span>
+            <span class="chip">Peer Review</span>
+            <span class="chip">Mathematical Rigor</span>
+            <span class="chip">Technical Documentation</span>
+            <span class="chip">MVP Prototyping</span>
+            <span class="chip">Tradeoff Analysis</span>
           </div>
         </div>
 
-        <div>
-          <h3 class="text-lg font-semibold text-indigo-400 mb-3">Robotics & Control (Hobby)</h3>
-          <div class="flex flex-wrap gap-2">
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Physics-Based Simulation</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Control Systems (PID/MPC)</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Trajectory Optimization</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Path Planning</span>
-            <span class="bg-gray-800 px-3 py-1 rounded-lg text-sm">Three.js Visualization</span>
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Robotics &amp; Control (Hobby)</h3>
+          <div class="tag-list">
+            <span class="chip">Physics-Based Simulation</span>
+            <span class="chip">Control Systems (PID/MPC)</span>
+            <span class="chip">Trajectory Optimization</span>
+            <span class="chip">Path Planning</span>
+            <span class="chip">Three.js Visualization</span>
           </div>
         </div>
       </div>
@@ -1191,164 +1408,210 @@
   </section>
 
   <!-- Professional Experience -->
-  <section id="experience" data-workspace="profile" class="max-w-5xl mx-auto py-20 px-6 relative">
-    <h2 class="text-3xl font-bold mb-10">Professional Experience</h2>
-    <div class="space-y-8">
-
-      <div class="border-l-4 border-indigo-500 pl-6">
-        <h3 class="text-xl font-semibold">Software Engineer</h3>
-        <p class="text-gray-400 text-sm">
-          KIOS Research and Innovation Center of Excellence, University of Cyprus | Nov 2025 – Present
-        </p>
-        <p class="text-gray-300 mt-2">
-          Design and maintain back-end/front-end modules for research projects. Implement RESTful APIs and
-          microservices using Python and JavaScript. Deploy and monitor services in Docker-based environments.
-        </p>
+  <section id="experience" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">07</span>
+        <div class="section-title">Professional Experience</div>
       </div>
+      <div class="list">
+        <div class="list-row">
+          <div class="meta">Nov 2025 – Present</div>
+          <div>
+            <h3 class="list-row-title">Software Engineer</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">KIOS Research and Innovation Center of Excellence, University of Cyprus</p>
+            <p>
+              Design and maintain back-end/front-end modules for research projects. Implement RESTful APIs and
+              microservices using Python and JavaScript. Deploy and monitor services in Docker-based environments.
+            </p>
+          </div>
+        </div>
 
-      <div class="border-l-4 border-indigo-500 pl-6">
-        <h3 class="text-xl font-semibold">QA Automation Engineer</h3>
-        <p class="text-gray-400 text-sm">Techlink LTD, Nicosia | Sep 2023 – Oct 2025</p>
-        <p class="text-gray-300 mt-2">
-          Authored manual and automated UI/regression tests using Playwright (C#) and Selenium (Java). Operated
-          K6 performance suites on Docker Swarm and built DB utilities to optimize test data preparation.
-        </p>
+        <div class="list-row">
+          <div class="meta">Sep 2023 – Oct 2025</div>
+          <div>
+            <h3 class="list-row-title">QA Automation Engineer</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">Techlink LTD, Nicosia</p>
+            <p>
+              Authored manual and automated UI/regression tests using Playwright (C#) and Selenium (Java). Operated
+              K6 performance suites on Docker Swarm and built DB utilities to optimize test data preparation.
+            </p>
+          </div>
+        </div>
+
+        <div class="list-row">
+          <div class="meta">Mar 2025 – Present</div>
+          <div>
+            <h3 class="list-row-title">Special Research Scientist</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">DMSL, University of Cyprus</p>
+            <p>
+              Built a Flask backend integrating ChromaDB with open-source LLMs. Deployed and evaluated LLMs locally
+              for cost-effective experimentation and supported lab users with VM provisioning and research workflows.
+            </p>
+          </div>
+        </div>
+
+        <div class="list-row">
+          <div class="meta">Oct 2021 – Aug 2023</div>
+          <div>
+            <h3 class="list-row-title">Technical Support Assistant</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">University of Cyprus</p>
+            <p>
+              Diagnosed and replaced hardware, performed secure imaging and disk wiping, and provided front-line
+              technical support for departmental IT systems.
+            </p>
+          </div>
+        </div>
       </div>
-
-      <div class="border-l-4 border-indigo-500 pl-6">
-        <h3 class="text-xl font-semibold">Special Research Scientist</h3>
-        <p class="text-gray-400 text-sm">DMSL, University of Cyprus | Mar 2025 – Present</p>
-        <p class="text-gray-300 mt-2">
-          Built a Flask backend integrating ChromaDB with open-source LLMs. Deployed and evaluated LLMs locally
-          for cost-effective experimentation and supported lab users with VM provisioning and research workflows.
-        </p>
-      </div>
-
-      <div class="border-l-4 border-indigo-500 pl-6">
-        <h3 class="text-xl font-semibold">Technical Support Assistant</h3>
-        <p class="text-gray-400 text-sm">University of Cyprus | Oct 2021 – Aug 2023</p>
-        <p class="text-gray-300 mt-2">
-          Diagnosed and replaced hardware, performed secure imaging and disk wiping, and provided front-line
-          technical support for departmental IT systems.
-        </p>
-      </div>
-
     </div>
   </section>
 
   <!-- Projects -->
-  <section id="projects" data-workspace="llm" class="max-w-5xl mx-auto py-20 px-6 relative">
-    <h2 class="text-3xl font-bold mb-10">Featured Projects</h2>
-    <div class="grid md:grid-cols-2 gap-8">
-      <!-- Project Card -->
-      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
-        <h3 class="text-xl font-semibold mb-2">LLM-MS: Multi-Model Search Engine</h3>
-        <p class="text-gray-400 mb-4">
-          Research system orchestrating multiple LLMs with token-aware selection strategies and vector-based
-          retrieval using ChromaDB.
-        </p>
-        <a href="https://chatucy.cs.ucy.ac.cy/llmms.html" target="_blank"
-          class="text-indigo-400 hover:underline">Demo</a>
-        <span class="text-gray-500 mx-1">|</span>
-        <a href="https://www.cs.ucy.ac.cy/~dzeina/papers/llmvdb25-llmmeta.pdf" target="_blank"
-          class="text-indigo-400 hover:underline">Paper</a>
+  <section id="projects" data-workspace="llm" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">08</span>
+        <div class="section-title">Featured Projects</div>
+      </div>
+      <div class="project-row">
+        <div class="meta">01</div>
+        <div>
+          <h3>LLM-MS: Multi-Model Search Engine</h3>
+          <p>
+            Research system orchestrating multiple LLMs with token-aware selection strategies and vector-based
+            retrieval using ChromaDB.
+          </p>
+        </div>
+        <div class="project-links">
+          <a href="https://chatucy.cs.ucy.ac.cy/llmms.html" target="_blank" class="link link--accent">Demo</a>
+          <a href="https://www.cs.ucy.ac.cy/~dzeina/papers/llmvdb25-llmmeta.pdf" target="_blank" class="link link--accent">Paper</a>
+        </div>
       </div>
 
-      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
-        <h3 class="text-xl font-semibold mb-2">LLME: Distributed LLM Service</h3>
-        <p class="text-gray-400 mb-4">
-          Research manuscript exploring distributed, edge-deployed LLM services with focus on orchestration,
-          latency, and resource efficiency.
-        </p>
-        <span class="text-gray-500 text-sm">Manuscript (2025)</span>
+      <div class="project-row">
+        <div class="meta">02</div>
+        <div>
+          <h3>LLME: Distributed LLM Service</h3>
+          <p>
+            Research manuscript exploring distributed, edge-deployed LLM services with focus on orchestration,
+            latency, and resource efficiency.
+          </p>
+        </div>
+        <div class="project-links">
+          <span class="meta">Manuscript (2025)</span>
+        </div>
       </div>
 
-      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
-        <h3 class="text-xl font-semibold mb-2">Multi-Model LLM Search Engines</h3>
-        <p class="text-gray-400 mb-4">
-          B.Sc. thesis on scalable, multi-model LLM orchestration and token-efficient selection logic for
-          diverse query workloads.
-        </p>
-        <span class="text-gray-500 text-sm">B.Sc. Thesis (July 2025)</span>
+      <div class="project-row">
+        <div class="meta">03</div>
+        <div>
+          <h3>Multi-Model LLM Search Engines</h3>
+          <p>
+            B.Sc. thesis on scalable, multi-model LLM orchestration and token-efficient selection logic for
+            diverse query workloads.
+          </p>
+        </div>
+        <div class="project-links">
+          <span class="meta">B.Sc. Thesis (July 2025)</span>
+        </div>
       </div>
 
-      <div class="bg-gray-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
-        <h3 class="text-xl font-semibold mb-2">AI System Architecture</h3>
-        <p class="text-gray-400 mb-4">
-          Portfolio enhancement featuring real-time visualizations of GPT-4 system internals,
-          multi-model orchestration, and cyberpunk research-lab aesthetics with live telemetry.
-        </p>
-        <span class="text-gray-500 text-sm">Interactive Visualizer (2025)</span>
+      <div class="project-row">
+        <div class="meta">04</div>
+        <div>
+          <h3>AI System Architecture</h3>
+          <p>
+            Portfolio enhancement featuring real-time visualizations of GPT-4 system internals,
+            multi-model orchestration, and cyberpunk research-lab aesthetics with live telemetry.
+          </p>
+        </div>
+        <div class="project-links">
+          <span class="meta">Interactive Visualizer (2025)</span>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- Contact -->
-  <section id="contact" data-workspace="profile" class="bg-gray-900/80 backdrop-blur-sm py-20 px-6 text-center relative">
-    <h2 class="text-3xl font-bold mb-6">Get in Touch</h2>
-    <p class="text-gray-400 mb-6">
-      Let's collaborate on AI research, software engineering, or innovative systems projects.
-    </p>
-    <div class="space-y-3">
-      <p>
-        Email:
-        <a href="mailto:kkraso01@ucy.ac.cy" class="text-indigo-400 hover:underline">kkraso01@ucy.ac.cy</a>
-      </p>
-      <p>
-        LinkedIn:
-        <a href="https://linkedin.com/in/konstantin-krasovitskiy" target="_blank" class="text-indigo-400 hover:underline">linkedin.com/in/konstantin-krasovitskiy</a>
-        <span class="text-gray-500 mx-1">|</span>
-        GitHub:
-        <a href="https://github.com/kkraso01" target="_blank" class="text-indigo-400 hover:underline">github.com/kkraso01</a>
-      </p>
+  <section id="contact" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">09</span>
+        <div class="section-title">Contact</div>
+      </div>
+      <div class="panel panel--elevated" style="display: grid; gap: var(--space-4);">
+        <h2>Get in Touch</h2>
+        <p>
+          Let's collaborate on AI research, software engineering, or innovative systems projects.
+        </p>
+        <div style="display: grid; gap: var(--space-2);">
+          <p class="meta">Email</p>
+          <a href="mailto:kkraso01@ucy.ac.cy" class="link link--accent">kkraso01@ucy.ac.cy</a>
+        </div>
+        <div style="display: grid; gap: var(--space-2);">
+          <p class="meta">LinkedIn</p>
+          <a href="https://linkedin.com/in/konstantin-krasovitskiy" target="_blank" class="link link--accent">linkedin.com/in/konstantin-krasovitskiy</a>
+        </div>
+        <div style="display: grid; gap: var(--space-2);">
+          <p class="meta">GitHub</p>
+          <a href="https://github.com/kkraso01" target="_blank" class="link link--accent">github.com/kkraso01</a>
+        </div>
+      </div>
     </div>
   </section>
 
   <!-- Education & Recognition -->
-  <section id="education" data-workspace="profile" class="max-w-4xl mx-auto py-20 px-6 relative">
-    <h2 class="text-3xl font-bold mb-10">Education &amp; Recognition</h2>
+  <section id="education" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">10</span>
+        <div class="section-title">Education &amp; Recognition</div>
+      </div>
 
-    <div class="mb-8">
-      <h3 class="text-lg font-semibold text-indigo-400 mb-4">Education</h3>
-      <div class="space-y-4">
-        <div>
-          <p class="font-semibold">M.Sc. Artificial Intelligence</p>
-          <p class="text-gray-400 text-sm">University of Cyprus | Sep 2025 – Present</p>
+      <div class="section-columns">
+        <div class="section-column-left">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Education</h3>
+          <div style="display: grid; gap: var(--space-3);">
+            <div>
+              <p style="font-weight: 600; color: var(--text-strong);">M.Sc. Artificial Intelligence</p>
+              <p class="meta">University of Cyprus | Sep 2025 – Present</p>
+            </div>
+            <div>
+              <p style="font-weight: 600; color: var(--text-strong);">B.Sc. Computer Science</p>
+              <p class="meta">University of Cyprus | Sep 2021 – Jun 2025</p>
+              <p class="meta">Specialization: Big Data and Internet Computing</p>
+            </div>
+          </div>
         </div>
-        <div>
-          <p class="font-semibold">B.Sc. Computer Science</p>
-          <p class="text-gray-400 text-sm">University of Cyprus | Sep 2021 – Jun 2025</p>
-          <p class="text-gray-400 text-sm">Specialization: Big Data and Internet Computing</p>
+
+        <div class="section-column-right">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Publications &amp; Awards</h3>
+          <ul style="margin: 0; padding-left: 18px; display: grid; gap: var(--space-2);">
+            <li>
+              📄 <strong>LLM-MS: A Multi-Model LLM Search Engine</strong> —
+              International Workshop on LLM + Vector Data (May 2025)
+            </li>
+            <li>
+              🧠 <strong>LLME: A Distributed Large Language Model Service on the Edge</strong> —
+              Manuscript (2025)
+            </li>
+            <li>
+              🤖 <strong>Multi-Model LLM Search Engines</strong> —
+              B.Sc. Thesis, University of Cyprus (July 2025)
+            </li>
+            <li>
+              🏆 Judge &amp; Scientific Committee Member — Robotex Cyprus (2022 – Present)
+            </li>
+            <li>
+              🤖 Robotics Competition Awards — multiple 1st/2nd place distinctions (2018–2019)
+            </li>
+          </ul>
         </div>
       </div>
     </div>
-
-    <div>
-      <h3 class="text-lg font-semibold text-indigo-400 mb-4">Publications &amp; Awards</h3>
-      <ul class="space-y-2 text-gray-300">
-        <li>
-          📄 <strong>LLM-MS: A Multi-Model LLM Search Engine</strong> —
-          International Workshop on LLM + Vector Data (May 2025)
-        </li>
-        <li>
-          🧠 <strong>LLME: A Distributed Large Language Model Service on the Edge</strong> —
-          Manuscript (2025)
-        </li>
-        <li>
-          🤖 <strong>Multi-Model LLM Search Engines</strong> —
-          B.Sc. Thesis, University of Cyprus (July 2025)
-        </li>
-        <li>
-          🏆 Judge &amp; Scientific Committee Member — Robotex Cyprus (2022 – Present)
-        </li>
-        <li>
-          🤖 Robotics Competition Awards — multiple 1st/2nd place distinctions (2018–2019)
-        </li>
-      </ul>
-    </div>
   </section>
 
-  <footer class="py-6 text-center text-gray-600 bg-gray-950/90 relative">
+  <footer class="footer">
     © 2026 Konstantin Krasovitskiy
   </footer>
 
