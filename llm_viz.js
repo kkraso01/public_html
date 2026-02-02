@@ -4,15 +4,24 @@
 
   const ctx = canvas.getContext("2d");
   const bus = window.EventBus;
+  const theme = window.UI_THEME;
   let width, height, dpr;
 
-  const TOKENS = ["<s>", "user", "asks", "LLM"];
   let time = 0;
   let running = true;
   let speed = 1;
   let loadSpike = 0;
+  let hoveredLayer = null;
+  let lastMouse = null;
 
   function resize() {
+    if (theme) {
+      const metrics = theme.setDPR(canvas, ctx);
+      width = metrics.width;
+      height = metrics.height || 260;
+      dpr = metrics.dpr;
+      return;
+    }
     dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     width = rect.width;
@@ -24,14 +33,31 @@
   }
 
   window.addEventListener("resize", resize);
+  window.addEventListener("themechange", resize);
   resize();
 
-  // Viewport observer for performance
   const control = { isRunning: true };
   window.ViewportObserver.observe(canvas, control, 0.1);
 
-  function lerp(a, b, t) {
-    return a + (b - a) * t;
+  const layers = [
+    { id: "embed", label: "Embeddings", x: 0.12, y: 0.2, w: 80, h: 200 },
+    { id: "attn1", label: "Attention", x: 0.32, y: 0.15, w: 110, h: 220 },
+    { id: "ffn", label: "Feed Forward", x: 0.56, y: 0.18, w: 110, h: 210 },
+    { id: "logits", label: "Logits", x: 0.80, y: 0.22, w: 90, h: 190 }
+  ];
+
+  function palette() {
+    if (theme) return theme.palette();
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      surface: styles.getPropertyValue("--surface").trim(),
+      surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+      text: styles.getPropertyValue("--text").trim(),
+      textStrong: styles.getPropertyValue("--text-strong").trim(),
+      muted: styles.getPropertyValue("--muted").trim(),
+      border: styles.getPropertyValue("--border").trim(),
+      accent: styles.getPropertyValue("--accent").trim(),
+    };
   }
 
   function drawRoundedRect(x, y, w, h, r) {
@@ -54,33 +80,99 @@
     ctx.closePath();
   }
 
-  function drawBackground() {
-    const grad = ctx.createLinearGradient(0, 0, width, height);
-    grad.addColorStop(0, "#0b1224");
-    grad.addColorStop(1, "#050910");
-    ctx.fillStyle = grad;
+  function drawBackground(colors) {
+    ctx.fillStyle = colors.surface;
     ctx.fillRect(0, 0, width, height);
+    if (theme) {
+      theme.drawGrid(ctx, 22, colors.border, theme.isDark() ? 0.12 : 0.08, width, height);
+    }
+  }
 
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
+  function drawLayer(layer, colors) {
+    const x = layer.x * width;
+    const y = layer.y * height;
+    const w = layer.w;
+    const h = layer.h;
+    const isActive = hoveredLayer && hoveredLayer.id === layer.id;
+
+    ctx.save();
+    ctx.fillStyle = colors.surfaceElevated;
+    ctx.strokeStyle = theme ? theme.rgba(isActive ? colors.accent : colors.border, isActive ? 0.9 : 0.7) : colors.border;
     ctx.lineWidth = 1;
-    const gridSpacing = 22;
     ctx.beginPath();
-    for (let x = 0; x < width; x += gridSpacing) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-    }
-    for (let y = 0; y < height; y += gridSpacing) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-    }
+    drawRoundedRect(x - w / 2, y, w, h, 2);
+    ctx.fill();
     ctx.stroke();
 
-    // highlight band for the transformer trunk
-    ctx.fillStyle = "rgba(15,23,42,0.7)";
-    drawRoundedRect(width * 0.08, height * 0.18, width * 0.84, height * 0.64, 20);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(99,102,241,0.35)";
+    ctx.fillStyle = colors.textStrong;
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(layer.label.toUpperCase(), x, y + 14);
+
+    const matrixSize = 4;
+    const cellSize = 10;
+    const matrixX = x - (matrixSize * cellSize) / 2;
+    const matrixY = y + 36;
+
+    for (let row = 0; row < matrixSize; row += 1) {
+      for (let col = 0; col < matrixSize; col += 1) {
+        const phase = (Math.sin(time * 0.8 + row * 0.7 + col * 0.5) + 1) / 2;
+        const alpha = 0.18 + phase * 0.25;
+        ctx.fillStyle = theme ? theme.rgba(colors.text, alpha) : `rgba(226,232,240,${alpha})`;
+        ctx.fillRect(matrixX + col * cellSize, matrixY + row * cellSize, cellSize - 1, cellSize - 1);
+      }
+    }
+
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.7) : colors.border;
+    ctx.strokeRect(matrixX - 4, matrixY - 4, matrixSize * cellSize + 8, matrixSize * cellSize + 8);
+
+    ctx.restore();
+    return { x: x - w / 2, y, w, h };
+  }
+
+  function drawResidual(colors) {
+    const startX = layers[0].x * width + layers[0].w / 2;
+    const endX = layers[layers.length - 1].x * width - layers[layers.length - 1].w / 2;
+    const y = height * 0.82;
+
+    ctx.save();
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.7) : colors.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(startX, y);
+    ctx.lineTo(endX, y);
     ctx.stroke();
+
+    const pulse = Math.floor((time * 0.9) % 8) / 8;
+    const px = startX + (endX - startX) * pulse;
+    ctx.fillStyle = theme ? theme.rgba(colors.accent, 0.85) : colors.accent;
+    ctx.fillRect(px - 4, y - 4, 8, 8);
+    ctx.restore();
+  }
+
+  function drawTooltip(colors) {
+    if (!hoveredLayer || !lastMouse) return;
+    const text = hoveredLayer.label;
+    const padding = 8;
+    ctx.save();
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    const metrics = ctx.measureText(text);
+    const boxWidth = metrics.width + padding * 2;
+    const boxHeight = 24;
+    const x = Math.min(lastMouse.x + 12, width - boxWidth - 8);
+    const y = Math.min(lastMouse.y + 12, height - boxHeight - 8);
+    ctx.fillStyle = colors.surfaceElevated;
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : colors.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    drawRoundedRect(x, y, boxWidth, boxHeight, 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = colors.textStrong;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + padding, y + boxHeight / 2);
+    ctx.restore();
   }
 
   function draw() {
@@ -91,255 +183,20 @@
       }
     }
 
+    const colors = palette();
     ctx.clearRect(0, 0, width, height);
-    drawBackground();
+    drawBackground(colors);
 
-    const leftX = width * 0.12;
-    const embedX = width * 0.28;
-    const block1X = width * 0.48;
-    const block2X = width * 0.66;
-    const logitsX = width * 0.84;
-    const centerY = height * 0.52;
+    layers.forEach((layer) => drawLayer(layer, colors));
+    drawResidual(colors);
+    drawTooltip(colors);
 
-    const tokenAreaHeight = height * 0.5;
-    const tokenTop = centerY - tokenAreaHeight / 2;
-    const tokenSpacing = tokenAreaHeight / (TOKENS.length - 1);
-    const tokenPos = TOKENS.map((_, i) => ({
-      x: leftX,
-      y: tokenTop + i * tokenSpacing
-    }));
-
-    const headsPerBlock = 4;
-    const headRadius = 6;
-
-    const blockHeight = 96;
-    const block1Y = centerY - blockHeight - 16;
-    const block2Y = centerY + 8;
-
-    function pulse(offset) {
-      return 0.4 + 0.6 * Math.max(0, Math.sin(time * 2 + offset));
-    }
-
-    // Embedding box
-    const embedW = 92;
-    const embedH = 70;
-    const embedY = centerY - embedH / 2;
-    drawRoundedRect(embedX - embedW / 2, embedY, embedW, embedH, 10);
-    ctx.fillStyle = "rgba(15,23,42,0.92)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(56,189,248,0.9)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(226,232,240,0.92)";
-    ctx.font = "11px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText("Embeddings", embedX, embedY + embedH / 2 + 4);
-
-    // Transformer blocks
-    function drawBlock(x, y, label, sublabel, accent) {
-      const w = 130;
-      const h = blockHeight;
-      drawRoundedRect(x - w / 2, y, w, h, 12);
-      ctx.fillStyle = "rgba(10,12,24,0.95)";
-      ctx.fill();
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 1.8;
-      ctx.stroke();
-
-      ctx.fillStyle = "rgba(226,232,240,0.92)";
-      ctx.font = "11px monospace";
-      ctx.textAlign = "left";
-      ctx.fillText(label, x - w / 2 + 10, y + 18);
-
-      ctx.fillStyle = "rgba(148,163,184,0.9)";
-      ctx.font = "10px monospace";
-      ctx.fillText(sublabel, x - w / 2 + 10, y + 34);
-    }
-
-    drawBlock(block1X, block1Y, "Block 1", "Multi-Head Attention", "#a78bfa");
-    drawBlock(block2X, block2Y, "Block 2", "Feed Forward + Residual", "#38bdf8");
-
-    // logits box
-    const logitsW = 90;
-    const logitsH = 90;
-    const logitsY = centerY - logitsH / 2;
-    drawRoundedRect(logitsX - logitsW / 2, logitsY, logitsW, logitsH, 12);
-    ctx.fillStyle = "rgba(15,23,42,0.92)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(34,197,94,0.9)";
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(226,232,240,0.9)";
-    ctx.font = "11px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText("Logits", logitsX, logitsY + logitsH / 2 + 4);
-
-    for (let i = 0; i < 6; i++) {
-      const bx = logitsX - 28 + i * 11;
-      const bh = 12 + 16 * Math.abs(Math.sin(time * 1.5 + i));
-      ctx.fillStyle = `rgba(34,197,94,${0.4 + 0.5 * Math.random()})`;
-      ctx.fillRect(bx, logitsY + logitsH - bh - 10, 7, bh);
-    }
-
-    // Tokens
-    ctx.font = "12px monospace";
-    ctx.textAlign = "center";
-    tokenPos.forEach((p, i) => {
-      drawRoundedRect(p.x - 14, p.y - 14, 28, 28, 6);
-      ctx.fillStyle = "rgba(15,23,42,0.9)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(148,163,184,0.9)";
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
-      ctx.fillStyle = "rgba(226,232,240,0.95)";
-      ctx.fillText(TOKENS[i], p.x, p.y + 4);
-    });
-
-    // token -> embedding
-    tokenPos.forEach((p, i) => {
-      const alpha = pulse(i * 0.6);
-      ctx.strokeStyle = `rgba(59,130,246,${alpha})`;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(p.x + 14, p.y);
-      ctx.lineTo(embedX - embedW / 2, lerp(p.y, centerY, 0.4));
-      ctx.stroke();
-    });
-
-    // heads in block1
-    const heads = [];
-    const headAreaY = block1Y + 48;
-    const headSpacing = 22;
-
-    for (let h = 0; h < headsPerBlock; h++) {
-      const hx = block1X - 34 + h * headSpacing;
-      const hy = headAreaY;
-      heads.push({ x: hx, y: hy });
-
-      const alpha = 0.6 + 0.3 * Math.max(0, Math.sin(time * 2 + h));
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(168,85,247,${alpha})`;
-      ctx.arc(hx, hy, headRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(226,232,240,0.6)";
-      ctx.stroke();
-    }
-
-    // Q/K/V marker
-    ctx.fillStyle = "rgba(148,163,184,0.8)";
-    ctx.font = "10px monospace";
+    ctx.save();
+    ctx.fillStyle = colors.muted;
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.textAlign = "left";
-    ctx.fillText("Q / K / V projection", block1X - 60, block1Y + 22);
-
-    // token -> heads attention lines
-    tokenPos.forEach((tp, ti) => {
-      heads.forEach((h, hi) => {
-        const phase = time * 2 + ti * 0.5 + hi * 0.7;
-        const alpha = 0.15 + 0.6 * Math.max(0, Math.sin(phase));
-        ctx.strokeStyle = `rgba(129,140,248,${alpha})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(lerp(embedX + embedW / 2, block1X - 60, 0.7), lerp(tp.y, h.y, 0.35));
-        ctx.lineTo(h.x, h.y);
-        ctx.stroke();
-      });
-    });
-
-    // heads -> block1 output
-    heads.forEach((h, hi) => {
-      const alpha = pulse(hi);
-      ctx.strokeStyle = `rgba(94,234,212,${alpha})`;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(h.x, h.y);
-      ctx.lineTo(block1X + 52, centerY - 4);
-      ctx.stroke();
-    });
-
-    // feed-forward bars inside block2
-    const ffBaseX = block2X - 38;
-    const ffBaseY = block2Y + 30;
-    for (let i = 0; i < 4; i++) {
-      const barW = 18 + 12 * Math.abs(Math.sin(time * 1.8 + i));
-      const barY = ffBaseY + i * 16;
-      ctx.fillStyle = `rgba(56,189,248,${0.6 + 0.3 * Math.sin(time + i)})`;
-      ctx.fillRect(ffBaseX, barY, barW, 8);
-    }
-
-    // residual stream path
-    const pts = [
-      { x: embedX + embedW / 2, y: centerY },
-      { x: block1X + 60, y: centerY - 6 },
-      { x: block2X - 60, y: centerY + blockHeight / 2 },
-      { x: block2X + 60, y: centerY + blockHeight / 2 },
-      { x: logitsX - logitsW / 2, y: centerY }
-    ];
-
-    ctx.strokeStyle = "rgba(52,211,153,0.85)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
-
-    const tWrap = (Math.sin(time * 1.5) + 1) / 2;
-    const segCount = pts.length - 1;
-    let totalLen = 0;
-    const segLen = [];
-    for (let i = 0; i < segCount; i++) {
-      const dx = pts[i + 1].x - pts[i].x;
-      const dy = pts[i + 1].y - pts[i].y;
-      const l = Math.sqrt(dx * dx + dy * dy);
-      segLen.push(l);
-      totalLen += l;
-    }
-    const pulseDist = tWrap * totalLen;
-
-    let acc = 0;
-    for (let i = 0; i < segCount; i++) {
-      if (pulseDist <= acc + segLen[i]) {
-        const localT = (pulseDist - acc) / segLen[i];
-        const px = lerp(pts[i].x, pts[i + 1].x, localT);
-        const py = lerp(pts[i].y, pts[i + 1].y, localT);
-
-        ctx.fillStyle = "rgba(52,211,153,0.9)";
-        ctx.beginPath();
-        ctx.arc(px, py, 5 + loadSpike * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-      acc += segLen[i];
-    }
-
-    // labels
-    ctx.font = "10px monospace";
-    ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-    ctx.fillText("Tokens", leftX - 22, tokenTop - 12);
-    ctx.fillText("Attention heads", block1X - 46, block1Y - 10);
-    ctx.fillText("Feed-forward / residual", block2X - 70, block2Y + blockHeight + 18);
-    ctx.fillText("Next-token distribution", logitsX - 48, logitsY - 12);
-
-    // HUD
-    ctx.fillStyle = "rgba(15,23,42,0.82)";
-    ctx.strokeStyle = "rgba(129,140,248,0.45)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    drawRoundedRect(width - 180, 12, 160, 86, 12);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "rgba(226,232,240,0.9)";
-    ctx.font = "10px monospace";
-    ctx.fillText(`speed x${speed.toFixed(2)}`, width - 168, 36);
-    ctx.fillStyle = "rgba(52,211,153,0.9)";
-    ctx.fillText(`load ${loadSpike.toFixed(2)}`, width - 168, 54);
-    ctx.fillStyle = "rgba(148,163,184,0.85)";
-    ctx.fillText("click canvas = spike", width - 168, 72);
+    ctx.fillText(`load ${loadSpike.toFixed(2)} · speed x${speed.toFixed(2)}`, 16, height - 16);
+    ctx.restore();
 
     requestAnimationFrame(draw);
   }
@@ -359,6 +216,32 @@
   canvas.addEventListener("click", () => {
     loadSpike = Math.min(3, loadSpike + 0.6);
     if (bus) bus.emit("telemetry:spike", { source: "transformer", intensity: loadSpike });
+  });
+
+  canvas.addEventListener("mousemove", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    lastMouse = { x, y };
+    hoveredLayer = null;
+    layers.forEach((layer) => {
+      const box = {
+        x: layer.x * width - layer.w / 2,
+        y: layer.y * height,
+        w: layer.w,
+        h: layer.h,
+        id: layer.id,
+        label: layer.label
+      };
+      if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) {
+        hoveredLayer = box;
+      }
+    });
+  });
+
+  canvas.addEventListener("mouseleave", () => {
+    hoveredLayer = null;
+    lastMouse = null;
   });
 
   if (bus) {

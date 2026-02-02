@@ -8,6 +8,7 @@
   const errorEl = document.getElementById("pid-error");
   const speedEl = document.getElementById("pid-speed");
   const bus = window.EventBus || { emit: () => {}, on: () => {} };
+  const theme = window.UI_THEME;
 
   if (!canvas || !robotEl) return;
 
@@ -257,13 +258,31 @@ function buildTrackPath() {
     return readings;
   }
 
+  function palette() {
+    if (theme) return theme.palette();
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      surface: styles.getPropertyValue("--surface").trim(),
+      surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+      text: styles.getPropertyValue("--text").trim(),
+      textStrong: styles.getPropertyValue("--text-strong").trim(),
+      muted: styles.getPropertyValue("--muted").trim(),
+      border: styles.getPropertyValue("--border").trim(),
+      accent: styles.getPropertyValue("--accent").trim(),
+    };
+  }
+
   function drawTrack(sensorPositions, readings) {
     const w = canvas.width / dpr;
     const h = canvas.height / dpr;
+    const colors = palette();
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(17, 24, 39, 0.75)";
+    ctx.fillStyle = colors.surface;
     ctx.fillRect(0, 0, w, h);
+    if (theme) {
+      theme.drawGrid(ctx, 28, colors.border, theme.isDark() ? 0.12 : 0.08, w, h);
+    }
 
     if (track.path.length) {
       ctx.beginPath();
@@ -273,18 +292,21 @@ function buildTrackPath() {
       });
       ctx.closePath();
 
-      ctx.strokeStyle = "#0f172a";
+      ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.7) : colors.border;
       ctx.lineWidth = track.width + 12;
       ctx.stroke();
 
-      ctx.strokeStyle = "#0b0b0b";
+      ctx.strokeStyle = colors.textStrong;
       ctx.lineWidth = track.width;
       ctx.stroke();
     }
 
     sensorPositions.forEach((pos, idx) => {
+      const strength = readings[idx] ?? 0;
       ctx.beginPath();
-      ctx.fillStyle = `rgba(79,70,229,${0.3 + readings[idx] * 0.5})`;
+      ctx.fillStyle = theme
+        ? theme.rgba(strength > 0.7 ? colors.accent : colors.muted, 0.3 + strength * 0.5)
+        : `rgba(148,163,184,${0.3 + strength * 0.5})`;
       ctx.arc(pos.x, pos.y, 3.5, 0, Math.PI * 2);
       ctx.fill();
     });

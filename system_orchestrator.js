@@ -10,6 +10,7 @@
 
   const ctx = canvas.getContext("2d");
   const bus = window.EventBus;
+  const theme = window.UI_THEME;
   let w, h, dpr;
   let t = 0;
   let running = true;
@@ -17,6 +18,13 @@
   let spike = 0;
 
   function resize() {
+    if (theme) {
+      const metrics = theme.setDPR(canvas, ctx);
+      w = metrics.width;
+      h = metrics.height;
+      dpr = metrics.dpr;
+      return;
+    }
     dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     w = rect.width;
@@ -28,34 +36,32 @@
 
   resize();
   window.addEventListener("resize", resize);
+  window.addEventListener("themechange", resize);
 
   // Viewport observer for performance
   const control = { isRunning: true };
   window.ViewportObserver.observe(canvas, control, 0.1);
 
-  // Layout model - normalized coordinates (0-1)
   const layout = {
-    client: { x: 0.10, y: 0.50, w: 80, h: 40, label: "Client" },
-    router: { x: 0.30, y: 0.50, w: 120, h: 60, label: "Router / LLM-MS" },
-    vdb:    { x: 0.28, y: 0.75, w: 120, h: 40, label: "Vector DB\n(ChromaDB)" },
-    scorer: { x: 0.55, y: 0.50, w: 130, h: 50, label: "Scoring / Merge" },
-    output: { x: 0.80, y: 0.50, w: 90, h: 40, label: "Response" }
+    client: { x: 0.10, y: 0.50, w: 84, h: 38, label: "Client" },
+    router: { x: 0.30, y: 0.50, w: 132, h: 50, label: "Router" },
+    vdb: { x: 0.30, y: 0.78, w: 132, h: 36, label: "Vector DB" },
+    scorer: { x: 0.58, y: 0.50, w: 138, h: 46, label: "Scoring" },
+    output: { x: 0.84, y: 0.50, w: 90, h: 38, label: "Response" }
   };
 
   const llms = [
-    { name: "LLM-A", subtitle: "fast / cheap",   x: 0.55, y: 0.20 },
-    { name: "LLM-B", subtitle: "balanced",       x: 0.70, y: 0.30 },
-    { name: "LLM-C", subtitle: "slow / strong",  x: 0.70, y: 0.70 }
+    { name: "LLM-A", subtitle: "fast / cheap", x: 0.62, y: 0.24 },
+    { name: "LLM-B", subtitle: "balanced", x: 0.62, y: 0.42 },
+    { name: "LLM-C", subtitle: "slow / strong", x: 0.62, y: 0.60 }
   ];
 
-  // Routing modes that cycle
   const routes = [
-    { mode: "cost-aware", chosen: 0 }, // LLM-A
-    { mode: "balanced",   chosen: 1 }, // LLM-B
-    { mode: "quality",    chosen: 2 }  // LLM-C
+    { mode: "cost-aware", chosen: 0 },
+    { mode: "balanced", chosen: 1 },
+    { mode: "quality", chosen: 2 }
   ];
 
-  // Metrics state
   const metrics = {
     tokensPerSec: 0,
     latencyMs: 0,
@@ -63,15 +69,15 @@
   };
 
   function updateMetrics(routeIndex) {
-    if (routeIndex === 0) {        // cost-aware / LLM-A
+    if (routeIndex === 0) {
       metrics.tokensPerSec = 180;
       metrics.latencyMs = 40;
       metrics.cost = 1.0;
-    } else if (routeIndex === 1) { // balanced / LLM-B
+    } else if (routeIndex === 1) {
       metrics.tokensPerSec = 120;
       metrics.latencyMs = 60;
       metrics.cost = 1.4;
-    } else {                       // quality / LLM-C
+    } else {
       metrics.tokensPerSec = 80;
       metrics.latencyMs = 90;
       metrics.cost = 2.0;
@@ -84,128 +90,167 @@
     return routes[idx];
   }
 
-  // Draw utility: rounded box
-  function box(pos, options = {}) {
+  function palette() {
+    if (theme) return theme.palette();
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      surface: styles.getPropertyValue("--surface").trim(),
+      surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+      text: styles.getPropertyValue("--text").trim(),
+      textStrong: styles.getPropertyValue("--text-strong").trim(),
+      muted: styles.getPropertyValue("--muted").trim(),
+      border: styles.getPropertyValue("--border").trim(),
+      accent: styles.getPropertyValue("--accent").trim(),
+    };
+  }
+
+  function drawRoundedRect(x, y, width, height, radius) {
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, width, height, radius);
+      return;
+    }
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
+  function drawBackground(colors) {
+    ctx.fillStyle = colors.surface;
+    ctx.fillRect(0, 0, w, h);
+    if (theme) {
+      theme.drawGrid(ctx, 26, colors.border, theme.isDark() ? 0.12 : 0.08, w, h);
+    }
+  }
+
+  function drawBox(pos, colors, options = {}) {
     const { x, y, w: bw, h: bh, label } = pos;
     const px = x * w - bw / 2;
     const py = y * h - bh / 2;
+    const borderColor = options.accent ? colors.accent : colors.border;
 
     ctx.save();
+    ctx.fillStyle = options.fill || colors.surfaceElevated;
+    ctx.strokeStyle = theme ? theme.rgba(borderColor, options.accent ? 0.9 : 0.8) : borderColor;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    const r = 10;
-    ctx.moveTo(px + r, py);
-    ctx.lineTo(px + bw - r, py);
-    ctx.quadraticCurveTo(px + bw, py, px + bw, py + r);
-    ctx.lineTo(px + bw, py + bh - r);
-    ctx.quadraticCurveTo(px + bw, py + bh, px + bw - r, py + bh);
-    ctx.lineTo(px + r, py + bh);
-    ctx.quadraticCurveTo(px, py + bh, px, py + bh - r);
-    ctx.lineTo(px, py + r);
-    ctx.quadraticCurveTo(px, py, px + r, py);
-    ctx.closePath();
-
-    ctx.fillStyle = options.fill || "rgba(15,23,42,0.9)";
-    ctx.strokeStyle = options.stroke || "rgba(148,163,184,0.8)";
-    ctx.lineWidth = options.lineWidth || 1.4;
+    drawRoundedRect(px, py, bw, bh, 2);
     ctx.fill();
     ctx.stroke();
 
-    if (label) {
-      ctx.fillStyle = options.textColor || "rgba(226,232,240,0.96)";
-      ctx.font = "11px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      const lines = label.split("\n");
-      lines.forEach((line, i) => {
-        ctx.fillText(line, x * w, y * h - 6 + i * 12);
-      });
-    }
+    ctx.fillStyle = colors.textStrong;
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x * w, y * h);
 
     ctx.restore();
   }
 
-  // Draw animated arrow with dashes
-  function arrow(from, to, color, thickness = 2, dashed = false, pulse = 0) {
+  function drawRack(colors, activeIndex) {
+    const rackX = w * 0.62 - 70;
+    const rackY = h * 0.16;
+    const rackW = 140;
+    const rackH = h * 0.56;
+
+    ctx.save();
+    ctx.fillStyle = colors.surface;
+    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.9) : colors.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    drawRoundedRect(rackX, rackY, rackW, rackH, 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colors.muted;
+    ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("LLM POOL", rackX + 10, rackY + 14);
+
+    llms.forEach((llm, i) => {
+      const slotW = 120;
+      const slotH = 36;
+      const slotX = rackX + 10;
+      const slotY = rackY + 24 + i * 56;
+      const isActive = activeIndex === i;
+
+      ctx.fillStyle = colors.surfaceElevated;
+      ctx.strokeStyle = theme ? theme.rgba(isActive ? colors.accent : colors.border, isActive ? 0.9 : 0.6) : colors.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      drawRoundedRect(slotX, slotY, slotW, slotH, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = colors.textStrong;
+      ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(llm.name, slotX + 8, slotY + 14);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "9px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+      ctx.fillText(llm.subtitle, slotX + 8, slotY + 28);
+    });
+
+    ctx.restore();
+  }
+
+  function drawArrow(from, to, color, alpha = 0.7) {
     const fx = from.x * w;
     const fy = from.y * h;
     const tx = to.x * w;
     const ty = to.y * h;
 
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = thickness;
-    if (dashed) {
-      ctx.setLineDash([8, 6]);
-      ctx.lineDashOffset = -pulse * 20;
-    }
-
+    ctx.strokeStyle = theme ? theme.rgba(color, alpha) : color;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(fx, fy);
     ctx.lineTo(tx, ty);
     ctx.stroke();
-    ctx.setLineDash([]);
 
-    // Arrow head
     const angle = Math.atan2(ty - fy, tx - fx);
-    const ah = 8;
+    const ah = 7;
     ctx.beginPath();
     ctx.moveTo(tx, ty);
     ctx.lineTo(tx - ah * Math.cos(angle - Math.PI / 6), ty - ah * Math.sin(angle - Math.PI / 6));
     ctx.lineTo(tx - ah * Math.cos(angle + Math.PI / 6), ty - ah * Math.sin(angle + Math.PI / 6));
     ctx.closePath();
-    ctx.fillStyle = color;
+    ctx.fillStyle = theme ? theme.rgba(color, alpha) : color;
     ctx.fill();
-
     ctx.restore();
   }
 
-  // Draw background with subtle grid
-  function drawBackground() {
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, "rgba(15,23,42,1)");
-    grad.addColorStop(1, "rgba(15,23,42,0.96)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.strokeStyle = "rgba(30,64,175,0.25)";
-    ctx.lineWidth = 1;
-    const step = 24;
-    ctx.beginPath();
-    for (let x = 0; x < w; x += step) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-    }
-    for (let y = 0; y < h; y += step) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
-    ctx.stroke();
-  }
-
-  // Draw HUD showing current mode and metrics
-  function drawHUD(route) {
+  function drawPacket(path, progress, colors, active) {
+    const [start, end] = path;
+    const px = lerp(start.x * w, end.x * w, progress);
+    const py = lerp(start.y * h, end.y * h, progress);
     ctx.save();
-    ctx.font = "11px monospace";
-    ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(148,163,184,0.9)";
-
-    ctx.fillText(
-      `Mode: ${route.mode} | Chosen: ${llms[route.chosen].name}`,
-      16,
-      20
-    );
-
-    ctx.fillText(
-      `~Tokens/s: ${metrics.tokensPerSec} | Lat: ${metrics.latencyMs}ms | Cost (rel): ${metrics.cost.toFixed(1)}`,
-      16,
-      36
-    );
-
+    ctx.fillStyle = theme ? theme.rgba(active ? colors.accent : colors.text, active ? 0.9 : 0.7) : colors.text;
+    ctx.fillRect(px - 3, py - 3, 6, 6);
     ctx.restore();
   }
 
-  // Main animation loop
+  function lerp(a, b, p) {
+    return a + (b - a) * p;
+  }
+
+  function drawHUD(route, colors) {
+    ctx.save();
+    ctx.fillStyle = colors.muted;
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(`MODE: ${route.mode.toUpperCase()}`, 16, 20);
+    ctx.fillText(`LAT ${metrics.latencyMs}ms  TPS ${metrics.tokensPerSec}  COST ${metrics.cost.toFixed(1)}`, 16, 36);
+    ctx.restore();
+  }
+
   function drawScene() {
     if (control.isRunning) {
       if (running) {
@@ -214,83 +259,36 @@
       }
     }
     const route = currentRouteWithMetrics();
+    const colors = palette();
 
     ctx.clearRect(0, 0, w, h);
-    drawBackground();
+    drawBackground(colors);
 
-    // Core architecture boxes
-    box(layout.client, { fill: "rgba(15,23,42,0.9)", stroke: "rgba(148,163,184,0.9)" });
-    box(layout.router, { fill: "rgba(15,23,42,0.98)", stroke: "rgba(129,140,248,0.9)" });
-    box(layout.vdb,    { fill: "rgba(15,23,42,0.95)", stroke: "rgba(52,211,153,0.8)" });
-    box(layout.scorer, { fill: "rgba(15,23,42,0.98)", stroke: "rgba(244,114,182,0.8)" });
-    box(layout.output, { fill: "rgba(15,23,42,0.9)", stroke: "rgba(148,163,184,0.9)" });
+    drawBox(layout.client, colors);
+    drawBox(layout.router, colors, { accent: true });
+    drawBox(layout.vdb, colors);
+    drawBox(layout.scorer, colors);
+    drawBox(layout.output, colors);
 
-    // LLM model boxes
-    llms.forEach((llm, i) => {
-      const selected = route.chosen === i;
-      const pos = { x: llm.x, y: llm.y, w: 110, h: 46, label: `${llm.name}\n${llm.subtitle}` };
-      box(pos, {
-        fill: selected ? "rgba(30,64,175,0.95)" : "rgba(15,23,42,0.9)",
-        stroke: selected ? "rgba(129,140,248,0.95)" : "rgba(148,163,184,0.8)",
-        textColor: selected ? "rgba(226,232,255,0.98)" : "rgba(226,232,240,0.9)"
-      });
-    });
+    drawRack(colors, route.chosen);
 
-    // Animated data flow arrows
-    const pulse = (t % 300) / 300;
+    const activeColor = colors.accent;
+    const passiveColor = colors.border;
 
-    // Client -> Router
-    arrow(
-      layout.client,
-      layout.router,
-      `rgba(129,140,248,${0.7 + spike * 0.1})`,
-      2,
-      true,
-      pulse
-    );
+    drawArrow(layout.client, layout.router, passiveColor, 0.7 + spike * 0.1);
+    drawArrow({ x: layout.router.x, y: layout.router.y + 0.12 }, { x: layout.vdb.x, y: layout.vdb.y - 0.12 }, passiveColor, 0.6);
+    drawArrow({ x: layout.router.x + 0.07, y: layout.router.y - 0.08 }, { x: llms[route.chosen].x - 0.08, y: llms[route.chosen].y }, activeColor, 0.85);
+    drawArrow({ x: llms[route.chosen].x + 0.08, y: llms[route.chosen].y }, { x: layout.scorer.x - 0.08, y: layout.scorer.y }, activeColor, 0.85);
+    drawArrow(layout.scorer, layout.output, passiveColor, 0.7);
 
-    // Router -> Vector DB
-    arrow(
-      { x: layout.router.x, y: layout.router.y + 0.10 },
-      { x: layout.vdb.x,    y: layout.vdb.y - 0.12 },
-      `rgba(52,211,153,${0.7 + spike * 0.1})`,
-      1.8,
-      true,
-      pulse + 0.2
-    );
+    const packetPhase = (t % 200) / 200;
+    const stepped = Math.floor(packetPhase * 8) / 8;
+    drawPacket([{ x: layout.client.x, y: layout.client.y }, { x: layout.router.x, y: layout.router.y }], stepped, colors, false);
+    drawPacket([{ x: layout.router.x + 0.07, y: layout.router.y - 0.08 }, { x: llms[route.chosen].x - 0.08, y: llms[route.chosen].y }], stepped, colors, true);
+    drawPacket([{ x: llms[route.chosen].x + 0.08, y: llms[route.chosen].y }, { x: layout.scorer.x - 0.08, y: layout.scorer.y }], stepped, colors, true);
+    drawPacket([{ x: layout.scorer.x, y: layout.scorer.y }, { x: layout.output.x, y: layout.output.y }], stepped, colors, false);
 
-    // Router -> Chosen LLM
-    const chosenLLM = llms[route.chosen];
-    arrow(
-      { x: layout.router.x + 0.06, y: layout.router.y - 0.14 },
-      { x: chosenLLM.x - 0.05,     y: chosenLLM.y },
-      `rgba(129,140,248,${0.7 + spike * 0.1})`,
-      2,
-      true,
-      pulse + 0.4
-    );
-
-    // LLM -> Scorer
-    arrow(
-      { x: chosenLLM.x + 0.06, y: chosenLLM.y },
-      { x: layout.scorer.x - 0.06, y: layout.scorer.y - 0.04 },
-      `rgba(244,114,182,${0.7 + spike * 0.1})`,
-      1.8,
-      true,
-      pulse + 0.6
-    );
-
-    // Scorer -> Output
-    arrow(
-      layout.scorer,
-      layout.output,
-      `rgba(52,211,153,${0.8 + spike * 0.1})`,
-      2,
-      true,
-      pulse + 0.8
-    );
-
-    drawHUD(route);
+    drawHUD(route, colors);
 
     requestAnimationFrame(drawScene);
   }
@@ -315,9 +313,8 @@
     });
   }
 
-  // Optional: Register with SystemPlugins if available
   if (window.SystemPlugins && typeof window.SystemPlugins.registerNode === "function") {
-    llms.forEach(llm => {
+    llms.forEach((llm) => {
       window.SystemPlugins.registerNode(llm.name, {
         type: "llm",
         role: llm.subtitle,

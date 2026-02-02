@@ -10,6 +10,43 @@ function clamp(x, min, max) {
   return Math.min(Math.max(x, min), max);
 }
 
+function parseColor(value) {
+  if (!value) return { r: 0, g: 0, b: 0 };
+  const trimmed = value.trim();
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.replace("#", "");
+    const size = hex.length === 3 ? 1 : 2;
+    const read = (idx) => parseInt(hex.substr(idx * size, size).padEnd(2, hex[idx] || "0"), 16);
+    return { r: read(0), g: read(1), b: read(2) };
+  }
+  const match = trimmed.match(/rgba?\(([^)]+)\)/);
+  if (match) {
+    const parts = match[1].split(",").map((part) => parseFloat(part.trim()));
+    return { r: parts[0] ?? 0, g: parts[1] ?? 0, b: parts[2] ?? 0 };
+  }
+  return { r: 0, g: 0, b: 0 };
+}
+
+function toThreeColor(value) {
+  const parsed = window.UI_THEME?.parseColor ? window.UI_THEME.parseColor(value) : parseColor(value);
+  return new THREE.Color(parsed.r / 255, parsed.g / 255, parsed.b / 255);
+}
+
+function readThemePalette() {
+  if (window.UI_THEME) return window.UI_THEME.palette();
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    bg: styles.getPropertyValue("--bg").trim(),
+    surface: styles.getPropertyValue("--surface").trim(),
+    surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+    text: styles.getPropertyValue("--text").trim(),
+    textStrong: styles.getPropertyValue("--text-strong").trim(),
+    muted: styles.getPropertyValue("--muted").trim(),
+    border: styles.getPropertyValue("--border").trim(),
+    accent: styles.getPropertyValue("--accent").trim(),
+  };
+}
+
 export function initDroneRaceDemo(container, options = {}) {
   if (!container || typeof THREE === 'undefined') {
     console.warn('Drone race demo requires a valid container and Three.js');
@@ -62,12 +99,15 @@ class DroneRaceDemo {
     this._initHUD();
     this._bindInputs();
     this._initUIController();
+    this._applyTheme();
+    window.addEventListener('themechange', () => this._applyTheme());
     this.restart();
   }
 
   _initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a1020);
+    const palette = readThemePalette();
+    this.scene.background = toThreeColor(palette.bg);
     const aspect = this.options.width / this.options.height;
     
     // Perspective camera for third-person view
@@ -89,16 +129,16 @@ class DroneRaceDemo {
     this.container.innerHTML = '';
     this.container.appendChild(this.renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0x8899ff, 0.35);
-    const hemi = new THREE.HemisphereLight(0x6272ff, 0x090b14, 0.65);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
-    dir.position.set(6, 10, 6);
-    dir.castShadow = !!this.options.shadows;
-    this.scene.add(ambient, hemi, dir);
+    this.ambient = new THREE.AmbientLight(toThreeColor(palette.text), 0.25);
+    this.hemi = new THREE.HemisphereLight(toThreeColor(palette.textStrong), toThreeColor(palette.bg), 0.6);
+    this.dir = new THREE.DirectionalLight(new THREE.Color(1, 1, 1), 1.0);
+    this.dir.position.set(6, 10, 6);
+    this.dir.castShadow = !!this.options.shadows;
+    this.scene.add(this.ambient, this.hemi, this.dir);
 
     const floorGeo = new THREE.PlaneGeometry(200, 200);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.8, metalness: 0.1 });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
+    this.floorMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.surface), roughness: 0.8, metalness: 0.1 });
+    const floor = new THREE.Mesh(floorGeo, this.floorMat);
     floor.rotation.y = 0; // Floor is X-Y plane (Z is up)
     floor.position.z = this.floorHeight;
     floor.receiveShadow = true;
@@ -107,7 +147,7 @@ class DroneRaceDemo {
     this.trailGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
     this.trailLine = new THREE.Line(
       this.trailGeometry,
-      new THREE.LineBasicMaterial({ color: 0x8be9fd, transparent: true, opacity: 0.55 }),
+      new THREE.LineBasicMaterial({ color: toThreeColor(palette.accent), transparent: true, opacity: 0.35 }),
     );
     this.scene.add(this.trailLine);
   }
@@ -115,6 +155,7 @@ class DroneRaceDemo {
   _initDrone() {
     this.params = CRAZYFLIE_PARAMS;
     this.drone = new DronePhysicsEngine(this.params);
+    const palette = readThemePalette();
 
     // Initialize controller types (ETH-based)
     this.geometricController = new RaceController(this.params);
@@ -124,16 +165,16 @@ class DroneRaceDemo {
     this.controller = this.geometricController;
     // Create body matching stationary demo (+Z is up, X is forward)
     const bodyGeometry = new THREE.BoxGeometry(0.28, 0.28, 0.08);
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.35, roughness: 0.45 });
-    const bottomMat = new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.35, roughness: 0.45 });
-    const sideMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.35, roughness: 0.45 });
-    const bodyMaterials = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
+    this.topMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.textStrong), metalness: 0.35, roughness: 0.45 });
+    this.bottomMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.muted), metalness: 0.35, roughness: 0.45 });
+    this.sideMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.text), metalness: 0.35, roughness: 0.45 });
+    const bodyMaterials = [this.sideMat, this.sideMat, this.topMat, this.bottomMat, this.sideMat, this.sideMat];
     const body = new THREE.Mesh(bodyGeometry, bodyMaterials);
     body.castShadow = true;
     body.receiveShadow = true;
     
-    const armMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.25, roughness: 0.6 });
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), armMat); // Arm along X (forward)
+    this.armMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.text), metalness: 0.25, roughness: 0.6 });
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.12, 0.05), this.armMat); // Arm along X (forward)
     arm.castShadow = true;
     arm.receiveShadow = true;
 
@@ -142,21 +183,20 @@ class DroneRaceDemo {
 
     // Add colored motor rotors (ETH Zürich X-configuration)
     const rotorGeo = new THREE.RingGeometry(0.09, 0.14, 16);
-    const rotorColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00];
+    this.rotorMat = new THREE.MeshStandardMaterial({ color: toThreeColor(palette.border), emissive: toThreeColor(palette.border), emissiveIntensity: 0.1, metalness: 0.6, roughness: 0.4 });
     const rotorPositions = [
       new THREE.Vector3(0.28, 0.28, 0.06),   // Motor 0 - Front-Left: +X (front), +Y (left)
       new THREE.Vector3(0.28, -0.28, 0.06),  // Motor 1 - Front-Right: +X (front), -Y (right)
       new THREE.Vector3(-0.28, -0.28, 0.06), // Motor 2 - Back-Right: -X (back), -Y (right)
       new THREE.Vector3(-0.28, 0.28, 0.06),  // Motor 3 - Back-Left: -X (back), +Y (left)
     ];
-    rotorPositions.forEach((p, i) => {
-      const rotorMat = new THREE.MeshStandardMaterial({ color: rotorColors[i], emissive: rotorColors[i], emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.4 });
-      const rTop = new THREE.Mesh(rotorGeo, rotorMat);
+    rotorPositions.forEach((p) => {
+      const rTop = new THREE.Mesh(rotorGeo, this.rotorMat);
       rTop.position.copy(p);
       rTop.position.z += 0.01;
       rTop.castShadow = true;
       this.droneMesh.add(rTop);
-      const rBottom = new THREE.Mesh(rotorGeo, rotorMat);
+      const rBottom = new THREE.Mesh(rotorGeo, this.rotorMat);
       rBottom.position.copy(p);
       rBottom.position.z -= 0.01;
       rBottom.castShadow = true;
@@ -196,6 +236,42 @@ class DroneRaceDemo {
 
   _initUIController() {
     this.uiController = new RaceUIController(this, this.container);
+  }
+
+  _applyTheme() {
+    const palette = readThemePalette();
+    if (this.scene) {
+      this.scene.background = toThreeColor(palette.bg);
+    }
+    if (this.ambient) {
+      this.ambient.color = toThreeColor(palette.text);
+    }
+    if (this.hemi) {
+      this.hemi.color = toThreeColor(palette.textStrong);
+      this.hemi.groundColor = toThreeColor(palette.bg);
+    }
+    if (this.floorMat) {
+      this.floorMat.color = toThreeColor(palette.surface);
+    }
+    if (this.topMat) {
+      this.topMat.color = toThreeColor(palette.textStrong);
+    }
+    if (this.bottomMat) {
+      this.bottomMat.color = toThreeColor(palette.muted);
+    }
+    if (this.sideMat) {
+      this.sideMat.color = toThreeColor(palette.text);
+    }
+    if (this.armMat) {
+      this.armMat.color = toThreeColor(palette.text);
+    }
+    if (this.rotorMat) {
+      this.rotorMat.color = toThreeColor(palette.border);
+      this.rotorMat.emissive = toThreeColor(palette.border);
+    }
+    if (this.trailLine) {
+      this.trailLine.material.color = toThreeColor(palette.accent);
+    }
   }
 
   _bindInputs() {

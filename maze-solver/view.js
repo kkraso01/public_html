@@ -9,6 +9,7 @@
       this.maze = maze;
       this.solver = solver;
       this.deviceRatio = window.devicePixelRatio || 1;
+      this.theme = window.UI_THEME;
       this._onResize = () => this._resize();
       this._resize();
       window.addEventListener("resize", this._onResize);
@@ -31,6 +32,7 @@
     _drawDistanceMap() {
       if (!this.solver.latestDistances) return;
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
       let max = 0;
       this.solver.latestDistances.forEach((row) => row.forEach((v) => {
@@ -41,10 +43,10 @@
           const d = this.solver.latestDistances[y][x];
           if (!Number.isFinite(d)) continue;
           const t = max === 0 ? 0 : d / max;
-          ctx.fillStyle = `rgba(99, 102, 241, ${0.08 + 0.35 * (1 - t)})`;
+          ctx.fillStyle = this._rgba(colors.text, 0.06 + 0.25 * (1 - t));
           ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-          ctx.fillStyle = "#dbeafe";
-          ctx.font = `${Math.max(10, cellSize * 0.35)}px Inter, system-ui`;
+          ctx.fillStyle = colors.text;
+          ctx.font = `${Math.max(10, cellSize * 0.35)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(d.toString(), x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
@@ -54,8 +56,9 @@
 
     _drawGrid() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
-      ctx.strokeStyle = "#0f172a";
+      ctx.strokeStyle = this._rgba(colors.border, 0.8);
       ctx.lineWidth = 1;
       for (let i = 0; i <= this.maze.size; i += 1) {
         ctx.beginPath();
@@ -71,8 +74,9 @@
 
     _drawWalls() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
-      ctx.strokeStyle = "#94a3b8";
+      ctx.strokeStyle = this._rgba(colors.textStrong, 0.9);
       ctx.lineWidth = 3;
       ctx.lineCap = "round";
       for (let y = 0; y < this.maze.size; y += 1) {
@@ -112,7 +116,8 @@
     _drawGoals() {
       const { ctx } = this;
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
-      ctx.fillStyle = "rgba(34,197,94,0.18)";
+      const colors = this._palette();
+      ctx.fillStyle = this._rgba(colors.accent, 0.18);
       this.maze.goalCells.forEach((key) => {
         const [x, y] = key.split(",").map(Number);
         ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -126,8 +131,9 @@
       const centerX = x * cellSize + cellSize / 2;
       const centerY = y * cellSize + cellSize / 2;
       const r = cellSize * 0.25;
-      ctx.fillStyle = "#fbbf24";
-      ctx.strokeStyle = "#f59e0b";
+      const colors = this._palette();
+      ctx.fillStyle = colors.textStrong;
+      ctx.strokeStyle = colors.border;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
@@ -142,12 +148,30 @@
         south: Math.PI / 2,
         west: Math.PI
       }[dir] ?? 0;
-      ctx.strokeStyle = "#1e293b";
+      ctx.strokeStyle = colors.muted;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(centerX + Math.cos(angle) * r * 1.2, centerY + Math.sin(angle) * r * 1.2);
       ctx.stroke();
+    }
+
+    _palette() {
+      if (this.theme) return this.theme.palette();
+      const styles = getComputedStyle(document.documentElement);
+      return {
+        surface: styles.getPropertyValue("--surface").trim(),
+        surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+        text: styles.getPropertyValue("--text").trim(),
+        textStrong: styles.getPropertyValue("--text-strong").trim(),
+        muted: styles.getPropertyValue("--muted").trim(),
+        border: styles.getPropertyValue("--border").trim(),
+        accent: styles.getPropertyValue("--accent").trim(),
+      };
+    }
+
+    _rgba(color, alpha) {
+      return this.theme ? this.theme.rgba(color, alpha) : color;
     }
 
     draw() {
@@ -607,15 +631,15 @@
       section.style.marginBottom = "16px";
       section.style.padding = "12px";
       section.style.borderRadius = "8px";
-      section.style.background = "linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(99, 102, 241, 0.08) 100%)";
-      section.style.border = "1px solid rgba(99, 102, 241, 0.3)";
-      section.style.boxShadow = "0 2px 8px rgba(99, 102, 241, 0.1)";
+      section.style.background = "var(--surface)";
+      section.style.border = "1px solid var(--border)";
+      section.style.boxShadow = "none";
       
       const label = document.createElement("label");
       label.style.display = "block";
       label.style.fontWeight = "700";
       label.style.marginBottom = "12px";
-      label.style.color = "#e2e8f0";
+      label.style.color = "var(--text-strong)";
       label.style.fontSize = "0.85rem";
       label.style.textTransform = "uppercase";
       label.style.letterSpacing = "1px";
@@ -635,7 +659,7 @@
       dynamicContainer.style.gap = "12px";
       
       const dynamicOption = document.createElement("label");
-      dynamicOption.className = "radio-option";
+      dynamicOption.className = "radio-option ui-control";
       dynamicOption.style.flex = "1";
       dynamicOption.style.margin = "0";
       const dynamicRadio = document.createElement("input");
@@ -662,19 +686,20 @@
       const dynamicText = document.createElement("span");
       dynamicText.style.fontSize = "0.95rem";
       dynamicText.style.fontWeight = "500";
-      dynamicText.style.color = "#e2e8f0";
+      dynamicText.style.color = "var(--text)";
       dynamicText.textContent = "Dynamic Flood-Fill";
       dynamicOption.appendChild(dynamicText);
       
       // Oblique sprint checkbox next to dynamic option
       const obliqueToggle = document.createElement("label");
+      obliqueToggle.className = "ui-control";
       obliqueToggle.style.display = "flex";
       obliqueToggle.style.alignItems = "center";
       obliqueToggle.style.gap = "8px";
       obliqueToggle.style.padding = "8px 12px";
       obliqueToggle.style.borderRadius = "6px";
-      obliqueToggle.style.background = "rgba(16, 185, 129, 0.1)";
-      obliqueToggle.style.border = "1px solid rgba(16, 185, 129, 0.3)";
+      obliqueToggle.style.background = "var(--surface)";
+      obliqueToggle.style.border = "1px solid var(--border)";
       obliqueToggle.style.cursor = "pointer";
       obliqueToggle.style.whiteSpace = "nowrap";
       obliqueToggle.style.transition = "all 0.2s ease";
@@ -704,7 +729,7 @@
       const obliqueLabel = document.createElement("span");
       obliqueLabel.style.fontSize = "0.85rem";
       obliqueLabel.style.fontWeight = "500";
-      obliqueLabel.style.color = "#10b981";
+      obliqueLabel.style.color = "var(--muted)";
       obliqueLabel.textContent = "8-Dir";
       
       obliqueToggle.appendChild(obliqueCheckbox);
@@ -712,32 +737,23 @@
       
       // Update checkbox visual styling function
       const updateCheckboxStyle = () => {
-        if (obliqueCheckbox.checked) {
-          obliqueToggle.style.background = "rgba(16, 185, 129, 0.25)";
-          obliqueToggle.style.borderColor = "rgba(16, 185, 129, 0.6)";
-          obliqueToggle.style.boxShadow = "0 0 8px rgba(16, 185, 129, 0.2)";
-        } else {
-          obliqueToggle.style.background = "rgba(16, 185, 129, 0.1)";
-          obliqueToggle.style.borderColor = "rgba(16, 185, 129, 0.3)";
-          obliqueToggle.style.boxShadow = "none";
-        }
+        obliqueToggle.classList.toggle("is-active", obliqueCheckbox.checked);
       };
+      updateCheckboxStyle();
       
-      obliqueToggle.addEventListener("mouseover", () => {
-        obliqueToggle.style.background = "rgba(16, 185, 129, 0.2)";
-      });
-      
+      obliqueToggle.addEventListener("mouseover", () => obliqueToggle.classList.add("is-active"));
       obliqueToggle.addEventListener("mouseout", updateCheckboxStyle);
       
       // NEW: Smooth Curves Toggle (visible by default)
       const smoothCurvesToggle = document.createElement("label");
+      smoothCurvesToggle.className = "ui-control";
       smoothCurvesToggle.style.display = "inline-flex";
       smoothCurvesToggle.style.alignItems = "center";
       smoothCurvesToggle.style.gap = "6px";
       smoothCurvesToggle.style.padding = "4px 8px";
       smoothCurvesToggle.style.borderRadius = "4px";
-      smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.1)";
-      smoothCurvesToggle.style.border = "1px solid rgba(59, 130, 246, 0.3)";
+      smoothCurvesToggle.style.background = "var(--surface)";
+      smoothCurvesToggle.style.border = "1px solid var(--border)";
       smoothCurvesToggle.style.cursor = "pointer";
       smoothCurvesToggle.style.whiteSpace = "nowrap";
       smoothCurvesToggle.style.transition = "all 0.2s ease";
@@ -758,7 +774,7 @@
       const smoothCurvesLabel = document.createElement("span");
       smoothCurvesLabel.style.fontSize = "0.85rem";
       smoothCurvesLabel.style.fontWeight = "500";
-      smoothCurvesLabel.style.color = "#3b82f6";
+      smoothCurvesLabel.style.color = "var(--muted)";
       smoothCurvesLabel.textContent = "Smoothing";
       
       smoothCurvesToggle.appendChild(smoothCurvesCheckbox);
@@ -766,21 +782,11 @@
       
       // Smooth curves visual styling
       const updateSmoothCurvesStyle = () => {
-        if (smoothCurvesCheckbox.checked) {
-          smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.25)";
-          smoothCurvesToggle.style.borderColor = "rgba(59, 130, 246, 0.6)";
-          smoothCurvesToggle.style.boxShadow = "0 0 8px rgba(59, 130, 246, 0.2)";
-        } else {
-          smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.1)";
-          smoothCurvesToggle.style.borderColor = "rgba(59, 130, 246, 0.3)";
-          smoothCurvesToggle.style.boxShadow = "none";
-        }
+        smoothCurvesToggle.classList.toggle("is-active", smoothCurvesCheckbox.checked);
       };
+      updateSmoothCurvesStyle();
       
-      smoothCurvesToggle.addEventListener("mouseover", () => {
-        smoothCurvesToggle.style.background = "rgba(59, 130, 246, 0.2)";
-      });
-      
+      smoothCurvesToggle.addEventListener("mouseover", () => smoothCurvesToggle.classList.add("is-active"));
       smoothCurvesToggle.addEventListener("mouseout", updateSmoothCurvesStyle);
       
       // Smooth curves toggle is always visible (not conditional on oblique state)
@@ -792,7 +798,7 @@
 
       // Flood Fill (baseline)
       const floodOption = document.createElement("label");
-      floodOption.className = "radio-option";
+      floodOption.className = "radio-option ui-control";
       floodOption.style.margin = "0";
       const floodRadio = document.createElement("input");
       floodRadio.type = "radio";
@@ -817,14 +823,14 @@
       const floodText = document.createElement("span");
       floodText.style.fontSize = "0.95rem";
       floodText.style.fontWeight = "500";
-      floodText.style.color = "#e2e8f0";
+      floodText.style.color = "var(--text)";
       floodText.textContent = "Flood Fill";
       floodOption.appendChild(floodText);
       radioGroup.appendChild(floodOption);
 
       // LPA*
       const lpaOption = document.createElement("label");
-      lpaOption.className = "radio-option";
+      lpaOption.className = "radio-option ui-control";
       lpaOption.style.margin = "0";
       const lpaRadio = document.createElement("input");
       lpaRadio.type = "radio";
@@ -849,7 +855,7 @@
       const lpaText = document.createElement("span");
       lpaText.style.fontSize = "0.95rem";
       lpaText.style.fontWeight = "500";
-      lpaText.style.color = "#e2e8f0";
+      lpaText.style.color = "var(--text)";
       lpaText.textContent = "LPA*";
       lpaOption.appendChild(lpaText);
       radioGroup.appendChild(lpaOption);
@@ -896,7 +902,7 @@
       label.style.display = "block";
       label.style.fontWeight = "600";
       label.style.marginBottom = "8px";
-      label.style.color = "#cbd5e1";
+      label.style.color = "var(--muted)";
       label.style.fontSize = "0.9rem";
       label.style.textTransform = "uppercase";
       label.style.letterSpacing = "0.5px";
@@ -918,20 +924,20 @@
       speeds.forEach(speed => {
         const button = document.createElement("button");
         button.id = speed.id;
+        button.className = "ui-btn";
         button.textContent = speed.label;
         button.style.padding = "8px 12px";
         button.style.fontSize = "0.8rem";
         button.style.fontWeight = "600";
-        button.style.border = "1px solid rgba(99, 102, 241, 0.6)";
-        button.style.borderRadius = "6px";
-        button.style.color = "#e2e8f0";
+        button.style.border = "1px solid var(--border)";
+        button.style.borderRadius = "var(--radius)";
+        button.style.color = "var(--text-strong)";
         button.style.cursor = "pointer";
         button.style.transition = "all 0.2s ease";
-        button.style.background = "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)";
+        button.style.background = "transparent";
         
         if (speed.delay === 200) {
-          button.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
-          button.style.boxShadow = "0 4px 8px rgba(16, 185, 129, 0.4)";
+          button.classList.add("ui-btn--solid");
         }
 
         button.addEventListener("click", () => {
@@ -941,7 +947,7 @@
 
         button.addEventListener("mouseover", () => {
           button.style.transform = "translateY(-2px)";
-          button.style.boxShadow = "0 4px 12px rgba(99, 102, 241, 0.4)";
+          button.style.borderColor = "var(--accent)";
         });
 
         button.addEventListener("mouseout", () => {
@@ -970,11 +976,9 @@
         const el = document.getElementById(btn.id);
         if (el) {
           if (btn.delay === this.stepDelay) {
-            el.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
-            el.style.boxShadow = "0 4px 8px rgba(16, 185, 129, 0.4)";
+            el.classList.add("ui-btn--solid");
           } else {
-            el.style.background = "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)";
-            el.style.boxShadow = "none";
+            el.classList.remove("ui-btn--solid");
           }
         }
       });
@@ -1005,50 +1009,6 @@
     }
 
      _updateStatsDisplay() {
-    //   const statsEl = document.getElementById("maze-stats");
-    //   if (!statsEl) return;
-      
-    //   const timeSaved = this.useLPA 
-    //     ? Math.max(0, (this.stats.nodesExplored * 0.05 - this.stats.timeSeconds)).toFixed(2)
-    //     : 0;
-      
-    //   // Include optimization stats from explorer if available
-    //   const optimStats = this.explorer && this.explorer.optimizationStats 
-    //     ? this.explorer.optimizationStats 
-    //     : null;
-
-    //   let html = `
-    //     <div style="font-size: 12px; color: #64748b;">
-    //       <p><strong>Phase:</strong> <span style="color: #3b82f6;">${this.stats.currentPhase || "..."}</span></p>
-    //       <p><strong>Algorithm:</strong> ${this.currentAlgorithm.toUpperCase()}</p>
-    //       <p>Nodes Explored: ${this.stats.nodesExplored}</p>
-    //       <p>Wall Discoveries: ${this.stats.wallDiscoveries}</p>
-    //       <p>Elapsed: ${this.stats.timeSeconds.toFixed(2)}s</p>`;
-
-    //   if (optimStats) {
-    //     html += `
-    //       <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
-    //       <p><strong>🏁 Path Optimization (Stage 1&2):</strong></p>
-    //       <p>Exploration Steps: ${optimStats.explorationSteps}</p>
-    //       <p>Optimal Path Steps: ${optimStats.optimalSteps}</p>
-    //       <p>Improvement: ${optimStats.improvementFactor}x faster</p>
-    //       <p>Time Saved: <span style="color: #10b981; font-weight: bold;">${optimStats.timeSavedPercent}%</span></p>`;
-    //   }
-
-    //   if (this.stats.racingSegments) {
-    //     html += `
-    //       <hr style="margin: 8px 0; border: none; border-top: 1px solid #475569;">
-    //       <p><strong>⚡ Racing Phase:</strong></p>
-    //       <p>Race Segments: ${this.stats.racingSegments}</p>
-    //       <p>Est. Race Time: ${this.stats.totalRaceTime}s</p>`;
-    //   }
-
-    //   html += `
-    //       <p>Estimated Time Saved: ${timeSaved}s (LPA*)</p>
-    //     </div>
-    //   `;
-      
-    //   statsEl.innerHTML = html;
     }
 
     draw() {
@@ -1073,6 +1033,7 @@
     // Overlay for LPA*: show g/rhs values, open list, inconsistent cells
     _drawLPAOverlay() {
       const { ctx } = this;
+      const colors = this._palette();
       const cellSize = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / this.maze.size;
       const g = this.solver.gValues;
       const rhs = this.solver.rhsValues;
@@ -1080,7 +1041,7 @@
       if (this.solver.openList && this.solver.openList.items) {
         ctx.save();
         ctx.globalAlpha = 0.18;
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = this._rgba(colors.text, 0.25);
         for (const item of this.solver.openList.items) {
           const x = item[1], y = item[2];
           ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -1088,7 +1049,7 @@
         ctx.restore();
       }
       // Draw g/rhs values and inconsistent cells
-      ctx.font = `${Math.max(10, cellSize * 0.28)}px Inter, system-ui`;
+      ctx.font = `${Math.max(10, cellSize * 0.28)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (let y = 0; y < this.maze.size; y++) {
@@ -1099,14 +1060,32 @@
           if (gx !== rx) {
             ctx.save();
             ctx.globalAlpha = 0.18;
-            ctx.fillStyle = '#fbbf24';
+            ctx.fillStyle = this._rgba(colors.accent, 0.2);
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
             ctx.restore();
           }
-          ctx.fillStyle = '#dbeafe';
+          ctx.fillStyle = colors.text;
           ctx.fillText(txt, x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
         }
       }
+    }
+
+    _palette() {
+      if (window.UI_THEME) return window.UI_THEME.palette();
+      const styles = getComputedStyle(document.documentElement);
+      return {
+        surface: styles.getPropertyValue("--surface").trim(),
+        surfaceElevated: styles.getPropertyValue("--surface-elevated").trim(),
+        text: styles.getPropertyValue("--text").trim(),
+        textStrong: styles.getPropertyValue("--text-strong").trim(),
+        muted: styles.getPropertyValue("--muted").trim(),
+        border: styles.getPropertyValue("--border").trim(),
+        accent: styles.getPropertyValue("--accent").trim(),
+      };
+    }
+
+    _rgba(color, alpha) {
+      return window.UI_THEME ? window.UI_THEME.rgba(color, alpha) : color;
     }
   }
   
