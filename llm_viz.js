@@ -6,24 +6,36 @@
   const theme = window.UI_THEME;
   let width = 0;
   let height = 0;
-  let dpr = 1;
   let hoveredStage = null;
   let hoveredToken = null;
   let selectedToken = 0;
   let tokenBoxes = [];
   let stageHitboxes = [];
   let needsRender = false;
-  let time = 0;
 
-  const tokens = ["<bos>", "query", "retrieval", "router", "context", "policy", "logits", "answer"];
+  const pad = 16;
+  const tokens = [
+    "<bos>",
+    "question",
+    "retrieval",
+    "router",
+    "context",
+    "evidence",
+    "policy",
+    "reasoning",
+    "draft",
+    "logits",
+    "answer",
+    "<eos>"
+  ];
 
   const stages = [
-    { id: "embed", label: "Embedding", dims: "seq × d_model", shape: "8 × 768" },
-    { id: "qkv", label: "Q / K / V", dims: "3 × (seq × 64)", shape: "8 × 64 per head" },
-    { id: "attn", label: "Attention", dims: "heads=8, seq × seq", shape: "8 × 8 weights", isAttention: true },
-    { id: "res", label: "Residual", dims: "skip + layer norm", shape: "8 × 768" },
-    { id: "ffn", label: "FFN", dims: "GELU(3072) → 768", shape: "8 × 3072 → 8 × 768" },
-    { id: "logits", label: "Logits", dims: "seq × vocab", shape: "8 × 50k" }
+    { id: "embed", label: "Embedding", dims: "seq × d_model", shape: "12 × 768" },
+    { id: "qkv", label: "Q / K / V", dims: "3 × (seq × 64)", shape: "12 × 64 per head" },
+    { id: "attn", label: "Attention", dims: "heads=8, seq × seq", shape: "12 × 12 weights", isAttention: true },
+    { id: "res", label: "Residual", dims: "skip + layer norm", shape: "12 × 768" },
+    { id: "ffn", label: "FFN", dims: "GELU(3072) → 768", shape: "12 × 3072 → 12 × 768" },
+    { id: "logits", label: "Logits", dims: "seq × vocab", shape: "12 × 50k" }
   ];
 
   function palette() {
@@ -36,21 +48,18 @@
       textStrong: styles.getPropertyValue("--text-strong").trim(),
       muted: styles.getPropertyValue("--muted").trim(),
       border: styles.getPropertyValue("--border").trim(),
-      accent: styles.getPropertyValue("--accent").trim(),
+      accent: styles.getPropertyValue("--accent").trim()
     };
   }
 
   function setCanvasSize() {
     const rect = canvas.getBoundingClientRect();
-    const cssW = Math.max(1, rect.width);
-    const cssH = Math.max(1, rect.height);
-    const nextDpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(cssW * nextDpr);
-    canvas.height = Math.round(cssH * nextDpr);
-    ctx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
-    dpr = nextDpr;
-    width = cssW;
-    height = cssH;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    width = rect.width;
+    height = rect.height;
   }
 
   function resize() {
@@ -62,7 +71,6 @@
   window.addEventListener("themechange", resize);
   resize();
 
-  const pad = 16;
   const safe = () => ({
     left: pad,
     right: Math.max(pad, width - pad),
@@ -128,8 +136,11 @@
     for (let q = 0; q < size; q += 1) {
       let sum = 0;
       for (let k = 0; k < size; k += 1) {
-        const base = Math.cos((q + 1) * 0.9 + (k + 1) * 0.55) + (q === k ? 0.8 : 0);
-        const val = Math.exp(base);
+        const proximity = Math.exp(-Math.abs(q - k) * 0.35);
+        const tokenBias = tokens[k].length * 0.04;
+        const contextBoost = tokens[k] === "context" ? 0.35 : 0;
+        const answerBoost = tokens[k] === "answer" ? 0.25 : 0;
+        const val = proximity + tokenBias + contextBoost + answerBoost;
         matrix[q][k] = val;
         sum += val;
       }
@@ -149,18 +160,19 @@
     return entries.slice(0, k);
   }
 
-  function drawTokens(colors) {
+  function drawTokens(colors, fade) {
     const s = safe();
-    const compact = width < 640;
-    const stripTop = s.top + 28;
-    const stripY = stripTop + 16;
+    const compact = width < 680;
+    const headerY = s.top + 10;
+    const stripY = headerY + 18;
     const padX = compact ? 8 : 12;
     const gap = compact ? 6 : 8;
     tokenBoxes = [];
-    ctx.font = compact ? "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" : "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.font = compact
+      ? "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+      : "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.textBaseline = "middle";
 
-    // Measure if tokens fit in one row; otherwise wrap to two lines.
     const chips = tokens.map((tok) => {
       const label = tok.toUpperCase();
       const w = ctx.measureText(label).width + padX * 2;
@@ -173,16 +185,21 @@
     const twoRows = totalW > availW && height > 220;
     let cursorX = s.left;
     let cursorY = stripY;
+    let maxRowHeight = 0;
 
     chips.forEach((chip, idx) => {
       if (cursorX + chip.w > s.right && twoRows) {
         cursorX = s.left;
-        cursorY += chip.h + 6;
+        cursorY += maxRowHeight + 6;
+        maxRowHeight = 0;
       }
       const isSelected = idx === selectedToken;
       tokenBoxes.push({ x: cursorX, y: cursorY - chip.h / 2, w: chip.w, h: chip.h, idx });
 
-      ctx.fillStyle = isSelected ? (theme ? theme.rgba(colors.accent, 0.16) : colors.surfaceElevated) : colors.surfaceElevated;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = isSelected
+        ? (theme ? theme.rgba(colors.accent, 0.16) : colors.surfaceElevated)
+        : colors.surfaceElevated;
       ctx.strokeStyle = isSelected ? colors.accent : colors.border;
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -193,21 +210,27 @@
       ctx.fillStyle = isSelected ? colors.textStrong : colors.muted;
       ctx.textAlign = "center";
       ctx.fillText(chip.label, cursorX + chip.w / 2, cursorY);
+      ctx.globalAlpha = 1;
 
+      maxRowHeight = Math.max(maxRowHeight, chip.h);
       cursorX += chip.w + gap;
     });
 
     ctx.fillStyle = colors.muted;
     ctx.textAlign = "left";
-    ctx.fillText("Trace token", s.left, stripTop - 6);
+    ctx.font = compact
+      ? "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+      : "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.fillText("Trace token", s.left, headerY);
+
+    const bottomY = cursorY + maxRowHeight / 2;
+    return { bottomY };
   }
 
-  function drawPipeline(colors, activeStageId) {
+  function drawPipeline(colors, activeStageId, topY, fade) {
     const s = safe();
     const compact = width < 760;
-    const tokenZoneBottom = s.top + 110;
 
-    // Decide inspector placement
     let inspectorWidth = clamp(width * 0.28, 200, 280);
     let inspectorX = s.right - inspectorWidth;
     let pipeAreaLeft = s.left;
@@ -226,11 +249,13 @@
     const nominalBox = compact ? 110 : 140;
     const minBox = compact ? 72 : 90;
     const boxWidth = clamp(areaWidth / stages.length - 12, minBox, nominalBox);
-    const boxHeight = Math.max(104, Math.min(compact ? 136 : 156, height * 0.28));
+    const pipeBottomLimit = stacked ? s.bottom - 170 : s.bottom - 20;
+    const availableHeight = Math.max(0, pipeBottomLimit - topY);
+    const boxHeight = Math.min(compact ? 140 : 156, Math.max(96, availableHeight));
     const centerStart = pipeAreaLeft + boxWidth / 2;
     const centerEnd = pipeAreaRight - boxWidth / 2;
     const xStep = Math.max(0, (centerEnd - centerStart) / Math.max(1, stages.length - 1));
-    const yTop = tokenZoneBottom;
+    const yTop = topY;
 
     stageHitboxes = [];
 
@@ -271,7 +296,10 @@
 
       stageHitboxes.push({ id: stage.id, label: stage.label, x, y, w: boxWidth, h: boxHeight });
 
-      ctx.fillStyle = isHover ? (theme ? theme.rgba(colors.accent, 0.14) : colors.surfaceElevated) : colors.surfaceElevated;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = isHover
+        ? (theme ? theme.rgba(colors.accent, 0.14) : colors.surfaceElevated)
+        : colors.surfaceElevated;
       ctx.strokeStyle = isHover ? colors.accent : colors.border;
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -293,20 +321,27 @@
       drawWrappedText(stage.shape, x + textPad, y + 46, textWidth, 12, 2);
 
       if (isAttention) {
-        const matrixSize = Math.min(5, tokens.length);
-        const topBlock = 56; // label + dims/shape block
+        const matrixSize = Math.min(6, tokens.length);
+        const topBlock = 56;
         const bottomPad = 12;
         const availW = boxWidth - textPad * 2;
         const availH = Math.max(24, boxHeight - topBlock - bottomPad);
-        const cell = clamp(Math.min(availW / matrixSize, availH / matrixSize), 8, 14);
+        const cell = clamp(Math.min(availW / matrixSize, availH / matrixSize), 7, 14);
         const gridWidth = matrixSize * cell;
         const gridHeight = matrixSize * cell;
         const gridX = x + (boxWidth - gridWidth) / 2;
         const gridY = y + topBlock + Math.max(0, (availH - gridHeight) / 2);
         const isDark = theme ? theme.isDark() : document.documentElement.dataset.theme === "dark";
         const selectedRow = selectedToken % matrixSize;
+        const rowWeights = attention[selectedRow] || [];
+        const strongest = rowWeights.slice(0, matrixSize).reduce(
+          (best, val, idx) => (val > best.value ? { idx, value: val } : best),
+          { idx: 0, value: -1 }
+        );
+
         ctx.fillStyle = theme ? theme.rgba(colors.accent, 0.1) : "rgba(255, 45, 45, 0.08)";
         ctx.fillRect(gridX - 4, gridY + selectedRow * cell - 2, matrixSize * cell + 8, cell + 4);
+
         for (let r = 0; r < matrixSize; r += 1) {
           for (let c = 0; c < matrixSize; c += 1) {
             const v = attention[r][c];
@@ -317,30 +352,37 @@
             ctx.fillRect(gridX + c * cell, gridY + r * cell, cell - 1, cell - 1);
           }
         }
+
         ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : colors.border;
         ctx.strokeRect(gridX - 4, gridY - 4, matrixSize * cell + 8, matrixSize * cell + 8);
+
+        ctx.strokeStyle = colors.accent;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(gridX + strongest.idx * cell - 1, gridY + selectedRow * cell - 1, cell + 2, cell + 2);
       }
+
+      ctx.globalAlpha = 1;
 
       if (isAttentionHero && !isAttention) {
         ctx.restore();
       }
     });
 
-    const inspectorXFinal = inspectorX;
-    return { inspectorX: inspectorXFinal, inspectorWidth, compact: stacked, yTop, boxHeight, stacked };
+    return { inspectorX, inspectorWidth, stacked, yTop, boxHeight };
   }
 
-  function drawInspector(colors, layout) {
-    const { inspectorX, inspectorWidth, compact, yTop, boxHeight } = layout;
+  function drawInspector(colors, layout, fade) {
+    const { inspectorX, inspectorWidth, stacked, yTop, boxHeight } = layout;
     const s = safe();
     const panelX = inspectorX;
-    const stackedY = compact ? yTop + boxHeight + 22 : s.top + 110;
-    const panelY = Math.max(stackedY, s.top);
-    const panelW = inspectorWidth - 24;
+    const stackedY = stacked ? yTop + boxHeight + 22 : s.top + 110;
+    const panelY = Math.max(stackedY, s.top + 8);
+    const panelW = Math.max(140, inspectorWidth - 24);
     const availableH = s.bottom - panelY - 8;
     const panelH = Math.max(120, Math.min(height * 0.52, availableH));
-    const stage = hoveredStage || stages.find((s) => s.isAttention) || stages[0];
+    const stage = hoveredStage || stages.find((s) => s.id === "attn") || stages[0];
 
+    ctx.globalAlpha = fade;
     ctx.fillStyle = colors.surfaceElevated;
     ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : colors.border;
     ctx.lineWidth = 1;
@@ -383,7 +425,7 @@
         ctx.fillStyle = colors.textStrong;
         ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
         const summary = `${tokens[selectedToken].toUpperCase()} pulls ${lead.token.toUpperCase()} (${(lead.weight * 100).toFixed(0)}%)`;
-        ctx.fillText(summary, panelX + 12, panelY + 132 + tops.length * 18 + 10);
+        drawWrappedText(summary, panelX + 12, panelY + 132 + tops.length * 18 + 8, panelW - 24, 12, 2);
       }
     } else {
       ctx.fillStyle = colors.textStrong;
@@ -394,20 +436,21 @@
       ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
       ctx.fillText("LayerNorm ✓", panelX + 12, panelY + 132);
       ctx.fillText("Batch size: 1", panelX + 12, panelY + 150);
-      ctx.fillText("Sequence: 8 tokens", panelX + 12, panelY + 168);
+      ctx.fillText(`Sequence: ${tokens.length} tokens`, panelX + 12, panelY + 168);
     }
 
     ctx.fillStyle = colors.textStrong;
     ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-    ctx.fillText("Trace token", panelX + 12, panelY + panelH - 68);
+    ctx.fillText("Trace token", panelX + 12, panelY + panelH - 58);
 
     ctx.fillStyle = colors.muted;
     ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-    ctx.fillText(tokens[selectedToken].toUpperCase(), panelX + 12, panelY + panelH - 50);
+    ctx.fillText(tokens[selectedToken].toUpperCase(), panelX + 12, panelY + panelH - 40);
+    ctx.globalAlpha = 1;
   }
 
   function drawTrace(colors) {
-    const stage = hoveredStage || stages.find((s) => s.isAttention) || stages[0];
+    const stage = hoveredStage || stages.find((s) => s.id === "attn") || stages[0];
     if (!stageHitboxes.length) return;
     const target = stageHitboxes.find((b) => b.id === stage.id) || stageHitboxes[0];
     const tokenBox = tokenBoxes[selectedToken];
@@ -435,6 +478,7 @@
 
   function draw() {
     const colors = palette();
+    const introProgress = mode === MODE.INTRO ? clamp(demoElapsed / INTRO_DURATION, 0, 1) : 1;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
@@ -442,11 +486,13 @@
 
     ctx.clearRect(0, 0, width, height);
     background(colors);
-    drawTokens(colors);
-    const activeStage = hoveredStage ? hoveredStage.id : stages[demoStageIndex]?.id || stages.find((s) => s.isAttention)?.id || stages[0].id;
-    const layout = drawPipeline(colors, activeStage);
+    const tokenLayout = drawTokens(colors, introProgress);
+    const activeStage = hoveredStage
+      ? hoveredStage.id
+      : stages[demoStageIndex]?.id || stages.find((s) => s.id === "attn")?.id || stages[0].id;
+    const layout = drawPipeline(colors, activeStage, tokenLayout.bottomY + 18, introProgress);
     drawTrace(colors);
-    drawInspector(colors, layout);
+    drawInspector(colors, layout, introProgress);
 
     ctx.fillStyle = colors.muted;
     ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
@@ -457,13 +503,13 @@
     ctx.restore();
   }
 
-  // --- Observer-controlled playback + demo state machine ---
   const MODE = { IDLE: "IDLE", INTRO: "INTRO", DEMO: "DEMO", HOLD: "HOLD" };
   let mode = MODE.IDLE;
   let rafId = null;
   let lastTs = 0;
   let demoElapsed = 0;
   let demoStageIndex = 0;
+  const INTRO_DURATION = 1.0;
 
   const controlsRoot = canvas.closest(".ui-canvas-frame")?.querySelector(".ui-canvas-title") || null;
   const playBtn = controlsRoot?.querySelector('[data-llmctl="play"]') || null;
@@ -473,42 +519,41 @@
   function setMode(next) {
     mode = next;
     if (playBtn) {
-      playBtn.textContent = mode === MODE.DEMO ? "Pause" : "Play";
+      playBtn.textContent = mode === MODE.DEMO || mode === MODE.INTRO ? "Pause" : "Play";
     }
   }
 
   function resetDemo() {
-    time = 0;
     demoElapsed = 0;
     demoStageIndex = 0;
     hoveredStage = null;
     hoveredToken = null;
-    scheduleDraw();
     setMode(MODE.INTRO);
+    scheduleDraw();
   }
 
   function stepDemo() {
     demoStageIndex = (demoStageIndex + 1) % stages.length;
     hoveredStage = stages[demoStageIndex];
-    scheduleDraw();
     setMode(MODE.HOLD);
+    stopRunning(false);
+    scheduleDraw();
   }
 
   function startRunning() {
     if (rafId != null) return;
     lastTs = 0;
-    if (mode === MODE.IDLE || mode === MODE.HOLD) {
-      setMode(MODE.INTRO);
-    }
     rafId = requestAnimationFrame(tick);
   }
 
-  function stopRunning() {
+  function stopRunning(setIdle) {
     if (rafId == null) return;
     cancelAnimationFrame(rafId);
     rafId = null;
     lastTs = 0;
-    setMode(MODE.IDLE);
+    if (setIdle) {
+      setMode(MODE.IDLE);
+    }
   }
 
   function scheduleDraw() {
@@ -526,7 +571,6 @@
     const dt = Math.min(0.05, (ts - lastTs) / 1000);
     lastTs = ts;
 
-    time += dt;
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
     if (mode === MODE.INTRO) {
@@ -534,10 +578,16 @@
       hoveredStage = stages[0];
       scheduleDraw();
 
-      if (demoElapsed >= 1.2 || reduceMotion) {
+      if (demoElapsed >= INTRO_DURATION || reduceMotion) {
         demoElapsed = 0;
         demoStageIndex = 0;
-        setMode(reduceMotion ? MODE.HOLD : MODE.DEMO);
+        if (reduceMotion) {
+          setMode(MODE.HOLD);
+          stopRunning(false);
+          scheduleDraw();
+          return;
+        }
+        setMode(MODE.DEMO);
       }
     } else if (mode === MODE.DEMO) {
       demoElapsed += dt;
@@ -547,24 +597,21 @@
         demoStageIndex += 1;
 
         if (demoStageIndex >= stages.length) {
-          demoStageIndex = stages.findIndex((s) => s.isAttention);
+          demoStageIndex = stages.findIndex((s) => s.id === "attn");
           hoveredStage = stages[demoStageIndex] || stages[0];
           setMode(MODE.HOLD);
-        } else {
-          hoveredStage = stages[demoStageIndex];
+          stopRunning(false);
+          scheduleDraw();
+          return;
         }
+        hoveredStage = stages[demoStageIndex];
       }
 
       draw();
-    } else {
-      // HOLD/IDLE: no continuous redraw
     }
 
     if (mode === MODE.INTRO || mode === MODE.DEMO) {
       rafId = requestAnimationFrame(tick);
-    } else {
-      stopRunning();
-      scheduleDraw();
     }
   }
 
@@ -576,68 +623,67 @@
     return stageHitboxes.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
   }
 
-  // Observer hooks
   const control = {
     isRunning: false,
     onEnter: () => {
       control.isRunning = true;
+      const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
       resetDemo();
-      startRunning();
+      if (!reduceMotion) {
+        startRunning();
+      } else {
+        setMode(MODE.HOLD);
+        scheduleDraw();
+      }
     },
     onExit: () => {
       control.isRunning = false;
-      stopRunning();
+      stopRunning(true);
+      scheduleDraw();
     }
   };
 
   if (window.ViewportObserver && typeof window.ViewportObserver.observe === "function") {
     window.ViewportObserver.observe(canvas, control, 0.1);
-    setTimeout(() => {
-      if (!control.isRunning) {
-        resetDemo();
-        startRunning();
-      }
-    }, 400);
   } else {
-    resetDemo();
-    startRunning();
+    control.onEnter();
   }
 
-  // Fallback polling if observer only toggles control.isRunning
-  setInterval(() => {
-    if (control.isRunning && rafId == null) {
-      resetDemo();
+  const observerFallback = setInterval(() => {
+    if (control.isRunning && rafId == null && mode !== MODE.HOLD) {
       startRunning();
     }
     if (!control.isRunning && rafId != null) {
-      stopRunning();
+      stopRunning(true);
+      scheduleDraw();
     }
   }, 1200);
 
-  // Optional title-bar buttons
   if (playBtn) {
     playBtn.addEventListener("click", () => {
       if (mode === MODE.DEMO || mode === MODE.INTRO) {
         setMode(MODE.HOLD);
-        stopRunning();
-      } else {
-        resetDemo();
-        startRunning();
+        stopRunning(false);
+        scheduleDraw();
+        return;
       }
+      resetDemo();
+      startRunning();
     });
   }
 
   if (stepBtn) stepBtn.addEventListener("click", stepDemo);
-  if (resetBtn) resetBtn.addEventListener("click", () => {
-    resetDemo();
-    startRunning();
-  });
+  if (resetBtn)
+    resetBtn.addEventListener("click", () => {
+      resetDemo();
+      startRunning();
+    });
 
   canvas.addEventListener("mousemove", (event) => {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    hoveredStage = stageHit(x, y) || hoveredStage;
+    hoveredStage = stageHit(x, y) || null;
     hoveredToken = tokenHit(x, y) || null;
     scheduleDraw();
   });
@@ -665,6 +711,7 @@
     }
   });
 
-  // Initial static render; animation begins on viewport entry
+  window.addEventListener("beforeunload", () => clearInterval(observerFallback));
+
   scheduleDraw();
 })();
