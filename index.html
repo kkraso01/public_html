@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Konstantin Krasovitskiy | AI Portfolio</title>
+  <!--
+    Entry assets:
+    CSS: inline styles in this file; https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4
+    JS: https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4
+        https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js
+        viewport-observer.js, shared_bus.js, background.js, rag_pipeline.js, system_status.js,
+        system_plugins.js, system_orchestrator.js, llm_viz.js, attention.js,
+        line-follower/line_following.js,
+        maze-solver/maze.js, maze-solver/solver.js, maze-solver/lpa-solver.js,
+        maze-solver/motion-profile.js, maze-solver/path-planner-oblique.js,
+        maze-solver/maze-explorer.js, maze-solver/path-planner.js,
+        maze-solver/advanced-renderer.js, maze-solver/view.js,
+        https://unpkg.com/three@0.160.0/build/three.module.js,
+        drones/race/drone_race_demo.js, drone-sim/ui/main_demo.js
+    Assets: line-follower/ROBOT.png, KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf
+  -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <script>
+    (() => {
+      const stored = localStorage.getItem("theme");
+      const theme = stored === "dark" || stored === "light" ? stored : "light";
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+
+  <!-- Custom styles for background + subtle polish -->
+  <style>
+    :root {
+      --bg: #f6f6f6;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-elevated: rgba(255, 255, 255, 0.92);
+      --text: #1a1a1a;
+      --text-strong: #070707;
+      --muted: #5a5a5a;
+      --border: rgba(10, 10, 10, 0.14);
+      --accent: #ff2d2d;
+      --bg-overlay: radial-gradient(circle at 50% 20%, rgba(246, 246, 246, 0.55), rgba(246, 246, 246, 0.78));
+      --radius: 2px;
+      --shadow: none;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --space-7: 48px;
+      --space-8: 64px;
+      --font-heading: "Space Grotesk", "Inter", sans-serif;
+      --font-body: "Inter", "Helvetica Neue", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #060606;
+      --surface: rgba(12, 12, 12, 0.9);
+      --surface-elevated: rgba(18, 18, 18, 0.94);
+      --text: #d6d6d6;
+      --text-strong: #f5f5f5;
+      --muted: #9a9a9a;
+      --border: rgba(255, 255, 255, 0.14);
+      --accent: #ff2d2d;
+      --bg-overlay: radial-gradient(circle at 50% 20%, rgba(6, 6, 6, 0.72), rgba(6, 6, 6, 0.9));
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-body);
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: var(--bg-overlay);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-heading);
+      color: var(--text-strong);
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 6vw, 4.8rem);
+      line-height: 1.05;
+      font-weight: 700;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+      font-weight: 600;
+    }
+
+    h3 {
+      font-size: clamp(1.2rem, 2.2vw, 1.6rem);
+      font-weight: 600;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .ui-link,
+    a.link {
+      position: relative;
+      color: var(--text-strong);
+    }
+
+    .ui-link::after,
+    a.link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -2px;
+      height: 1px;
+      width: 0;
+      background: var(--accent);
+      transition: width 0.18s ease;
+    }
+
+    .ui-link:hover::after,
+    .ui-link:focus-visible::after,
+    a.link:hover::after,
+    a.link:focus-visible::after {
+      width: 100%;
+    }
+
+    .ui-link--accent,
+    a.link--accent {
+      color: var(--accent);
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    #nn-bg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -2;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .page {
+      position: relative;
+      z-index: 0;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 var(--space-6);
+    }
+
+    .grid-12 {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: var(--space-6);
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--surface-elevated);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .site-header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-4) 0;
+    }
+
+    .site-logo {
+      font-family: var(--font-heading);
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      color: var(--text-strong);
+    }
+
+    .site-nav {
+      display: flex;
+      gap: var(--space-5);
+      font-size: 0.7rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+    }
+
+    .site-nav a {
+      color: var(--muted);
+    }
+
+    .site-nav a:hover,
+    .site-nav a:focus-visible {
+      color: var(--text-strong);
+    }
+
+    .site-nav a.active {
+      color: var(--accent);
+    }
+
+    .mobile-nav {
+      display: none;
+    }
+
+    .mobile-nav summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: 0.7rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--text-strong);
+    }
+
+    .mobile-nav[open] summary {
+      color: var(--accent);
+    }
+
+    .mobile-nav nav {
+      display: grid;
+      gap: var(--space-3);
+      margin-top: var(--space-3);
+    }
+
+    .hero {
+      padding: calc(var(--space-8) + 32px) 0 var(--space-8);
+    }
+
+    .hero-inner {
+      display: grid;
+      gap: var(--space-5);
+    }
+
+    .hero-subline {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 52ch;
+    }
+
+    .status-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .status-line span {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+    }
+
+    .ui-btn,
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 0.7rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-strong);
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+
+    .ui-btn:hover,
+    .ui-btn:focus-visible,
+    .btn:hover,
+    .btn:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .ui-btn--solid,
+    .btn--solid {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .ui-btn--solid:hover,
+    .ui-btn--solid:focus-visible,
+    .btn--solid:hover,
+    .btn--solid:focus-visible {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .section {
+      padding: var(--space-8) 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-header {
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      align-items: center;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+
+    .section-number {
+      font-family: var(--font-heading);
+      font-size: 1.1rem;
+      color: var(--accent);
+      letter-spacing: 0.2em;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.32em;
+      color: var(--muted);
+    }
+
+    .section-title::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .ui-panel,
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-6);
+    }
+
+    .panel--tight {
+      padding: var(--space-4);
+    }
+
+    .panel--elevated {
+      background: var(--surface-elevated);
+    }
+
+    .ui-chip,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .ui-chip--accent,
+    .chip--accent {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+
+    .ui-chip:hover,
+    .ui-chip:focus-visible,
+    .chip:hover,
+    .chip:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .meta {
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .ui-canvas-frame,
+    .canvas-frame {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .ui-canvas-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.65rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .ui-input,
+    select,
+    input[type="text"],
+    input[type="number"],
+    input[type="range"] {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
+    .ui-input:focus,
+    select:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    input[type="range"]:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      height: 2px;
+      padding: 0;
+      background: var(--border);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: var(--radius);
+      background: var(--text-strong);
+      border: 1px solid var(--border);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: var(--radius);
+      background: var(--text-strong);
+      border: 1px solid var(--border);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 2px;
+      background: var(--border);
+      border: none;
+    }
+
+    .ui-control,
+    #maze-controls .radio-option,
+    #maze-controls .checkbox-option {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .ui-control.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .ui-control.is-active .meta {
+      color: var(--accent);
+    }
+
+    .workspace-tabs-container {
+      position: sticky;
+      top: 64px;
+      z-index: 9;
+      background: var(--surface-elevated);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .workspace-tabs {
+      display: flex;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+    }
+
+    .workspace-tab {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.65rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+
+    .workspace-tab:hover,
+    .workspace-tab:focus-visible {
+      border-color: var(--border);
+      color: var(--text-strong);
+      transform: translateY(-2px);
+    }
+
+    .workspace-tab.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .section-columns {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: var(--space-6);
+    }
+
+    .section-column-left {
+      grid-column: span 4;
+    }
+
+    .section-column-right {
+      grid-column: span 8;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: var(--space-5);
+      padding-top: var(--space-5);
+      border-top: 1px solid var(--border);
+    }
+
+    .list-row:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .list-row-title {
+      font-size: 1.1rem;
+      margin-bottom: var(--space-2);
+    }
+
+    .project-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 180px;
+      gap: var(--space-5);
+      padding: var(--space-5) 0;
+      border-top: 1px solid var(--border);
+      align-items: start;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+
+    .project-row:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .project-row:hover {
+      transform: translateX(2px);
+      border-top-color: var(--accent);
+    }
+
+    .project-links {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
+
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: var(--space-4) 0;
+      text-align: center;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .lf-robot {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 56px;
+      height: 56px;
+      transform: translate(-50%, -50%);
+      display: grid;
+      place-items: center;
+      pointer-events: auto;
+      cursor: grab;
+    }
+
+    .lf-robot-core {
+      position: relative;
+      width: 46px;
+      height: 46px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background-image: url("line-follower/ROBOT.png");
+      background-size: cover;
+      background-position: center;
+      border: 1px solid var(--border);
+      z-index: 2;
+    }
+
+    .lf-robot-core::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: color-mix(in srgb, var(--bg) 60%, transparent);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .lf-robot-ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+      animation: pulse 2.4s ease-in-out infinite;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.92);
+        opacity: 0.6;
+      }
+      50% {
+        transform: scale(1.02);
+        opacity: 0.35;
+      }
+      100% {
+        transform: scale(0.92);
+        opacity: 0.6;
+      }
+    }
+
+    .sensor-pill {
+      border: 1px solid var(--border);
+      padding: var(--space-3);
+      text-align: center;
+      background: var(--surface);
+    }
+
+    .sensor-value {
+      font-family: var(--font-body);
+      font-weight: 600;
+      color: var(--text-strong);
+    }
+
+    #maze-controls label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: var(--space-2);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+
+    #maze-controls .radio-group {
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    #maze-controls .checkbox-group {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-2);
+    }
+
+    .system-layer {
+      border: 1px solid var(--border);
+      padding: var(--space-3);
+      border-radius: var(--radius);
+      background: var(--surface);
+      transition: border-color 0.18s ease;
+    }
+
+    .system-layer:hover {
+      border-color: var(--accent);
+    }
+
+    .layer-anchors a {
+      font-size: 0.65rem;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-decoration: none;
+      transition: border-color 0.18s ease, color 0.18s ease;
+    }
+
+    .layer-anchors a:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .industry-callout {
+      font-size: 0.8rem;
+      color: var(--muted);
+      border-left: 2px solid var(--accent);
+      padding-left: var(--space-3);
+      margin-top: var(--space-3);
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: 0.6rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .theme-toggle-label {
+      color: var(--text-strong);
+    }
+
+    .theme-toggle-buttons {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .theme-toggle button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 10px;
+      font-size: 0.6rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .theme-toggle button.is-active {
+      color: var(--text-strong);
+      background: color-mix(in srgb, var(--surface-elevated) 80%, transparent);
+    }
+
+    .cue-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--surface);
+    }
+
+    .metric-flash {
+      color: var(--accent);
+    }
+
+    .hud-panel {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .hud-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hud-section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-3);
+      background: var(--surface-elevated);
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    .hud-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-2);
+      font-size: 0.7rem;
+    }
+
+    .hud-label {
+      color: var(--muted);
+    }
+
+    .hud-value {
+      color: var(--text-strong);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 600;
+    }
+
+    .hud-controls {
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    .hud-button-row {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    .hud-controls label {
+      display: grid;
+      grid-template-columns: 64px 1fr 56px;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .workspace-hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 960px) {
+      .container {
+        padding: 0 var(--space-4);
+      }
+
+      .site-nav {
+        display: none;
+      }
+
+      .mobile-nav {
+        display: block;
+      }
+
+      .section-column-left,
+      .section-column-right {
+        grid-column: span 12;
+      }
+
+      .project-row {
+        grid-template-columns: 1fr;
+      }
+
+      .list-row {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-tabs-container {
+        top: 56px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero {
+        padding-top: var(--space-7);
+      }
+
+      .section-header {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title::after {
+        display: none;
+      }
+
+      .workspace-tabs {
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="page">
+
+  <!-- Neural Network / Constellation Background -->
+  <canvas id="nn-bg"></canvas>
+
+  <header class="site-header">
+    <div class="container site-header-inner">
+      <span class="site-logo">Konstantin Krasovitskiy</span>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="ui-link link" href="#research-systems">Systems</a>
+        <a class="ui-link link" href="#projects">Projects</a>
+        <a class="ui-link link" href="#experience">Experience</a>
+        <a class="ui-link link" href="#contact">Contact</a>
+      </nav>
+      <div class="theme-toggle" role="group" aria-label="Mode">
+        <span class="theme-toggle-label">Mode</span>
+        <div class="theme-toggle-buttons">
+          <button type="button" data-theme-toggle="light">Light</button>
+          <button type="button" data-theme-toggle="dark">Dark</button>
+        </div>
+      </div>
+      <details class="mobile-nav">
+        <summary>Menu</summary>
+        <nav aria-label="Mobile">
+          <a class="ui-link link" href="#research-systems">Systems</a>
+          <a class="ui-link link" href="#projects">Projects</a>
+          <a class="ui-link link" href="#experience">Experience</a>
+          <a class="ui-link link" href="#contact">Contact</a>
+        </nav>
+      </details>
+    </div>
+  </header>
+
+  <!-- Hero (visible in all workspaces) -->
+  <section class="hero" data-workspace="llm" data-workspace-shared="true">
+    <div class="container hero-inner">
+      <h1>Konstantin Krasovitskiy</h1>
+      <p class="hero-subline">LLM Systems / Applied AI Engineer</p>
+      <div class="status-line">
+        <span>AI Systems &amp; Reliability</span>
+        <span>Simulation-First Autonomy (Hobby)</span>
+      </div>
+      <div class="hero-actions">
+        <a href="#projects" class="ui-btn ui-btn--solid btn btn--solid">View Projects</a>
+        <a href="KOSTNANTIN_KRASOVITSKIY_CV_NEW_2025.pdf" class="ui-btn btn">Download CV</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Workspace Tabs (Browser-Style Horizontal Bar) - Outside hero for proper sticky behavior -->
+  <div class="workspace-tabs-container">
+    <nav class="workspace-tabs container" role="tablist" aria-label="Content Workspaces">
+      <button class="workspace-tab" data-tab="profile" aria-selected="false" role="tab" tabindex="0">
+        Profile
+      </button>
+      <button class="workspace-tab" data-tab="llm" aria-selected="false" role="tab" tabindex="-1">
+        LLM Systems
+      </button>
+      <button class="workspace-tab" data-tab="autonomy" aria-selected="false" role="tab" tabindex="-1">
+        Autonomy Lab
+      </button>
+    </nav>
+  </div>
+
+  <!-- Research-First Systems -->
+  <section id="research-systems" data-workspace="llm" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">07</span>
+        <div class="section-title">LLM Systems Lab</div>
+      </div>
+      <div class="hero-subline" style="margin-bottom: var(--space-6);">
+        RAG pipelines, multi-model routing, and transformer internals - visualized with live telemetry.
+      </div>
+
+      <div class="grid-12">
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Signal Routing</span>
+            <span class="chip">Hover to trace retrieval hops</span>
+          </div>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>RAG Mesh &amp; Context Flow</h3>
+            <p>A clean view of the Retrieval-Augmented Generation (RAG) pipeline and how
+              context moves through the system.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Retrieval QA, chunking strategies, context grounding, hallucination reduction for production LLM systems.
+            </div>
+          </div>
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Rag Mesh</span>
+            </div>
+            <canvas id="ragCanvas" style="width: 100%; height: 256px;"></canvas>
+          </div>
+        </article>
+
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Router Status</span>
+            <span class="chip">Hover to watch dispatch logic</span>
+          </div>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>Multi-LLM Orchestrator</h3>
+            <p>Router-dispatch visualization showing vector DB lookups, model selection,
+              and merge policies under latency/cost constraints.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Router policies, cost/latency optimization, evaluation harness design, multi-model scoring and merge strategies.
+            </div>
+          </div>
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Orchestrator</span>
+            </div>
+            <canvas id="orchestratorCanvas" style="width: 100%; height: 320px;"></canvas>
+          </div>
+          <p class="meta" style="margin-top: var(--space-2);">Flow: Client → Router → Vector DB + LLM Pool → Scoring &amp; Merge →
+            Response</p>
+        </article>
+
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Token Flow</span>
+            <span class="chip">Hover to reveal head activity</span>
+          </div>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>Transformer Core Internals</h3>
+            <p>Embeddings → multi-head attention → residual paths → logits, rendered with
+              the same live metrics used across the portfolio.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Debugging attention/residual flow dynamics, interpretability for transformer architectures, conceptual model introspection.
+            </div>
+          </div>
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Transformer Core</span>
+            </div>
+            <canvas id="llm-viz" style="width: 100%; height: 360px;"></canvas>
+          </div>
+        </article>
+
+        <article class="panel panel--elevated" style="grid-column: span 12;">
+          <div class="tag-list" style="margin-bottom: var(--space-4);">
+            <span class="chip">Attention Field</span>
+            <span class="chip">Hover to expose head weights</span>
+          </div>
+          <div style="display: grid; gap: var(--space-3);">
+            <h3>Semantic Attention Map</h3>
+            <p>Parallel attention heads computing token relationships and convergence
+              patterns - the research signal that informs tuning.</p>
+            <div class="industry-callout">
+              <strong>Industry relevance:</strong> Interpretability insights, attention head behavior analysis, debugging multi-head attention convergence for production models.
+            </div>
+          </div>
+          <div class="ui-canvas-frame canvas-frame" style="margin-top: var(--space-5);">
+            <div class="ui-canvas-title">
+              <span>Attention Map</span>
+            </div>
+            <canvas id="attentionCanvas" style="width: 100%; height: 300px;"></canvas>
+          </div>
+        </article>
+
+      <!-- Hidden 2D & 3D System Visualizers (for plugin system - Disabled) -->
+      <!-- <canvas id="viz2d" style="display:none;"></canvas>
+      <canvas id="viz3d" style="display:none;"></canvas> -->
+      </div>
+    </div>
+  </section>
+
+  <!-- Playful Lab -->
+  <section id="playful-demos" data-workspace="autonomy" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">08</span>
+        <div class="section-title">Line-Following Robot</div>
+      </div>
+      <p class="hero-subline" style="margin-bottom: var(--space-6);">
+        Drag-and-drop the bot anywhere on the track. IR sensors sample the canvas in real-time as the PID loop keeps the rover locked on the black line.
+      </p>
+
+      <div class="panel panel--elevated" style="margin-bottom: var(--space-6);">
+        <div class="tag-list" style="margin-bottom: var(--space-4);">
+          <span class="chip">Draggable Bot</span>
+          <span class="chip">Grab to reposition on the track</span>
+        </div>
+        <div class="ui-canvas-frame canvas-frame" style="position: relative;">
+          <div class="ui-canvas-title">
+            <span>Line Lab</span>
+          </div>
+          <canvas id="line-following-canvas" style="width: 100%; height: 480px;"></canvas>
+          <div id="line-following-robot" class="lf-robot" title="Drag me">
+            <div class="lf-robot-core" aria-hidden="true"></div>
+            <div class="lf-robot-ring"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel panel--elevated" style="display: grid; gap: var(--space-5);">
+        <div>
+          <h3 class="meta" style="margin-bottom: var(--space-3);">PID Tuning</h3>
+          <div class="grid-12">
+            <div class="panel panel--tight" style="grid-column: span 3;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Proportional</label>
+                <span id="kp-value" class="meta" style="color: var(--accent);">1.30</span>
+              </div>
+              <input id="kp-slider" class="ui-input" type="range" min="0" max="3" step="0.01" value="1.3">
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 3;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Integral</label>
+                <span id="ki-value" class="meta" style="color: var(--accent);">0.42</span>
+              </div>
+              <input id="ki-slider" class="ui-input" type="range" min="0" max="1" step="0.01" value="0.42">
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 3;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Derivative</label>
+                <span id="kd-value" class="meta" style="color: var(--accent);">0.32</span>
+              </div>
+              <input id="kd-slider" class="ui-input" type="range" min="0" max="1" step="0.01" value="0.32">
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 2;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+                <label class="meta">Speed</label>
+                <span id="speed-value" class="meta" style="color: var(--accent);">120 px/s</span>
+              </div>
+              <input id="speed-slider" class="ui-input" type="range" min="45" max="300" step="5" value="120">
+            </div>
+            <button id="pid-reset-btn" class="ui-btn btn" style="grid-column: span 1; align-self: end;">⟲ Reset</button>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Advanced</h3>
+          <div class="grid-12">
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
+              <input id="noise-toggle" type="checkbox">
+              <span class="meta" style="letter-spacing: 0.12em;">Sensor Noise</span>
+            </label>
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
+              <input id="anti-windup-toggle" type="checkbox" checked>
+              <span class="meta" style="letter-spacing: 0.12em;">Anti-Windup</span>
+            </label>
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
+              <input id="d-filter-toggle" type="checkbox">
+              <span class="meta" style="letter-spacing: 0.12em;">D-Filter</span>
+            </label>
+            <label class="panel panel--tight ui-control" style="grid-column: span 3;">
+              <input id="adaptive-speed-toggle" type="checkbox">
+              <span class="meta" style="letter-spacing: 0.12em;">Adaptive Speed</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Telemetry</h3>
+          <div class="grid-12">
+            <div class="panel panel--tight" style="grid-column: span 2; text-align: center;">
+              <p class="meta">P</p>
+              <p id="pid-p" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 2; text-align: center;">
+              <p class="meta">I</p>
+              <p id="pid-i" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 2; text-align: center;">
+              <p class="meta">D</p>
+              <p id="pid-d" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 3; text-align: center;">
+              <p class="meta">Error</p>
+              <p id="pid-error" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+            <div class="panel panel--tight" style="grid-column: span 3; text-align: center;">
+              <p class="meta">Speed</p>
+              <p id="pid-speed" class="meta" style="color: var(--accent);">0.00</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+            <h3 class="meta">IR Sensors (8×)</h3>
+            <span class="meta">Left ← Center → Right</span>
+          </div>
+          <div class="grid-12" style="gap: var(--space-2);">
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S1</p>
+              <p data-sensor-index="0" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S2</p>
+              <p data-sensor-index="1" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S3</p>
+              <p data-sensor-index="2" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S4</p>
+              <p data-sensor-index="3" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S5</p>
+              <p data-sensor-index="4" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S6</p>
+              <p data-sensor-index="5" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S7</p>
+              <p data-sensor-index="6" class="sensor-value">0.00</p>
+            </div>
+            <div class="sensor-pill" style="grid-column: span 1;">
+              <p class="meta">S8</p>
+              <p data-sensor-index="7" class="sensor-value">0.00</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Maze Solver Section -->
+  <section id="maze-solver" data-workspace="autonomy" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">09</span>
+        <div class="section-title">Maze Solver: Micromouse Challenge</div>
+      </div>
+      <p class="hero-subline" style="margin-bottom: var(--space-6);">
+        Micromouse-style exploration with dynamic flood-fill, intelligent dead-end pruning, and optional 8-directional sprinting. Watch the robot autonomously map walls, compute distances, and execute time-optimal racing strategies.
+      </p>
+
+      <div class="panel panel--elevated">
+        <div class="tag-list" style="margin-bottom: var(--space-4);">
+          <span class="chip">Micromouse-Style Flood Fill</span>
+          <span class="chip">Top-down idealized robot, 16×16 grid</span>
+          <span class="chip">Center goal (2×2)</span>
+        </div>
+
+        <div class="section-columns">
+          <div class="section-column-left" style="display: grid; gap: var(--space-3);">
+            <h3>Flood-Fill Pathfinding</h3>
+            <p>
+              The robot autonomously explores the maze, builds a distance map, and finds the shortest path to the center goal. With multiple algorithms and visualization options, you can watch different exploration strategies in real-time.
+            </p>
+
+            <div class="hero-actions" style="gap: var(--space-2);">
+              <button id="maze-generate" class="ui-btn btn">Generate Maze</button>
+              <button id="maze-run" class="ui-btn ui-btn--solid btn btn--solid">Run</button>
+              <button id="maze-step" class="ui-btn btn">Step</button>
+              <button id="maze-reset" class="ui-btn btn">Reset</button>
+            </div>
+
+            <div id="maze-controls" class="panel panel--tight" style="display: grid; gap: var(--space-3); margin-top: var(--space-4);"></div>
+          </div>
+
+          <div class="section-column-right">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Maze Grid</span>
+              </div>
+              <canvas id="maze-canvas" style="width: 100%; height: 520px;"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Drone Demos Section -->
+  <section id="drone-race" data-workspace="autonomy" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">10</span>
+        <div class="section-title">Autonomous Drone Flight</div>
+      </div>
+      <p class="hero-subline" style="margin-bottom: var(--space-5);">
+        Racing, LiDAR-based cave exploration, and obstacle avoidance — all simulated with physics-based control.
+      </p>
+      <div style="margin-bottom: var(--space-6);">
+        <a href="drones/stationary/stationary_test.html" class="ui-btn ui-btn--solid btn btn--solid">Hover Stability Demo (ETH Controller)</a>
+      </div>
+
+      <div style="margin-bottom: var(--space-6);">
+        <h3 style="margin-bottom: var(--space-2);">Autonomous Racing (Sim)</h3>
+        <p class="hero-subline">
+          Autonomous racing drone flying a spline-planned indoor track with chase camera, gate timing, VIO noise, and PID control. Visualizes real-time trajectory tracking with live metrics and controller tuning.
+        </p>
+      </div>
+
+      <div class="section-columns" style="margin-bottom: var(--space-7);">
+        <div id="drone-race-controls-container" class="section-column-left panel panel--elevated"></div>
+        <div class="section-column-right">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Race Sim</span>
+              </div>
+              <div id="drone-race-demo" style="width: 100%; height: 520px;"></div>
+              <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+                Live Three.js render with embedded HUD controls. Hooks into IntersectionObserver to pause when scrolled out of view.
+              </div>
+            </div>
+          </div>
+      </div>
+
+    <!-- Cave Explorer Demo -->
+      <div style="border-top: 1px solid var(--border); padding-top: var(--space-6);">
+        <div style="margin-bottom: var(--space-4);">
+          <h3 style="margin-bottom: var(--space-2);">LiDAR Cave Exploration &amp; Mapping</h3>
+          <p class="hero-subline">
+            Autonomous cave exploration using LiDAR-based SLAM and frontier-based planning. The drone maps unknown environments, builds occupancy grids, and plans collision-free paths.
+          </p>
+        </div>
+
+        <div class="section-columns">
+          <div class="section-column-left panel panel--elevated" style="display: grid; gap: var(--space-4);">
+            <div class="tag-list">
+              <span class="chip">SLAM &amp; Exploration</span>
+              <span class="chip">LiDAR mapping · Frontier planning · Physics</span>
+            </div>
+            <div>
+              <h4>Autonomous Mapping</h4>
+              <p>
+                Real-time LiDAR point cloud processing, occupancy grid updates, and frontier-based exploration for autonomous cave discovery.
+              </p>
+            </div>
+
+            <div style="display: grid; gap: var(--space-2);">
+              <button id="drone-cave-toggle" class="ui-btn ui-btn--solid btn btn--solid">Start Exploration</button>
+              <button id="drone-cave-restart" class="ui-btn btn">Reset Map</button>
+            </div>
+
+            <div>
+              <h4 class="meta" style="margin-bottom: var(--space-3);">Exploration Stats</h4>
+              <div style="display: grid; gap: var(--space-2);">
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Grid Explored:</span>
+                  <span id="cave-grid-explored" class="meta" style="color: var(--accent);">0%</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Cells Visited:</span>
+                  <span id="cave-cells-visited" class="meta" style="color: var(--accent);">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Obstacles Detected:</span>
+                  <span id="cave-obstacles" class="meta" style="color: var(--accent);">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="meta">Frontier Nodes:</span>
+                  <span id="cave-frontiers" class="meta" style="color: var(--accent);">0</span>
+                </div>
+              </div>
+            </div>
+
+            <ul style="margin: 0; padding-left: 18px; display: grid; gap: var(--space-2);">
+              <li>LiDAR-based SLAM mapping</li>
+              <li>Frontier-based exploration strategy</li>
+              <li>Real-time occupancy grid updates</li>
+              <li>Physics-based collision detection</li>
+            </ul>
+          </div>
+
+          <div class="section-column-right">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Cave Map</span>
+              </div>
+              <div id="drone-cave-demo" style="width: 100%; height: 520px;"></div>
+              <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+                Real-time LiDAR point cloud and occupancy grid visualization with frontier exploration overlay.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- Obstacle Drop Demo -->
+      <div style="border-top: 1px solid var(--border); padding-top: var(--space-6);">
+        <div style="margin-bottom: var(--space-4);">
+          <h3 style="margin-bottom: var(--space-2);">Dynamic Obstacle Avoidance</h3>
+          <p class="hero-subline">
+            Interactive obstacle placement and avoidance demonstration. Spawn various obstacle types, watch the drone dynamically recalculate paths, and observe collision avoidance in real-time with physics-based simulation.
+          </p>
+        </div>
+
+        <div class="section-columns">
+          <div class="section-column-left panel panel--elevated" style="display: grid; gap: var(--space-4);">
+            <div class="tag-list">
+              <span class="chip">Dynamic Avoidance</span>
+              <span class="chip">Interactive obstacles · Real-time replanning</span>
+            </div>
+            <div>
+              <h4>Spawn &amp; Observe</h4>
+              <p>
+                Interactively add obstacles to the environment and watch the drone intelligently avoid them using trajectory replanning.
+              </p>
+            </div>
+
+            <div style="display: grid; gap: var(--space-2);">
+              <button id="drone-obstacle-spawn-boulder" class="ui-btn ui-btn--solid btn btn--solid">Add Boulder</button>
+              <button id="drone-obstacle-spawn-wall" class="ui-btn btn">Add Wall</button>
+              <button id="drone-obstacle-spawn-sphere" class="ui-btn btn">Add Sphere</button>
+              <button id="drone-obstacle-reset" class="ui-btn btn">Clear All Obstacles</button>
+            </div>
+
+            <div>
+              <h4 class="meta" style="margin-bottom: var(--space-3);">Obstacle Count</h4>
+              <div class="meta" id="obstacle-count" style="font-size: 1.5rem; color: var(--accent);">0</div>
+            </div>
+
+            <ul style="margin: 0; padding-left: 18px; display: grid; gap: var(--space-2);">
+              <li>Real-time obstacle spawning</li>
+              <li>Dynamic trajectory replanning</li>
+              <li>Physics-based collision response</li>
+              <li>Smooth avoidance maneuvers</li>
+            </ul>
+          </div>
+
+          <div class="section-column-right">
+            <div class="ui-canvas-frame canvas-frame">
+              <div class="ui-canvas-title">
+                <span>Obstacle Field</span>
+              </div>
+              <div id="drone-obstacle-demo" style="width: 100%; height: 520px;"></div>
+              <div class="meta" style="padding: var(--space-3); border-top: 1px solid var(--border);">
+                Interactive 3D environment with real-time obstacle physics and drone avoidance visualization.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section id="about" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">01</span>
+        <div class="section-title">About Me</div>
+      </div>
+      <div class="section-columns">
+        <div class="section-column-left">
+          <p class="meta" style="margin-bottom: var(--space-3);">Profile</p>
+          <p>
+            I design end-to-end AI systems that bridge research and production constraints.
+            My work centers on LLM orchestration,
+            retrieval-augmented generation (RAG), and
+            multi-model routing — systems that balance latency, cost, and accuracy
+            at scale. I approach AI with a reliability mindset: monitoring, evaluation,
+            failure modes, and deployment tradeoffs are first-class concerns.
+          </p>
+        </div>
+        <div class="section-column-right" style="display: grid; gap: var(--space-4);">
+          <p>
+            Professionally, I bring software engineering discipline (QA automation, DevOps, backend APIs) and research
+            infrastructure experience (deploying local LLMs, ChromaDB integration, Docker orchestration).
+            I build and test systems under constraints: latency, cost, reliability, and observability.
+            The robotics and autonomy projects on this site are
+            simulation-first hobby work — not formal coursework — demonstrating
+            my interest in perception-to-control loops, planning, and physics-based systems.
+          </p>
+          <p style="font-weight: 600; color: var(--text-strong);">
+            I build AI as systems, not just models.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Skills -->
+  <section id="skills" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">02</span>
+        <div class="section-title">Technical Skills &amp; Expertise</div>
+      </div>
+
+      <div class="grid-12">
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">AI Systems &amp; Architecture</h3>
+          <div class="tag-list">
+            <span class="chip">Multi-Model LLM Orchestration</span>
+            <span class="chip">RAG Pipeline Design</span>
+            <span class="chip">Vector Databases (ChromaDB)</span>
+            <span class="chip">Embedding Systems</span>
+            <span class="chip">Latency/Cost Optimization</span>
+            <span class="chip">Model Selection Strategies</span>
+            <span class="chip">Distributed LLM Services</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">NLP &amp; Language Models</h3>
+          <div class="tag-list">
+            <span class="chip">Transformer Architectures</span>
+            <span class="chip">Attention Mechanisms</span>
+            <span class="chip">Prompt Engineering</span>
+            <span class="chip">LLM Evaluation</span>
+            <span class="chip">Bias &amp; Robustness Analysis</span>
+            <span class="chip">Hate Speech Detection</span>
+            <span class="chip">Misinformation Detection</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Computer Vision &amp; Graphics</h3>
+          <div class="tag-list">
+            <span class="chip">Object Detection</span>
+            <span class="chip">Image Segmentation</span>
+            <span class="chip">3D Reconstruction</span>
+            <span class="chip">Vision Transformers</span>
+            <span class="chip">Multi-Modal Architectures</span>
+            <span class="chip">Generative Models</span>
+            <span class="chip">SLAM &amp; Mapping</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">AI Ethics &amp; Governance</h3>
+          <div class="tag-list">
+            <span class="chip">Fairness Auditing</span>
+            <span class="chip">Transparency &amp; Explainability</span>
+            <span class="chip">Accountability Frameworks</span>
+            <span class="chip">Compliance &amp; Regulation</span>
+            <span class="chip">Societal Impact Assessment</span>
+            <span class="chip">Grounding Accuracy</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Software Engineering &amp; QA</h3>
+          <div class="tag-list">
+            <span class="chip">Test Automation (Playwright/Selenium)</span>
+            <span class="chip">Performance Testing (K6)</span>
+            <span class="chip">Failure Mode Analysis</span>
+            <span class="chip">Observability &amp; Monitoring</span>
+            <span class="chip">CI/CD Pipelines</span>
+            <span class="chip">Reproducibility Engineering</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Backend &amp; Infrastructure</h3>
+          <div class="tag-list">
+            <span class="chip">Python (Flask/FastAPI)</span>
+            <span class="chip">RESTful API Design</span>
+            <span class="chip">Microservices Architecture</span>
+            <span class="chip">Docker &amp; Orchestration</span>
+            <span class="chip">Linux System Administration</span>
+            <span class="chip">Database Design (SQL)</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Research &amp; Communication</h3>
+          <div class="tag-list">
+            <span class="chip">Academic Writing</span>
+            <span class="chip">Peer Review</span>
+            <span class="chip">Mathematical Rigor</span>
+            <span class="chip">Technical Documentation</span>
+            <span class="chip">MVP Prototyping</span>
+            <span class="chip">Tradeoff Analysis</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 6;">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Robotics &amp; Control (Hobby)</h3>
+          <div class="tag-list">
+            <span class="chip">Physics-Based Simulation</span>
+            <span class="chip">Control Systems (PID/MPC)</span>
+            <span class="chip">Trajectory Optimization</span>
+            <span class="chip">Path Planning</span>
+            <span class="chip">Three.js Visualization</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Professional Experience -->
+  <section id="experience" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">03</span>
+        <div class="section-title">Professional Experience</div>
+      </div>
+      <div class="list">
+        <div class="list-row">
+          <div class="meta">Nov 2025 – Present</div>
+          <div>
+            <h3 class="list-row-title">Software Engineer</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">KIOS Research and Innovation Center of Excellence, University of Cyprus</p>
+            <p>
+              Design and maintain back-end/front-end modules for research projects. Implement RESTful APIs and
+              microservices using Python and JavaScript. Deploy and monitor services in Docker-based environments.
+            </p>
+          </div>
+        </div>
+
+        <div class="list-row">
+          <div class="meta">Sep 2023 – Oct 2025</div>
+          <div>
+            <h3 class="list-row-title">QA Automation Engineer</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">Techlink LTD, Nicosia</p>
+            <p>
+              Authored manual and automated UI/regression tests using Playwright (C#) and Selenium (Java). Operated
+              K6 performance suites on Docker Swarm and built DB utilities to optimize test data preparation.
+            </p>
+          </div>
+        </div>
+
+        <div class="list-row">
+          <div class="meta">Mar 2025 – Present</div>
+          <div>
+            <h3 class="list-row-title">Special Research Scientist</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">DMSL, University of Cyprus</p>
+            <p>
+              Built a Flask backend integrating ChromaDB with open-source LLMs. Deployed and evaluated LLMs locally
+              for cost-effective experimentation and supported lab users with VM provisioning and research workflows.
+            </p>
+          </div>
+        </div>
+
+        <div class="list-row">
+          <div class="meta">Oct 2021 – Aug 2023</div>
+          <div>
+            <h3 class="list-row-title">Technical Support Assistant</h3>
+            <p class="meta" style="margin-bottom: var(--space-2);">University of Cyprus</p>
+            <p>
+              Diagnosed and replaced hardware, performed secure imaging and disk wiping, and provided front-line
+              technical support for departmental IT systems.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Projects -->
+  <section id="projects" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">04</span>
+        <div class="section-title">Featured Projects</div>
+      </div>
+      <div class="project-row">
+        <div class="meta">01</div>
+        <div>
+          <h3>LLM-MS: Multi-Model Search Engine</h3>
+          <p>
+            Research system orchestrating multiple LLMs with token-aware selection strategies and vector-based
+            retrieval using ChromaDB.
+          </p>
+        </div>
+        <div class="project-links">
+          <a href="https://chatucy.cs.ucy.ac.cy/llmms.html" target="_blank" class="link link--accent">Demo</a>
+          <a href="https://www.cs.ucy.ac.cy/~dzeina/papers/llmvdb25-llmmeta.pdf" target="_blank" class="link link--accent">Paper</a>
+        </div>
+      </div>
+
+      <div class="project-row">
+        <div class="meta">02</div>
+        <div>
+          <h3>LLME: Distributed LLM Service</h3>
+          <p>
+            Research manuscript exploring distributed, edge-deployed LLM services with focus on orchestration,
+            latency, and resource efficiency.
+          </p>
+        </div>
+        <div class="project-links">
+          <span class="meta">Manuscript (2025)</span>
+        </div>
+      </div>
+
+      <div class="project-row">
+        <div class="meta">03</div>
+        <div>
+          <h3>Multi-Model LLM Search Engines</h3>
+          <p>
+            B.Sc. thesis on scalable, multi-model LLM orchestration and token-efficient selection logic for
+            diverse query workloads.
+          </p>
+        </div>
+        <div class="project-links">
+          <span class="meta">B.Sc. Thesis (July 2025)</span>
+        </div>
+      </div>
+
+      <div class="project-row">
+        <div class="meta">04</div>
+        <div>
+          <h3>AI System Architecture</h3>
+          <p>
+            Portfolio enhancement featuring real-time visualizations of GPT-4 system internals,
+            multi-model orchestration, and cyberpunk research-lab aesthetics with live telemetry.
+          </p>
+        </div>
+        <div class="project-links">
+          <span class="meta">Interactive Visualizer (2025)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="contact" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">05</span>
+        <div class="section-title">Contact</div>
+      </div>
+      <div class="panel panel--elevated" style="display: grid; gap: var(--space-4);">
+        <h2>Get in Touch</h2>
+        <p>
+          Let's collaborate on AI research, software engineering, or innovative systems projects.
+        </p>
+        <div style="display: grid; gap: var(--space-2);">
+          <p class="meta">Email</p>
+          <a href="mailto:kkraso01@ucy.ac.cy" class="ui-link link link--accent">kkraso01@ucy.ac.cy</a>
+        </div>
+        <div style="display: grid; gap: var(--space-2);">
+          <p class="meta">LinkedIn</p>
+          <a href="https://linkedin.com/in/konstantin-krasovitskiy" target="_blank" class="ui-link link link--accent">linkedin.com/in/konstantin-krasovitskiy</a>
+        </div>
+        <div style="display: grid; gap: var(--space-2);">
+          <p class="meta">GitHub</p>
+          <a href="https://github.com/kkraso01" target="_blank" class="ui-link link link--accent">github.com/kkraso01</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Education & Recognition -->
+  <section id="education" data-workspace="profile" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-number">06</span>
+        <div class="section-title">Education &amp; Recognition</div>
+      </div>
+
+      <div class="section-columns">
+        <div class="section-column-left">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Education</h3>
+          <div style="display: grid; gap: var(--space-3);">
+            <div>
+              <p style="font-weight: 600; color: var(--text-strong);">M.Sc. Artificial Intelligence</p>
+              <p class="meta">University of Cyprus | Sep 2025 – Present</p>
+            </div>
+            <div>
+              <p style="font-weight: 600; color: var(--text-strong);">B.Sc. Computer Science</p>
+              <p class="meta">University of Cyprus | Sep 2021 – Jun 2025</p>
+              <p class="meta">Specialization: Big Data and Internet Computing</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-column-right">
+          <h3 class="meta" style="margin-bottom: var(--space-3);">Publications &amp; Awards</h3>
+          <ul style="margin: 0; padding-left: 18px; display: grid; gap: var(--space-2);">
+            <li>
+               <strong>LLM-MS: A Multi-Model LLM Search Engine</strong> —
+              International Workshop on LLM + Vector Data (May 2025)
+            </li>
+            <li>
+               <strong>LLME: A Distributed Large Language Model Service on the Edge</strong> —
+              Manuscript (2025)
+            </li>
+            <li>
+               <strong>Multi-Model LLM Search Engines</strong> —
+              B.Sc. Thesis, University of Cyprus (July 2025)
+            </li>
+            <li>
+               Judge &amp; Scientific Committee Member — Robotex Cyprus (2022 – Present)
+            </li>
+            <li>
+              Robotics Competition Awards — multiple 1st/2nd place distinctions (2018–2019)
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    © 2026 Konstantin Krasovitskiy
+  </footer>
+
+  <!-- External JS for Background Animation -->
+  <!-- Disabled old animations - using maze-solver instead -->
+  <script src="tabs.js"></script>
+  <script src="viewport-observer.js"></script>
+  <script src="shared_bus.js"></script>
+  <script src="ui_theme.js"></script>
+  <script src="background.js"></script>
+  <script src="rag_pipeline.js"></script>
+  <script src="system_status.js"></script>
+  <script src="system_plugins.js"></script>
+  <script src="system_orchestrator.js"></script>
+  <script src="llm_viz.js"></script>
+  <script src="attention.js"></script>
+  <script src="line-follower/line_following.js"></script>
+  
+  <!-- New: Advanced Maze Solver Scripts -->
+  <script src="maze-solver/maze.js"></script>
+  <script src="maze-solver/solver.js"></script>
+  <script src="maze-solver/lpa-solver.js"></script>
+  <script src="maze-solver/motion-profile.js"></script>
+  <script src="maze-solver/path-planner-oblique.js"></script>
+  <script src="maze-solver/maze-explorer.js"></script>
+  <script src="maze-solver/path-planner.js"></script>
+  <script src="maze-solver/advanced-renderer.js"></script>
+  <script src="maze-solver/view.js"></script>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    window.THREE = THREE;
+  </script>
+  <!-- Drone Race Demo - Independently managed -->
+  <script type="module" src="drones/race/drone_race_demo.js"></script>
+  <!-- Other Drone Demos -->
+  <script type="module" src="drone-sim/ui/main_demo.js"></script>
+
+  <script>
+    const themeButtons = document.querySelectorAll("[data-theme-toggle]");
+    const applyTheme = (theme) => {
+      const nextTheme = theme === "dark" ? "dark" : "light";
+      document.documentElement.dataset.theme = nextTheme;
+      localStorage.setItem("theme", nextTheme);
+      themeButtons.forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.themeToggle === nextTheme);
+      });
+      window.dispatchEvent(new Event("themechange"));
+      if (typeof window.refreshCanvases === "function") {
+        window.refreshCanvases();
+      }
+    };
+
+    themeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => applyTheme(btn.dataset.themeToggle));
+    });
+
+    const storedTheme = localStorage.getItem("theme");
+    applyTheme(storedTheme === "dark" ? "dark" : "light");
+
+    // Fade interaction cues after first engagement
+    const cueBadges = document.querySelectorAll('.cue-badge');
+    cueBadges.forEach((badge) => {
+      const parentSection = badge.closest('section');
+      if (!parentSection) return;
+
+      const handleInteraction = () => {
+        badge.classList.add('opacity-60');
+      };
+
+      parentSection.addEventListener('pointerenter', handleInteraction, { once: true });
+      parentSection.addEventListener('click', handleInteraction, { once: true });
+    });
+
+    // Maze Solver UI initialization
+    window.addEventListener('DOMContentLoaded', function () {
+      if (window.MazeUI) {
+        window.mazeUI = new window.MazeUI("maze-canvas");
+      }
+    });
+  </script>
+
+</body>
+
+</html>
