@@ -30,12 +30,49 @@
   ];
 
   const stages = [
-    { id: "embed", label: "Embedding", dims: "seq × d_model", shape: "12 × 768" },
-    { id: "qkv", label: "Q / K / V", dims: "3 × (seq × 64)", shape: "12 × 64 per head" },
-    { id: "attn", label: "Attention", dims: "heads=8, seq × seq", shape: "12 × 12 weights", isAttention: true },
-    { id: "res", label: "Residual", dims: "skip + layer norm", shape: "12 × 768" },
-    { id: "ffn", label: "FFN", dims: "GELU(3072) → 768", shape: "12 × 3072 → 12 × 768" },
-    { id: "logits", label: "Logits", dims: "seq × vocab", shape: "12 × 50k" }
+    {
+      id: "embed",
+      label: "Embedding",
+      dims: "seq × d_model",
+      shape: "12 × 768",
+      desc: "Token + position vectors"
+    },
+    {
+      id: "qkv",
+      label: "Q / K / V",
+      dims: "3 × (seq × 64)",
+      shape: "12 × 64 per head",
+      desc: "Project to queries, keys, values"
+    },
+    {
+      id: "attn",
+      label: "Attention",
+      dims: "heads=8, seq × seq",
+      shape: "12 × 12 weights",
+      desc: "Softmax weights across sequence",
+      isAttention: true
+    },
+    {
+      id: "res",
+      label: "Residual",
+      dims: "skip + layer norm",
+      shape: "12 × 768",
+      desc: "Adds skip path + normalize"
+    },
+    {
+      id: "ffn",
+      label: "FFN",
+      dims: "GELU(3072) → 768",
+      shape: "12 × 3072 → 12 × 768",
+      desc: "Two-layer MLP with GELU"
+    },
+    {
+      id: "logits",
+      label: "Logits",
+      dims: "seq × vocab",
+      shape: "12 × 50k",
+      desc: "Project to vocabulary scores"
+    }
   ];
 
   function palette() {
@@ -101,6 +138,7 @@
     if (lineCount < maxLines) {
       ctx.fillText(line, x, y + lineCount * lineHeight);
     }
+    return Math.min(maxLines, lineCount + 1);
   }
 
   function drawRoundedRect(x, y, w, h, r) {
@@ -249,9 +287,11 @@
     const nominalBox = compact ? 110 : 140;
     const minBox = compact ? 72 : 90;
     const boxWidth = clamp(areaWidth / stages.length - 12, minBox, nominalBox);
-    const pipeBottomLimit = stacked ? s.bottom - 170 : s.bottom - 20;
+    const pipeBottomLimit = stacked ? s.bottom - 88 : s.bottom - 2;
     const availableHeight = Math.max(0, pipeBottomLimit - topY);
-    const boxHeight = Math.min(compact ? 140 : 156, Math.max(96, availableHeight));
+    const desiredBoxH = compact ? 120 : 130;
+    const minBoxH = compact ? 96 : 106;
+    const boxHeight = Math.min(desiredBoxH, Math.max(minBoxH, availableHeight));
     const centerStart = pipeAreaLeft + boxWidth / 2;
     const centerEnd = pipeAreaRight - boxWidth / 2;
     const xStep = Math.max(0, (centerEnd - centerStart) / Math.max(1, stages.length - 1));
@@ -294,7 +334,7 @@
         ctx.globalAlpha = 0.35;
       }
 
-      stageHitboxes.push({ id: stage.id, label: stage.label, x, y, w: boxWidth, h: boxHeight });
+      stageHitboxes.push({ ...stage, x, y, w: boxWidth, h: boxHeight });
 
       ctx.globalAlpha = fade;
       ctx.fillStyle = isHover
@@ -313,20 +353,21 @@
       ctx.fillText(stage.label.toUpperCase(), x + boxWidth / 2, y + 16);
 
       const textPad = 8;
-      const textWidth = Math.max(40, boxWidth - textPad * 2);
       ctx.fillStyle = colors.muted;
-      ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+      ctx.font = "500 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
       ctx.textAlign = "left";
-      drawWrappedText(stage.dims, x + textPad, y + 30, textWidth, 12, 2);
-      drawWrappedText(stage.shape, x + textPad, y + 46, textWidth, 12, 2);
+      const descLines = drawWrappedText(stage.desc || "", x + textPad, y + 30, Math.max(60, boxWidth - textPad * 2 - 8), 11, 3) || 0;
+      const descBlock = Math.max(0, descLines * 11 + 4);
 
       if (isAttention) {
         const matrixSize = Math.min(6, tokens.length);
-        const topBlock = 56;
-        const bottomPad = 12;
+        const baseTop = compact ? 48 : 56;
+        const descPad = Math.min(22, descBlock);
+        const topBlock = Math.min(boxHeight - 32, baseTop + descPad);
+        const bottomPad = 10;
         const availW = boxWidth - textPad * 2;
-        const availH = Math.max(24, boxHeight - topBlock - bottomPad);
-        const cell = clamp(Math.min(availW / matrixSize, availH / matrixSize), 7, 14);
+        const availH = Math.max(28, boxHeight - topBlock - bottomPad);
+        const cell = Math.max(4, Math.min(14, Math.min(availW / matrixSize, availH / matrixSize)));
         const gridWidth = matrixSize * cell;
         const gridHeight = matrixSize * cell;
         const gridX = x + (boxWidth - gridWidth) / 2;
@@ -340,7 +381,7 @@
         );
 
         ctx.fillStyle = theme ? theme.rgba(colors.accent, 0.1) : "rgba(255, 45, 45, 0.08)";
-        ctx.fillRect(gridX - 4, gridY + selectedRow * cell - 2, matrixSize * cell + 8, cell + 4);
+        ctx.fillRect(gridX, gridY + selectedRow * cell, gridWidth, cell);
 
         for (let r = 0; r < matrixSize; r += 1) {
           for (let c = 0; c < matrixSize; c += 1) {
@@ -353,12 +394,9 @@
           }
         }
 
-        ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : colors.border;
-        ctx.strokeRect(gridX - 4, gridY - 4, matrixSize * cell + 8, matrixSize * cell + 8);
-
         ctx.strokeStyle = colors.accent;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(gridX + strongest.idx * cell - 1, gridY + selectedRow * cell - 1, cell + 2, cell + 2);
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(gridX + strongest.idx * cell - 0.5, gridY + selectedRow * cell - 0.5, cell + 1, cell + 1);
       }
 
       ctx.globalAlpha = 1;
@@ -406,26 +444,30 @@
     ctx.fillText(`Shape: ${stage.shape}`, panelX + 12, panelY + 72);
     ctx.fillText(`Flow: ${stage.dims}`, panelX + 12, panelY + 88);
 
+    let cursorY = panelY + 112;
+
     if (stage.isAttention) {
       ctx.fillStyle = colors.textStrong;
       ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-      ctx.fillText("Top-3 attended", panelX + 12, panelY + 112);
+      ctx.fillText("Top-3 attended", panelX + 12, cursorY);
+      cursorY += 18;
 
       const tops = topKAttention(selectedToken, 3);
       ctx.fillStyle = colors.muted;
       ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
       tops.forEach((item, idx) => {
-        const y = panelY + 132 + idx * 18;
         const weight = (item.weight * 100).toFixed(1);
-        ctx.fillText(`${idx + 1}. ${item.token} (${weight}%)`, panelX + 12, y);
+        ctx.fillText(`${idx + 1}. ${item.token} (${weight}%)`, panelX + 12, cursorY + idx * 16);
       });
+      cursorY += tops.length * 16;
 
       const lead = tops[0];
       if (lead) {
         ctx.fillStyle = colors.textStrong;
         ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
         const summary = `${tokens[selectedToken].toUpperCase()} pulls ${lead.token.toUpperCase()} (${(lead.weight * 100).toFixed(0)}%)`;
-        drawWrappedText(summary, panelX + 12, panelY + 132 + tops.length * 18 + 8, panelW - 24, 12, 2);
+        const lines = drawWrappedText(summary, panelX + 12, cursorY + 8, panelW - 24, 12, 2) || 0;
+        cursorY += 8 + lines * 12;
       }
     } else {
       ctx.fillStyle = colors.textStrong;
@@ -439,13 +481,14 @@
       ctx.fillText(`Sequence: ${tokens.length} tokens`, panelX + 12, panelY + 168);
     }
 
+    const traceY = Math.max(panelY + panelH - 58, cursorY + 16);
     ctx.fillStyle = colors.textStrong;
     ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-    ctx.fillText("Trace token", panelX + 12, panelY + panelH - 58);
+    ctx.fillText("Trace token", panelX + 12, traceY);
 
     ctx.fillStyle = colors.muted;
     ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-    ctx.fillText(tokens[selectedToken].toUpperCase(), panelX + 12, panelY + panelH - 40);
+    ctx.fillText(tokens[selectedToken].toUpperCase(), panelX + 12, traceY + 18);
     ctx.globalAlpha = 1;
   }
 

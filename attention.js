@@ -49,6 +49,11 @@
     { name: "Mixed" }
   ];
 
+  function displayToken(tok) {
+    if (tok.length <= 8) return tok;
+    return `${tok.slice(0, 5)}…`;
+  }
+
   function palette() {
     if (theme) return theme.palette();
     const styles = getComputedStyle(document.documentElement);
@@ -179,34 +184,50 @@
 
   function computeLayout() {
     const s = safe();
-    const panelWidth = clamp(width * 0.26, 170, 230);
-    const panelHeight = clamp(height * 0.26, 120, 180);
+
+    const panelWidth = clamp(width * 0.24, 160, 210);
+    const panelHeight = clamp(height * 0.28, 140, 220);
     const hasSidePanel = s.right - s.left - panelWidth - pad >= 360;
     const stacked = !hasSidePanel;
 
     const gridAreaWidth = stacked ? s.right - s.left : s.right - s.left - panelWidth - pad;
     const gridAreaHeight = stacked ? s.bottom - s.top - panelHeight - pad : s.bottom - s.top;
 
-    const labelLeft = clamp(Math.round(gridAreaWidth * 0.2), 56, 92);
-    const labelTop = 42;
-    const labelBottom = 24;
-    const gridSize = Math.max(80, Math.min(gridAreaWidth - labelLeft, gridAreaHeight - labelTop - labelBottom));
-    const gridX = s.left + labelLeft;
-    const gridY = s.top + labelTop;
+    ctx.font = "500 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    const labelTokens = tokens.map((t) => displayToken(t));
+    const maxLeftLabelW = Math.min(
+      140,
+      Math.max(64, Math.ceil(Math.max(...labelTokens.map((t) => ctx.measureText(t).width)) + 10))
+    );
+
+    const topLabelH = 22;
+    const titleH = 26;
+
+    const gridX = s.left + maxLeftLabelW + 8;
+    const gridY = s.top + titleH + topLabelH + 6;
+
+    const rawGridW = Math.max(180, gridAreaWidth - (gridX - s.left) - 6);
+    const rawGridH = Math.max(160, gridAreaHeight - (gridY - s.top) - 6);
+
+    const cellW = Math.max(22, rawGridW / size);
+    const cellH = Math.max(16, rawGridH / size);
+    const gridW = cellW * size;
+    const gridH = cellH * size;
 
     const panelX = stacked ? s.left : s.left + gridAreaWidth + pad;
-    const panelY = stacked ? gridY + gridSize + labelBottom + pad : gridY;
+    const panelY = stacked ? gridY + gridH + 10 : gridY;
     const panelW = stacked ? s.right - s.left : panelWidth;
-    const panelH = stacked ? s.bottom - panelY : gridSize;
+    const panelH = stacked ? s.bottom - panelY : gridH;
 
     return {
       gridX,
       gridY,
-      gridSize,
-      cell: gridSize / size,
-      labelLeft,
-      labelTop,
-      labelBottom,
+      gridW,
+      gridH,
+      cellW,
+      cellH,
+      leftLabelW: maxLeftLabelW,
+      topLabelH,
       panelX,
       panelY,
       panelW,
@@ -217,135 +238,71 @@
   }
 
   function drawHeadSelector(colors, layout) {
-    const { gridX, gridY } = layout;
-    const chipW = 64;
-    const chipH = 20;
-    const gap = 6;
-    const maxPerRow = Math.max(1, Math.floor((width - gridX - pad) / (chipW + gap)));
-    const rows = Math.ceil(heads.length / maxPerRow);
-    const startX = gridX;
-    const startY = layout.bounds.top + 6;
-    const headBoxes = [];
-
-    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    heads.forEach((head, idx) => {
-      const row = Math.floor(idx / maxPerRow);
-      const col = idx % maxPerRow;
-      const x = startX + col * (chipW + gap);
-      const y = startY + row * (chipH + 6);
-      const isActive = idx === selectedHead;
-      headBoxes.push({ x, y, w: chipW, h: chipH, idx });
-
-      ctx.fillStyle = isActive
-        ? (theme ? theme.rgba(colors.accent, 0.16) : colors.surfaceElevated)
-        : colors.surfaceElevated;
-      ctx.strokeStyle = isActive ? colors.accent : colors.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      drawRoundedRect(x, y, chipW, chipH, 3);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = isActive ? colors.textStrong : colors.muted;
-      ctx.fillText(head.name, x + chipW / 2, y + chipH / 2);
-    });
-
-    return { headBoxes, selectorHeight: rows * (chipH + 6) };
+    return { headBoxes: [], selectorHeight: 0 };
   }
 
   function drawMatrix(colors, layout) {
-    const { gridX, gridY, gridSize, cell } = layout;
+    const { gridX, gridY, gridW, gridH, cellW, cellH, leftLabelW } = layout;
 
     ctx.fillStyle = colors.surface;
     ctx.fillRect(0, 0, width, height);
-    if (theme) {
-      theme.drawGrid(ctx, 22, colors.border, theme.isDark() ? 0.1 : 0.06, width, height);
-    }
+    if (theme) theme.drawGrid(ctx, 22, colors.border, theme.isDark() ? 0.08 : 0.05, width, height);
 
-    ctx.fillStyle = colors.surfaceElevated;
-    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : colors.border;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    drawRoundedRect(gridX - 12, gridY - 16, gridSize + 24, gridSize + 32, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.font = "700 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.fillStyle = colors.textStrong;
     ctx.textAlign = "left";
-    ctx.fillText("Semantic Attention Map", gridX - 6, gridY - 26);
+    ctx.fillText("Semantic Attention Map", gridX - 4, gridY - 22);
 
     const matrix = headMatrices[selectedHead];
-
     for (let row = 0; row < size; row += 1) {
       for (let col = 0; col < size; col += 1) {
         const value = matrix[row][col];
-        const shade = Math.max(18, Math.min(240, Math.floor(255 * value)));
+        const lightness = Math.pow(clamp(value, 0, 1), 0.7);
+        const shade = Math.round(40 + 215 * lightness);
         ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-        ctx.fillRect(gridX + col * cell, gridY + row * cell, cell - 1, cell - 1);
+        ctx.fillRect(gridX + col * cellW, gridY + row * cellH, cellW - 1, cellH - 1);
       }
     }
 
     if (selectedRow != null) {
       ctx.fillStyle = theme ? theme.rgba(colors.accent, 0.08) : colors.surface;
-      ctx.fillRect(gridX, gridY + selectedRow * cell, gridSize, cell);
+      ctx.fillRect(gridX, gridY + selectedRow * cellH, gridW, cellH);
     }
 
     if (hoverRow != null) {
       ctx.fillStyle = theme ? theme.rgba(colors.accent, 0.08) : colors.surface;
-      ctx.fillRect(gridX, gridY + hoverRow * cell, gridSize, cell);
+      ctx.fillRect(gridX, gridY + hoverRow * cellH, gridW, cellH);
     }
 
-    ctx.strokeStyle = theme ? theme.rgba(colors.border, 0.8) : colors.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(gridX, gridY, gridSize, gridSize);
-
     ctx.save();
-    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    ctx.font = "500 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     ctx.fillStyle = colors.muted;
-    ctx.textAlign = "center";
-    tokens.forEach((tok, i) => {
-      const labelRaw = tok.length > 7 ? `${tok.slice(0, 6)}…` : tok;
-      const label = labelRaw.toUpperCase();
-      ctx.fillText(label, gridX + i * cell + cell / 2, gridY - 10);
+    ctx.textBaseline = "middle";
 
-      ctx.save();
-      ctx.translate(gridX - 16, gridY + i * cell + cell / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText(label, 0, 0);
-      ctx.restore();
+    tokens.forEach((tok, i) => {
+      const label = displayToken(tok);
+
+      const xTop = gridX + i * cellW + cellW / 2;
+      const yTop = gridY - 8;
+      ctx.textAlign = "center";
+      ctx.fillText(label, xTop, yTop);
+
+      const xLeft = gridX - 8;
+      const yLeft = gridY + i * cellH + cellH / 2;
+      ctx.textAlign = "right";
+      ctx.fillText(label, xLeft, yLeft);
     });
+
     ctx.restore();
 
     if (hoverCell) {
       ctx.strokeStyle = colors.accent;
       ctx.lineWidth = 1;
-      ctx.strokeRect(gridX + hoverCell.col * cell, gridY + hoverCell.row * cell, cell, cell);
+      ctx.strokeRect(gridX + hoverCell.col * cellW, gridY + hoverCell.row * cellH, cellW, cellH);
       ctx.setLineDash([4, 4]);
-      ctx.strokeRect(gridX, gridY + hoverCell.row * cell, gridSize, cell);
-      ctx.strokeRect(gridX + hoverCell.col * cell, gridY, cell, gridSize);
+      ctx.strokeRect(gridX, gridY + hoverCell.row * cellH, gridW, cellH);
+      ctx.strokeRect(gridX + hoverCell.col * cellW, gridY, cellW, gridH);
       ctx.setLineDash([]);
-    }
-
-    const legendX = gridX + gridSize + 12;
-    const legendY = gridY + gridSize - 10;
-    if (legendX + 90 <= width - pad) {
-      ctx.fillStyle = colors.muted;
-      ctx.textAlign = "left";
-      ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-      ctx.fillText("Weight", legendX, legendY - 6);
-      for (let i = 0; i <= 8; i += 1) {
-        const val = i / 8;
-        const shade = Math.floor(255 * val);
-        ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-        ctx.fillRect(legendX + i * 10, legendY, 8, 10);
-      }
-      ctx.fillStyle = colors.muted;
-      ctx.fillText("0", legendX, legendY + 22);
-      ctx.fillText("1", legendX + 80, legendY + 22);
     }
   }
 
@@ -383,11 +340,34 @@
         ctx.fillText(`${idx + 1}. ${item.token} (${weight}%)`, panelX + 10, y);
       }
     });
+
+    const legendWidth = 56;
+    const legendSteps = 6;
+    const legendBlockW = 7;
+    const legendGap = 2;
+    const legendX = panelX + panelW - legendWidth - 10;
+    const contentBottom = panelY + 56 + links.length * 18;
+    const legendY = Math.min(panelY + panelH - 20, contentBottom + 12);
+    if (legendX > panelX + 8 && legendY > panelY + 12) {
+      ctx.fillStyle = colors.muted;
+      ctx.textAlign = "left";
+      ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+      ctx.fillText("Weight", legendX, legendY - 6);
+      for (let i = 0; i < legendSteps; i += 1) {
+        const val = i / (legendSteps - 1);
+        const shade = Math.floor(255 * val);
+        ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+        ctx.fillRect(legendX + i * (legendBlockW + legendGap), legendY, legendBlockW, 10);
+      }
+      ctx.fillStyle = colors.muted;
+      ctx.fillText("0", legendX, legendY + 18);
+      ctx.fillText("1", legendX + (legendSteps - 1) * (legendBlockW + legendGap), legendY + 18);
+    }
   }
 
   function drawTooltip(colors, layout) {
     if (!hoverCell) return;
-    const { gridX, gridY, cell } = layout;
+    const { gridX, gridY, cellW, cellH } = layout;
     const matrix = headMatrices[selectedHead];
     const weight = matrix[hoverCell.row][hoverCell.col];
     const text = `${tokens[hoverCell.row]} → ${tokens[hoverCell.col]} (${weight.toFixed(3)})`;
@@ -395,8 +375,8 @@
     ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
     const w = ctx.measureText(text).width + 12;
     const h = 24;
-    let x = gridX + hoverCell.col * cell + cell + 8;
-    let y = gridY + hoverCell.row * cell + cell / 2 - 12;
+    let x = gridX + hoverCell.col * cellW + cellW + 8;
+    let y = gridY + hoverCell.row * cellH + cellH / 2 - 12;
 
     if (x + w > width - pad) x = width - pad - w;
     if (x < pad) x = pad;
@@ -446,26 +426,28 @@
 
   function cellFromPoint(x, y) {
     if (!lastLayout) return null;
-    const { gridX, gridY, gridSize, cell } = lastLayout;
-    if (x < gridX || y < gridY || x > gridX + gridSize || y > gridY + gridSize) return null;
-    const col = Math.floor((x - gridX) / cell);
-    const row = Math.floor((y - gridY) / cell);
-    if (col >= 0 && col < size && row >= 0 && row < size) {
-      return { row, col };
-    }
+    const { gridX, gridY, gridW, gridH, cellW, cellH } = lastLayout;
+    if (x < gridX || y < gridY || x > gridX + gridW || y > gridY + gridH) return null;
+
+    const col = Math.floor((x - gridX) / cellW);
+    const row = Math.floor((y - gridY) / cellH);
+
+    if (col >= 0 && col < size && row >= 0 && row < size) return { row, col };
     return null;
   }
 
   function rowLabelFromPoint(x, y) {
     if (!lastLayout) return null;
-    const { gridX, gridY, gridSize, cell } = lastLayout;
-    const labelWidth = Math.min(48, lastLayout.labelLeft - 8);
-    const labelAreaX = gridX - labelWidth;
-    if (x < labelAreaX || x > gridX - 4) return null;
-    if (y < gridY || y > gridY + gridSize) return null;
-    const row = Math.floor((y - gridY) / cell);
-    if (row >= 0 && row < size) return row;
-    return null;
+    const { gridX, gridY, gridH, cellH, leftLabelW } = lastLayout;
+
+    const labelAreaX0 = gridX - (leftLabelW + 16);
+    const labelAreaX1 = gridX - 4;
+
+    if (x < labelAreaX0 || x > labelAreaX1) return null;
+    if (y < gridY || y > gridY + gridH) return null;
+
+    const row = Math.floor((y - gridY) / cellH);
+    return row >= 0 && row < size ? row : null;
   }
 
   function stopRunning() {
