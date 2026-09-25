@@ -7,4 +7,4 @@
 :HL["/public_html/goodnighthotel/hotel/chambre-twin-renov%C3%A9e.png","image"]
 :HL["/public_html/goodnighthotel/hotel/img_breakfast.jpg","image"]
 :HL["/public_html/goodnighthotel/hotel/carre-saint-martin.jpg","image"]
-0:{"buildId":"Ld7xdpEwDqB_vFqNZGUDi","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"buildId":"zvXYHClTWuZWj63zJrEKT","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
