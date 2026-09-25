@@ -1,0 +1,2589 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark"><head><script id="aura-preview-performance-controller">
+(function() {
+if (window.__auraPreviewPerformanceController) return;
+const nativeRequestAnimationFrame = window.requestAnimationFrame
+? window.requestAnimationFrame.bind(window)
+: function(callback) { return window.setTimeout(function() { callback(Date.now()); }, 16); };
+const nativeCancelAnimationFrame = window.cancelAnimationFrame
+? window.cancelAnimationFrame.bind(window)
+: window.clearTimeout.bind(window);
+const nativeSetInterval = window.setInterval.bind(window);
+let paused = false;
+let nextFrameId = 1;
+const frameRecords = new Map();
+const pausedFrameCallbacks = new Map();
+const style = document.createElement('style');
+style.id = 'aura-preview-performance-style';
+style.textContent = [
+'html[data-aura-preview-paused="true"] *,',
+'html[data-aura-preview-paused="true"] *::before,',
+'html[data-aura-preview-paused="true"] *::after {',
+'  animation-play-state: paused !important;',
+'  transition-duration: 0s !important;',
+'  scroll-behavior: auto !important;',
+'}'
+].join('\n');
+document.head.appendChild(style);
+window.requestAnimationFrame = function(callback) {
+const frameId = nextFrameId++;
+if (paused) {
+pausedFrameCallbacks.set(frameId, callback);
+frameRecords.set(frameId, { paused: true });
+return frameId;
+}
+const nativeFrameId = nativeRequestAnimationFrame(function(timestamp) {
+frameRecords.delete(frameId);
+callback(timestamp);
+});
+frameRecords.set(frameId, { nativeFrameId: nativeFrameId });
+return frameId;
+};
+window.cancelAnimationFrame = function(frameId) {
+const record = frameRecords.get(frameId);
+pausedFrameCallbacks.delete(frameId);
+if (record && typeof record.nativeFrameId !== 'undefined') {
+nativeCancelAnimationFrame(record.nativeFrameId);
+}
+frameRecords.delete(frameId);
+};
+window.setInterval = function(callback, delay) {
+const args = Array.prototype.slice.call(arguments, 2);
+return nativeSetInterval(function() {
+if (paused) return;
+callback.apply(this, args);
+}, delay);
+};
+const flushPausedFrames = function() {
+const callbacks = Array.from(pausedFrameCallbacks.entries());
+pausedFrameCallbacks.clear();
+callbacks.forEach(function(entry) {
+const frameId = entry[0];
+const callback = entry[1];
+const nativeFrameId = nativeRequestAnimationFrame(function(timestamp) {
+frameRecords.delete(frameId);
+callback(timestamp);
+});
+frameRecords.set(frameId, { nativeFrameId: nativeFrameId });
+});
+};
+const setPaused = function(nextPaused) {
+const shouldPause = Boolean(nextPaused);
+if (paused === shouldPause) return;
+paused = shouldPause;
+document.documentElement.toggleAttribute('data-aura-preview-paused', paused);
+if (!paused) {
+flushPausedFrames();
+}
+};
+window.__auraPreviewPerformanceController = {
+setPaused: setPaused,
+get paused() {
+return paused;
+}
+};
+window.addEventListener('message', function(event) {
+if (event.source !== window.parent) return;
+if (!event.data || event.data.type !== 'aura-preview-performance-mode') return;
+setPaused(event.data.paused);
+});
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOLNA Residences — Премиальные апартаменты в Сочи</title>
+<meta name="description" content="Инвестируйте в сервисные апартаменты VOLNA Residences в Сочи. 50м до моря, доходность от 5 млн руб в год, 0% рассрочка.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+<script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+<script src="https://code.iconify.design/iconify-icon/1.0.8/iconify-icon.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+/* Dark Mode (Default) */
+--color-bg:#0F0F0E;
+--color-bg-elevated:#1A1917;
+--color-bg-card:#22211E;
+--color-surface:#2C2B27;
+--color-copper:#C17F59;
+--color-copper-light:#D4A07A;
+--color-copper-bright:#E8B894;
+--color-terracotta:#C4704E;
+--color-gold:#C9A96E;
+--color-gold-light:#DFC08A;
+--color-sage:#8A9A7B;
+--color-sage-light:#A7B89A;
+--color-sage-dark:#6B7A5E;
+--color-cream:#F5F0EB;
+--color-cream-muted:#D9D2CA;
+--color-text:#F5F0EB;
+--color-text-muted:#9C9789;
+--color-text-subtle:#6B675E;
+--nav-bg:rgba(15,15,14,0.85);
+--overlay-bg:rgba(15,15,14,0.97);
+--noise-opacity:0.025;
+--font-display:'Playfair Display',Georgia,serif;
+--font-body:'Inter',system-ui,-apple-system,sans-serif;
+--ease-out-expo:cubic-bezier(0.16,1,0.3,1);
+--ease-out-quart:cubic-bezier(0.25,1,0.5,1);
+}
+/* Light Mode Override */
+[data-theme="light"] {
+--color-bg:#F8F6F3;
+--color-bg-elevated:#EFECE6;
+--color-bg-card:#FFFFFF;
+--color-surface:#E5E0D8;
+--color-cream:#1A1816; /* Inverted for text */
+--color-cream-muted:#3D3B37;
+--color-text:#2D2B28;
+--color-text-muted:#6B675E;
+--color-text-subtle:#8F8B82;
+--nav-bg:rgba(248,246,243,0.85);
+--overlay-bg:rgba(248,246,243,0.97);
+--noise-opacity:0.015;
+}
+html{scroll-behavior:smooth;font-size:16px;overflow-x:hidden}
+body{font-family:var(--font-body);background:var(--color-bg);color:var(--color-text);overflow-x:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;transition:background-color 0.4s, color 0.4s;}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+/* ============ UTILITY ============ */
+.container{max-width:1320px;margin:0 auto;padding:0 clamp(1.5rem,4vw,3rem)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+/* ============ SCROLLBAR ============ */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--color-bg)}
+::-webkit-scrollbar-thumb{background:var(--color-surface);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--color-copper)}
+/* ============ SELECTION ============ */
+::selection{background:var(--color-copper);color:#F5F0EB}
+/* ============ CURSOR GLOW ============ */
+.cursor-glow{
+position:fixed;width:600px;height:600px;border-radius:50%;
+pointer-events:none;z-index:0;
+background:radial-gradient(circle,rgba(193,127,89,0.06) 0%,transparent 70%);
+transform:translate(-50%,-50%);
+transition:opacity 0.3s;
+will-change:left,top;
+}
+/* ============ NAVIGATION ============ */
+.nav{
+position:fixed;top:0;left:0;right:0;z-index:100;
+padding:1.25rem 0;
+transition:background 0.4s,backdrop-filter 0.4s,padding 0.4s;
+}
+.nav.scrolled{
+background:var(--nav-bg);
+backdrop-filter:blur(20px) saturate(1.2);
+-webkit-backdrop-filter:blur(20px) saturate(1.2);
+padding:0.75rem 0;
+border-bottom:1px solid rgba(193,127,89,0.1);
+}
+.nav-inner{
+display:flex;align-items:center;justify-content:space-between;
+}
+.nav-logo{
+font-family:var(--font-display);font-size:1.5rem;font-weight:600;
+letter-spacing:0.12em;
+background:linear-gradient(135deg,var(--color-cream) 0%,var(--color-copper-light) 100%);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+transition:all 0.4s;
+}
+.nav-links{display:flex;gap:2.5rem;align-items:center}
+.nav-link{
+font-size:0.8rem;letter-spacing:0.1em;text-transform:uppercase;
+color:var(--color-text-muted);
+position:relative;
+transition:color 0.3s;
+}
+.nav-link::after{
+content:'';position:absolute;bottom:-4px;left:0;
+width:0;height:1px;
+background:linear-gradient(90deg,var(--color-copper),transparent);
+transition:width 0.4s var(--ease-out-expo);
+}
+.nav-link:hover{color:var(--color-cream)}
+.nav-link:hover::after{width:100%}
+.nav-cta{
+padding:0.65rem 1.6rem;
+font-size:0.75rem;letter-spacing:0.12em;text-transform:uppercase;font-weight:500;
+border-radius:100px;
+color:#F5F0EB;
+position:relative;overflow:hidden;
+z-index:1;
+transition:color 0.6s var(--ease-out-expo),box-shadow 0.6s,letter-spacing 0.6s var(--ease-out-expo),transform 0.6s var(--ease-out-expo);
+}
+/* Rotating gradient border */
+.nav-cta::before{
+content:'';position:absolute;
+top:50%;left:50%;
+width:300%;aspect-ratio:1;
+transform-origin:center;
+background:conic-gradient(
+rgba(212,160,122,0.7),
+rgba(193,127,89,0.25) 25%,
+rgba(201,169,110,0.6) 50%,
+rgba(193,127,89,0.25) 75%,
+rgba(212,160,122,0.7)
+);
+animation:navBorderSpin 4s linear infinite;
+z-index:-2;
+}
+@keyframes navBorderSpin{
+from{transform:translate(-50%,-50%) rotate(0deg)}
+to{transform:translate(-50%,-50%) rotate(360deg)}
+}
+/* Inner fill masks center — only border edge visible */
+.nav-cta::after{
+content:'';position:absolute;
+inset:1.5px;border-radius:100px;
+background:#1A1917; /* Always dark for contrast */
+z-index:-1;
+transition:background 0.6s;
+}
+/* Hover */
+.nav-cta:hover{
+color:#fff;
+box-shadow:0 0 25px rgba(193,127,89,0.2),0 0 60px rgba(193,127,89,0.08);
+letter-spacing:0.17em;
+transform:translateY(-1px);
+}
+.nav-cta:hover::before{animation-duration:2s}
+.nav-cta:hover::after{background:rgba(25,23,20,0.88)}
+/* Travelling shimmer light */
+.nav-cta-shimmer{
+position:absolute;top:-50%;left:-50%;width:30%;height:200%;
+background:radial-gradient(ellipse at center,rgba(232,184,148,0.3),transparent 70%);
+animation:navShimmer 3.5s ease-in-out infinite;
+pointer-events:none;z-index:0;
+}
+@keyframes navShimmer{
+0%{left:-50%;opacity:0}
+15%{opacity:1}
+50%{left:120%;opacity:1}
+65%{opacity:0}
+100%{left:120%;opacity:0}
+}
+.nav-cta:hover .nav-cta-shimmer{animation-duration:1.8s}
+.nav-cta span{position:relative;z-index:1}
+/* Mobile nav */
+.nav-toggle{display:none;flex-direction:column;gap:5px;padding:0.5rem}
+.nav-toggle span{width:22px;height:1.5px;background:var(--color-cream);transition:all 0.3s}
+.nav-mobile-overlay{
+display:none;position:fixed;inset:0;z-index:99;
+background:var(--overlay-bg);
+backdrop-filter:blur(30px);
+flex-direction:column;align-items:center;justify-content:center;gap:2rem;
+opacity:0;transition:opacity 0.4s;
+}
+.nav-mobile-overlay.active{display:flex;opacity:1}
+.nav-mobile-overlay .nav-link{font-size:1.2rem;letter-spacing:0.15em}
+/* ============ HERO ============ */
+.hero{
+position:relative;min-height:100vh;min-height:100dvh;
+display:flex;align-items:center;
+padding-top:clamp(6rem,12vh,10rem);
+padding-bottom:clamp(3rem,6vh,5rem);
+overflow:hidden;
+}
+.hero-bg{
+position:absolute;inset:0;z-index:0;
+}
+.hero-bg-image{
+position:absolute;inset:0;
+background:url('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1920&q=85&auto=format') center/cover no-repeat;
+transform:scale(1.1);
+animation:heroZoom 20s ease-out forwards;
+}
+@keyframes heroZoom{
+0%{transform:scale(1.15)}
+100%{transform:scale(1)}
+}
+.hero-bg-overlay{
+position:absolute;inset:0;
+background:
+linear-gradient(180deg,rgba(15,15,14,0.55) 0%,rgba(15,15,14,0.4) 30%,rgba(15,15,14,0.55) 60%,rgba(15,15,14,0.92) 100%),
+linear-gradient(90deg,rgba(15,15,14,0.7) 0%,transparent 60%);
+}
+/* Alpha mask fade at bottom */
+.hero-bg::after{
+content:'';position:absolute;bottom:0;left:0;right:0;height:40%;
+background:linear-gradient(to top,var(--color-bg) 0%,transparent 100%);
+z-index:1;
+}
+.hero-content{
+position:relative;z-index:2;
+max-width:900px;
+}
+.hero-tag{
+display:inline-flex;align-items:center;gap:0.5rem;
+padding:0.5rem 1rem;
+border:1px solid rgba(193,127,89,0.25);
+border-radius:100px;
+font-size:0.7rem;letter-spacing:0.15em;text-transform:uppercase;
+color:var(--color-copper-light);
+margin-bottom:1.25rem;
+opacity:0;animation:fadeUp 1s 0.5s var(--ease-out-expo) forwards;
+background:rgba(193,127,89,0.12);
+backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.hero-tag .iconify{font-size:0.85rem}
+/* Hero specifics locked to dark mode for background image legibility */
+.hero-title{
+font-family:var(--font-display);
+font-size:clamp(2.8rem,6.5vw,5.5rem);
+font-weight:400;
+line-height:1.05;
+letter-spacing:-0.02em;
+color:#F5F0EB;
+text-shadow:0 2px 20px rgba(0,0,0,0.5),0 1px 3px rgba(0,0,0,0.4);
+opacity:0;animation:fadeUp 1s 0.7s var(--ease-out-expo) forwards;
+}
+.hero-title em{
+font-style:italic;
+background:linear-gradient(135deg,var(--color-copper-light),var(--color-gold));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+}
+.hero-description{
+margin-top:1.25rem;
+font-size:clamp(0.9rem,1.1vw,1.05rem);
+line-height:1.65;
+color:rgba(245,240,235,0.88);
+max-width:540px;
+text-shadow:0 1px 8px rgba(0,0,0,0.4);
+opacity:0;animation:fadeUp 1s 0.9s var(--ease-out-expo) forwards;
+}
+.hero-actions{
+display:flex;gap:1rem;margin-top:1.75rem;flex-wrap:wrap;
+opacity:0;animation:fadeUp 1s 1.1s var(--ease-out-expo) forwards;
+}
+.hero-stats{
+display:flex;gap:3rem;margin-top:2rem;
+padding-top:1.5rem;
+border-top:1px solid rgba(193,127,89,0.15);
+opacity:0;animation:fadeUp 1s 1.3s var(--ease-out-expo) forwards;
+}
+.hero-stat-number{
+font-family:var(--font-display);
+font-size:clamp(1.8rem,3vw,2.5rem);
+font-weight:500;
+background:linear-gradient(135deg,#F5F0EB,var(--color-copper-light));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+}
+.hero-stat-label{
+font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;
+color:rgba(245,240,235,0.6);margin-top:0.25rem;
+}
+/* ============ WEBGL HERO BUTTON ============ */
+.btn-hero-webgl{
+position:relative;
+display:inline-flex;align-items:center;justify-content:center;
+padding:1.1rem 2.8rem;
+border-radius:100px;
+cursor:pointer;
+text-decoration:none;
+overflow:hidden;
+border:1px solid rgba(193,127,89,0.25);
+box-shadow:0 2px 20px rgba(0,0,0,0.3);
+transition:transform 0.6s var(--ease-out-expo),box-shadow 0.6s var(--ease-out-expo),border-color 0.6s;
+}
+.btn-hero-webgl:hover{
+transform:translateY(-2px);
+border-color:rgba(193,127,89,0.5);
+box-shadow:0 8px 40px rgba(193,127,89,0.25),0 0 0 1px rgba(193,127,89,0.15);
+}
+.btn-hero-webgl canvas{
+position:absolute;inset:0;width:100%;height:100%;
+border-radius:100px;
+pointer-events:none;
+z-index:1;
+}
+.btn-hero-webgl-text{
+position:relative;z-index:2;
+display:flex;align-items:center;gap:0.6rem;
+font-family:var(--font-body);
+font-size:0.8rem;letter-spacing:0.14em;text-transform:uppercase;font-weight:600;
+color:#F5F0EB;
+text-shadow:0 1px 3px rgba(0,0,0,0.4);
+transition:letter-spacing 0.6s var(--ease-out-expo);
+}
+.btn-hero-webgl:hover .btn-hero-webgl-text{
+letter-spacing:0.2em;
+}
+/* ============ BUTTONS ============ */
+.btn{
+display:inline-flex;align-items:center;gap:0.5rem;
+padding:1rem 2rem;
+font-size:0.78rem;letter-spacing:0.1em;text-transform:uppercase;
+font-weight:500;
+border-radius:100px;
+position:relative;overflow:hidden;
+transition:all 0.4s var(--ease-out-expo);
+}
+.btn-primary{
+background:linear-gradient(135deg,var(--color-copper),var(--color-terracotta));
+color:#F5F0EB;
+box-shadow:0 4px 24px rgba(193,127,89,0.25);
+}
+.btn-primary:hover{
+box-shadow:0 8px 40px rgba(193,127,89,0.35);
+transform:translateY(-2px);
+}
+.btn-primary::after{
+content:'';position:absolute;inset:0;
+background:linear-gradient(135deg,var(--color-terracotta),var(--color-copper));
+opacity:0;transition:opacity 0.4s;
+border-radius:100px;
+}
+.btn-primary:hover::after{opacity:1}
+.btn-primary span,.btn-primary .iconify{position:relative;z-index:1}
+.btn-outline{
+border:1px solid var(--color-copper);
+color:var(--color-cream);
+background:rgba(193,127,89,0.08);
+}
+.btn-outline:hover{
+border-color:var(--color-copper-light);
+background:rgba(193,127,89,0.22);
+color:var(--color-cream);
+letter-spacing:0.16em;
+transform:translateY(-2px);
+box-shadow:0 6px 30px rgba(193,127,89,0.15);
+}
+/* Hero button override */
+.hero .btn-outline { color: #F5F0EB; }
+.hero .btn-outline:hover { color: #fff; }
+/* ============ SECTION COMMON ============ */
+.section{padding:clamp(5rem,12vh,9rem) 0;position:relative}
+.section-label{
+display:inline-flex;align-items:center;gap:0.5rem;
+font-size:0.7rem;letter-spacing:0.18em;text-transform:uppercase;
+color:var(--color-copper);
+margin-bottom:1.5rem;
+}
+.section-label::before{
+content:'';width:30px;height:1px;
+background:linear-gradient(90deg,var(--color-copper),transparent);
+}
+.section-title{
+font-family:var(--font-display);
+font-size:clamp(2rem,4vw,3.2rem);
+font-weight:400;line-height:1.15;
+color:var(--color-cream);
+transition:color 0.4s;
+}
+.section-title em{
+font-style:italic;
+color:var(--color-copper-light);
+}
+/* Reveal animations */
+.reveal{opacity:0;transform:translateY(40px);transition:opacity 0.8s var(--ease-out-expo),transform 0.8s var(--ease-out-expo)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:0.1s}
+.reveal-delay-2{transition-delay:0.2s}
+.reveal-delay-3{transition-delay:0.3s}
+.reveal-delay-4{transition-delay:0.4s}
+@keyframes fadeUp{
+from{opacity:0;transform:translateY(30px)}
+to{opacity:1;transform:translateY(0)}
+}
+/* Philosophy reveal */
+.reveal-clip-left{opacity:0;transform:translateX(-60px) scale(0.97);transition:opacity 1.1s var(--ease-out-expo),transform 1.2s var(--ease-out-expo)}
+.reveal-clip-left.visible{opacity:1;transform:translateX(0) scale(1)}
+.reveal-slide-right{opacity:0;transform:translateX(50px);transition:opacity 0.9s var(--ease-out-expo),transform 0.9s var(--ease-out-expo)}
+.reveal-slide-right.visible{opacity:1;transform:translateX(0)}
+/* Projects reveal */
+.reveal-clip-up{opacity:0;clip-path:inset(100% 0 0 0);transition:opacity 0.8s var(--ease-out-expo),clip-path 1.1s var(--ease-out-expo)}
+.reveal-clip-up.visible{opacity:1;clip-path:inset(0 0 0 0)}
+/* Awards reveal */
+.reveal-pop{opacity:0;transform:scale(0.6);transition:opacity 0.5s var(--ease-out-expo),transform 0.7s cubic-bezier(0.34,1.56,0.64,1)}
+.reveal-pop.visible{opacity:1;transform:scale(1)}
+/* CTA reveal */
+.reveal-zoom{opacity:0;transform:scale(0.92);transition:opacity 1s var(--ease-out-expo),transform 1.2s var(--ease-out-expo)}
+.reveal-zoom.visible{opacity:1;transform:scale(1)}
+/* Footer reveal */
+.reveal-soft{opacity:0;transform:translateY(20px);transition:opacity 1s ease,transform 1s ease}
+.reveal-soft.visible{opacity:1;transform:translateY(0)}
+/* ============ ABOUT / PHILOSOPHY ============ */
+.philosophy{background:var(--color-bg); transition:background-color 0.4s;}
+.philosophy-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:clamp(3rem,6vw,6rem);
+align-items:center;
+}
+.philosophy-image{
+position:relative;
+border-radius:16px;
+overflow:hidden;
+aspect-ratio:4/5;
+}
+.philosophy-image img{
+width:100%;height:100%;object-fit:cover;
+transition:transform 0.8s var(--ease-out-expo);
+}
+.philosophy-image:hover img{transform:scale(1.04)}
+/* Alpha mask bottom fade on image */
+.philosophy-image::after{
+content:'';position:absolute;bottom:0;left:0;right:0;height:50%;
+background:linear-gradient(to top,var(--color-bg) 0%,transparent 100%);
+pointer-events:none;
+}
+/* Border gradient */
+.philosophy-image::before{
+content:'';position:absolute;inset:0;z-index:1;
+border-radius:16px;
+padding:1px;
+background:linear-gradient(160deg,rgba(193,127,89,0.4),transparent 40%,transparent 60%,rgba(201,169,110,0.2));
+-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+-webkit-mask-composite:xor;mask-composite:exclude;
+pointer-events:none;
+}
+.philosophy-text{max-width:520px}
+.philosophy-quote{
+font-family:var(--font-display);
+font-size:clamp(1.3rem,2.2vw,1.7rem);
+font-weight:400;line-height:1.5;
+color:var(--color-cream);
+margin:2rem 0;
+font-style:italic;
+transition:color 0.4s;
+}
+.philosophy-quote span{
+background:linear-gradient(135deg,var(--color-copper-light),var(--color-gold));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;font-style:normal;font-weight:500;
+}
+.philosophy-desc{
+font-size:0.95rem;line-height:1.8;
+color:var(--color-text-muted);
+}
+.philosophy-features{
+display:flex;flex-direction:column;gap:1.5rem;margin-top:2.5rem;
+}
+.philosophy-feature{
+display:flex;align-items:flex-start;gap:1rem;
+}
+.philosophy-feature-icon{
+width:40px;height:40px;flex-shrink:0;
+display:flex;align-items:center;justify-content:center;
+border-radius:10px;
+background:rgba(193,127,89,0.1);
+border:1px solid rgba(193,127,89,0.15);
+color:var(--color-copper-light);
+font-size:1.1rem;
+}
+.philosophy-feature-text h4{
+font-size:0.85rem;font-weight:500;
+color:var(--color-cream);margin-bottom:0.25rem;
+transition:color 0.4s;
+}
+.philosophy-feature-text p{
+font-size:0.82rem;line-height:1.6;
+color:var(--color-text-muted);
+}
+/* ============ SERVICES ============ */
+.services{
+background:var(--color-bg);
+position:relative;
+transition:background-color 0.4s;
+}
+/* Decorative blur gradient */
+.services::before{
+content:'';position:absolute;top:-200px;right:-200px;
+width:500px;height:500px;
+background:radial-gradient(circle,rgba(193,127,89,0.06) 0%,transparent 70%);
+pointer-events:none;
+}
+.services-header{
+display:flex;justify-content:space-between;align-items:flex-end;
+margin-bottom:clamp(3rem,5vw,5rem);
+flex-wrap:wrap;gap:2rem;
+}
+.services-header .section-title{max-width:600px}
+.services-header p{
+max-width:380px;
+font-size:0.9rem;line-height:1.7;
+color:var(--color-text-muted);
+}
+.services-grid{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:1.5rem;
+}
+.service-card{
+position:relative;
+padding:clamp(2rem,3vw,2.5rem);
+border-radius:20px;
+background:var(--color-bg-elevated);
+overflow:hidden;
+transition:transform 0.5s var(--ease-out-expo),box-shadow 0.5s, background-color 0.4s;
+cursor:default;
+}
+/* Border gradient on cards */
+.service-card::before{
+content:'';position:absolute;inset:0;
+border-radius:20px;padding:1px;
+background:linear-gradient(160deg,rgba(193,127,89,0.3),transparent 50%,transparent 50%,rgba(138,154,123,0.15));
+-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+-webkit-mask-composite:xor;mask-composite:exclude;
+pointer-events:none;
+transition:opacity 0.5s;
+opacity:0.5;
+}
+.service-card:hover::before{opacity:1}
+.service-card:hover{
+transform:translateY(-6px);
+box-shadow:0 20px 60px rgba(0,0,0,0.15);
+}
+/* Hover glow */
+.service-card::after{
+content:'';position:absolute;top:0;left:0;
+width:100%;height:100%;
+background:radial-gradient(circle at var(--mouse-x,50%) var(--mouse-y,0%),rgba(193,127,89,0.06) 0%,transparent 60%);
+pointer-events:none;
+opacity:0;transition:opacity 0.5s;
+}
+.service-card:hover::after{opacity:1}
+.service-card-icon{
+width:56px;height:56px;
+display:flex;align-items:center;justify-content:center;
+border-radius:14px;
+background:linear-gradient(135deg,rgba(193,127,89,0.12),rgba(193,127,89,0.04));
+border:1px solid rgba(193,127,89,0.15);
+color:var(--color-copper-light);
+font-size:1.5rem;
+margin-bottom:1.5rem;
+position:relative;z-index:1;
+}
+.service-card h3{
+font-family:var(--font-display);
+font-size:1.25rem;font-weight:500;
+color:var(--color-cream);
+margin-bottom:0.75rem;
+position:relative;z-index:1;
+transition:color 0.4s;
+}
+.service-card p{
+font-size:0.85rem;line-height:1.7;
+color:var(--color-text-muted);
+position:relative;z-index:1;
+}
+.service-card-number{
+position:absolute;top:1.5rem;right:1.5rem;
+font-family:var(--font-display);font-size:3rem;font-weight:600;
+color:rgba(193,127,89,0.06);
+line-height:1;
+}
+/* ============ FEATURED PROJECTS ============ */
+.projects{background:var(--color-bg);overflow:hidden; transition:background-color 0.4s;}
+.projects-header{
+text-align:center;
+margin-bottom:clamp(3rem,6vw,5rem);
+}
+.projects-header .section-title{margin:0 auto}
+.projects-subtitle{
+max-width:560px;margin:1.5rem auto 0;
+font-size:0.95rem;line-height:1.7;
+color:var(--color-text-muted);
+}
+.projects-grid{
+display:grid;
+grid-template-columns:1.2fr 0.8fr;
+grid-template-rows:auto auto;
+gap:1.5rem;
+}
+.project-card{
+position:relative;
+border-radius:20px;
+overflow:hidden;
+cursor:pointer;
+}
+.project-card:nth-child(1){grid-row:1/3}
+.project-card-image{
+width:100%;height:100%;min-height:400px;
+object-fit:cover;
+transition:transform 0.8s var(--ease-out-expo);
+}
+.project-card:hover .project-card-image{transform:scale(1.05)}
+/* Alpha mask overlay */
+.project-card-overlay{
+position:absolute;inset:0;
+background:linear-gradient(to top,rgba(15,15,14,0.9) 0%,rgba(15,15,14,0.1) 50%,rgba(15,15,14,0.2) 100%);
+transition:background 0.5s;
+}
+.project-card:hover .project-card-overlay{
+background:linear-gradient(to top,rgba(15,15,14,0.95) 0%,rgba(15,15,14,0.05) 40%,rgba(15,15,14,0.1) 100%);
+}
+.project-card-content{
+position:absolute;bottom:0;left:0;right:0;
+padding:clamp(1.5rem,3vw,2.5rem);
+z-index:1;
+}
+.project-card-tags{
+display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;
+}
+.project-card-tag{
+padding:0.3rem 0.75rem;
+font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;
+border:1px solid rgba(193,127,89,0.25);
+border-radius:100px;
+color:var(--color-copper-light);
+background:rgba(193,127,89,0.06);
+}
+/* Force white text on project cards for dark overlay */
+.project-card h3{
+font-family:var(--font-display);
+font-size:clamp(1.3rem,2.5vw,1.8rem);
+font-weight:500;
+color:#F5F0EB;
+margin-bottom:0.5rem;
+}
+.project-card p{
+font-size:0.85rem;line-height:1.6;
+color:rgba(245,240,235,0.88);
+max-width:400px;
+}
+.project-card-arrow{
+position:absolute;top:1.5rem;right:1.5rem;
+width:48px;height:48px;
+display:flex;align-items:center;justify-content:center;
+border-radius:50%;
+background:rgba(193,127,89,0.1);
+border:1px solid rgba(193,127,89,0.2);
+color:var(--color-copper-light);
+font-size:1.2rem;
+opacity:0;transform:translate(-10px,10px);
+transition:all 0.5s var(--ease-out-expo);
+}
+.project-card:hover .project-card-arrow{
+opacity:1;transform:translate(0,0);
+}
+/* ============ MARQUEE / TICKER ============ */
+.marquee-section{
+padding:clamp(2rem,4vw,3rem) 0;
+border-top:1px solid rgba(193,127,89,0.08);
+border-bottom:1px solid rgba(193,127,89,0.08);
+overflow:hidden;
+background:var(--color-bg);
+transition:background-color 0.4s;
+}
+.marquee-track{
+display:flex;
+animation:marquee 40s linear infinite;
+width:max-content;
+}
+.marquee-item{
+display:flex;align-items:center;gap:2rem;
+padding:0 2rem;
+white-space:nowrap;
+}
+.marquee-item span{
+font-family:var(--font-display);
+font-size:clamp(1.2rem,2vw,1.6rem);
+font-weight:400;
+color:var(--color-text-subtle);
+transition:color 0.3s;
+}
+.marquee-item span:hover{color:var(--color-cream)}
+.marquee-dot{
+width:6px;height:6px;
+border-radius:50%;
+background:linear-gradient(135deg,var(--color-copper),var(--color-gold));
+flex-shrink:0;
+}
+@keyframes marquee{
+0%{transform:translateX(0)}
+100%{transform:translateX(-50%)}
+}
+/* ============ PROCESS SECTION ============ */
+.process{background:var(--color-bg-elevated);position:relative;overflow:hidden; transition:background-color 0.4s;}
+.process::before{
+content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+width:800px;height:800px;
+background:radial-gradient(circle,rgba(138,154,123,0.04) 0%,transparent 70%);
+pointer-events:none;
+}
+.process-header{
+text-align:center;
+margin-bottom:clamp(3rem,6vw,5rem);
+}
+.process-steps{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:0;
+position:relative;
+}
+/* Connecting line */
+.process-steps::before{
+content:'';position:absolute;
+top:44px;left:12.5%;right:12.5%;
+height:1px;
+background:linear-gradient(90deg,transparent,rgba(193,127,89,0.3) 20%,rgba(193,127,89,0.3) 80%,transparent);
+}
+.process-step{
+text-align:center;
+padding:0 1.5rem;
+position:relative;
+}
+.process-step-number{
+width:88px;height:88px;
+margin:0 auto 2rem;
+display:flex;align-items:center;justify-content:center;
+border-radius:50%;
+background:var(--color-bg);
+position:relative;z-index:1;
+box-shadow:0 0 0 1px rgba(193,127,89,0.2);
+transition:background-color 0.4s;
+}
+.process-step-number::before{
+content:'';position:absolute;inset:-1px;
+border-radius:50%;
+background:linear-gradient(135deg,rgba(193,127,89,0.4),transparent 60%);
+-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+-webkit-mask-composite:xor;mask-composite:exclude;
+padding:1px;
+}
+.process-step-number span{
+font-family:var(--font-display);
+font-size:1.5rem;font-weight:600;
+background:linear-gradient(135deg,var(--color-copper-light),var(--color-gold));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+}
+.process-step h4{
+font-family:var(--font-display);
+font-size:1.1rem;font-weight:500;
+color:var(--color-cream);
+margin-bottom:0.75rem;
+transition:color 0.4s;
+}
+.process-step p{
+font-size:0.82rem;line-height:1.7;
+color:var(--color-text-muted);
+}
+/* ============ TESTIMONIALS ============ */
+.testimonials{background:var(--color-bg);position:relative; transition:background-color 0.4s;}
+.testimonials::before{
+content:'';position:absolute;bottom:-200px;left:-200px;
+width:600px;height:600px;
+background:radial-gradient(circle,rgba(201,169,110,0.04) 0%,transparent 70%);
+pointer-events:none;
+}
+.testimonials-header{margin-bottom:clamp(3rem,6vw,5rem)}
+.testimonials-grid{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:1.5rem;
+}
+.testimonial-card{
+padding:clamp(1.5rem,3vw,2.5rem);
+border-radius:20px;
+background:var(--color-bg-elevated);
+position:relative;
+transition:transform 0.5s var(--ease-out-expo), background-color 0.4s;
+}
+/* Glassmorphism + border gradient */
+.testimonial-card::before{
+content:'';position:absolute;inset:0;
+border-radius:20px;padding:1px;
+background:linear-gradient(160deg,rgba(193,127,89,0.2),transparent 40%,transparent 60%,rgba(201,169,110,0.1));
+-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+-webkit-mask-composite:xor;mask-composite:exclude;
+pointer-events:none;
+}
+.testimonial-card:hover{transform:translateY(-4px)}
+.testimonial-stars{
+display:flex;gap:0.25rem;margin-bottom:1.25rem;
+color:var(--color-gold);font-size:0.9rem;
+}
+.testimonial-text{
+font-size:0.92rem;line-height:1.7;
+color:var(--color-cream-muted);
+margin-bottom:1.5rem;
+font-style:italic;
+}
+.testimonial-author{
+display:flex;align-items:center;gap:1rem;
+padding-top:1.25rem;
+border-top:1px solid rgba(193,127,89,0.1);
+}
+.testimonial-avatar{
+width:44px;height:44px;
+border-radius:50%;
+object-fit:cover;
+border:2px solid rgba(193,127,89,0.3);
+flex-shrink:0;
+}
+.testimonial-author-info h5{
+font-size:0.85rem;font-weight:500;
+color:var(--color-cream);
+transition:color 0.4s;
+}
+.testimonial-author-info p{
+font-size:0.75rem;
+color:var(--color-text-muted);
+margin-top:0.15rem;
+}
+/* ============ AWARDS STRIP ============ */
+.awards{
+padding:clamp(3rem,5vw,5rem) 0;
+border-top:1px solid rgba(193,127,89,0.08);
+border-bottom:1px solid rgba(193,127,89,0.08);
+background:var(--color-bg);
+transition:background-color 0.4s;
+}
+.awards-grid{
+display:flex;
+justify-content:center;
+align-items:center;
+gap:clamp(3rem,6vw,6rem);
+flex-wrap:wrap;
+}
+.award-item{
+display:flex;flex-direction:column;align-items:center;gap:0.75rem;
+text-align:center;
+opacity:0.5;
+transition:opacity 0.4s;
+}
+.award-item:hover{opacity:1}
+.award-icon{
+font-size:2rem;
+color:var(--color-copper-light);
+}
+.award-item span{
+font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;
+color:var(--color-text-subtle);
+}
+/* ============ BLOG / JOURNAL ============ */
+.blog{background:var(--color-bg);position:relative; transition:background-color 0.4s;}
+.blog-header{
+display:flex;justify-content:space-between;align-items:flex-end;
+margin-bottom:clamp(3rem,5vw,5rem);
+flex-wrap:wrap;gap:2rem;
+}
+.blog-header .section-title{max-width:600px;}
+.blog-grid{
+display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;
+}
+.blog-card{
+position:relative;padding:0;
+border-radius:20px;background:var(--color-bg-elevated);
+overflow:hidden;
+transition:transform 0.5s var(--ease-out-expo),box-shadow 0.5s, background-color 0.4s;
+}
+.blog-card::before{
+content:'';position:absolute;inset:0;
+border-radius:20px;padding:1px;
+background:linear-gradient(160deg,rgba(193,127,89,0.3),transparent 50%,transparent 50%,rgba(138,154,123,0.15));
+-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+-webkit-mask-composite:xor;mask-composite:exclude;
+pointer-events:none;transition:opacity 0.5s;opacity:0.5;z-index:2;
+}
+.blog-card:hover::before{opacity:1;}
+.blog-card:hover{transform:translateY(-6px);box-shadow:0 20px 60px rgba(0,0,0,0.15);}
+.blog-card-image-wrap{position:relative;aspect-ratio:16/10;overflow:hidden;}
+.blog-card-image{
+width:100%;height:100%;object-fit:cover;
+transition:transform 0.8s var(--ease-out-expo);
+}
+.blog-card:hover .blog-card-image{transform:scale(1.05);}
+.blog-card-content{padding:clamp(1.5rem,3vw,2rem);display:flex;flex-direction:column;height:calc(100% - (100% / (16/10)));}
+.blog-card-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;}
+.blog-card-tag{
+padding:0.3rem 0.75rem;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;
+border:1px solid rgba(193,127,89,0.25);border-radius:100px;
+color:var(--color-copper-light);background:rgba(193,127,89,0.06);
+}
+.blog-card-date{font-size:0.75rem;color:var(--color-text-subtle);}
+.blog-card h3{
+font-family:var(--font-display);font-size:clamp(1.2rem,1.8vw,1.4rem);font-weight:500;
+color:var(--color-cream);margin-bottom:0.75rem;line-height:1.35;
+transition:color 0.4s;
+}
+.blog-card p{
+font-size:0.85rem;line-height:1.6;color:var(--color-text-muted);
+margin-bottom:1.5rem;
+display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.blog-card-link{
+margin-top:auto;display:inline-flex;align-items:center;gap:0.5rem;
+font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;
+color:var(--color-cream);transition:color 0.3s,gap 0.3s var(--ease-out-expo);
+}
+.blog-card:hover .blog-card-link{color:var(--color-copper-light);gap:0.75rem;}
+/* ============ CTA SECTION ============ */
+.cta{
+background:var(--color-bg);
+padding:clamp(5rem,10vw,9rem) 0;
+position:relative;
+overflow:hidden;
+transition:background-color 0.4s;
+}
+.cta-bg{
+position:absolute;inset:0;
+}
+.cta-bg-image{
+position:absolute;inset:0;
+background:url('https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1920&q=80&auto=format') center/cover no-repeat;
+opacity:0.15;
+}
+/* Alpha mask on CTA background */
+.cta-bg::after{
+content:'';position:absolute;inset:0;
+background:
+radial-gradient(ellipse at center,transparent 0%,var(--color-bg) 75%);
+}
+.cta-content{
+position:relative;z-index:1;
+text-align:center;
+max-width:700px;
+margin:0 auto;
+}
+.cta-title{
+font-family:var(--font-display);
+font-size:clamp(2.2rem,5vw,3.8rem);
+font-weight:400;line-height:1.1;
+color:var(--color-cream);
+margin-bottom:1.5rem;
+transition:color 0.4s;
+}
+.cta-title em{
+font-style:italic;
+background:linear-gradient(135deg,var(--color-copper-light),var(--color-gold));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+}
+.cta-text{
+font-size:1rem;line-height:1.7;
+color:var(--color-text-muted);
+margin-bottom:2.5rem;
+}
+.cta-actions{
+display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;
+}
+/* Animated border CTA button */
+.btn-glow{
+position:relative;
+padding:1.1rem 2.5rem;
+border-radius:100px;
+background:var(--color-bg);
+color:var(--color-cream);
+font-size:0.8rem;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;
+z-index:1;
+overflow:hidden;
+transition:background-color 0.4s, color 0.4s;
+}
+.btn-glow::before{
+content:'';position:absolute;inset:-2px;
+border-radius:100px;
+background:conic-gradient(from var(--glow-angle,0deg),var(--color-copper),var(--color-gold),var(--color-sage),var(--color-copper));
+z-index:-2;
+animation:glowRotate 4s linear infinite;
+}
+.btn-glow::after{
+content:'';position:absolute;inset:2px;
+border-radius:100px;
+background:var(--color-bg);
+z-index:-1;
+transition:background-color 0.4s;
+}
+@keyframes glowRotate{
+0%{--glow-angle:0deg}
+100%{--glow-angle:360deg}
+}
+@property --glow-angle{
+syntax:'<angle>';
+initial-value:0deg;
+inherits:false;
+}
+/* ============ FOOTER ============ */
+.footer{
+padding:clamp(4rem,8vw,6rem) 0 2rem;
+background:var(--color-bg-elevated);
+border-top:1px solid rgba(193,127,89,0.08);
+transition:background-color 0.4s;
+}
+.footer-grid{
+display:grid;
+grid-template-columns:1.5fr 1fr 1fr 1fr;
+gap:clamp(2rem,4vw,4rem);
+margin-bottom:4rem;
+}
+.footer-brand{
+max-width:320px;
+}
+.footer-logo{
+font-family:var(--font-display);font-size:1.4rem;font-weight:600;
+letter-spacing:0.1em;
+background:linear-gradient(135deg,var(--color-cream),var(--color-copper-light));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+margin-bottom:1.25rem;
+transition:all 0.4s;
+}
+.footer-brand p{
+font-size:0.85rem;line-height:1.7;
+color:var(--color-text-muted);
+}
+.footer-social{
+display:flex;gap:0.75rem;margin-top:1.5rem;
+}
+.footer-social a{
+width:40px;height:40px;
+display:flex;align-items:center;justify-content:center;
+border-radius:10px;
+border:1px solid rgba(193,127,89,0.15);
+color:var(--color-text-muted);
+font-size:1.1rem;
+transition:all 0.3s;
+}
+.footer-social a:hover{
+border-color:var(--color-copper);
+color:var(--color-copper-light);
+background:rgba(193,127,89,0.08);
+}
+.footer-column h4{
+font-size:0.72rem;letter-spacing:0.15em;text-transform:uppercase;
+color:var(--color-copper);
+margin-bottom:1.5rem;
+}
+.footer-column ul{list-style:none;display:flex;flex-direction:column;gap:0.85rem}
+.footer-column a{
+font-size:0.85rem;
+color:var(--color-text-muted);
+transition:color 0.3s;
+}
+.footer-column a:hover{color:var(--color-cream)}
+.footer-bottom{
+display:flex;justify-content:space-between;align-items:center;
+padding-top:2rem;
+border-top:1px solid rgba(193,127,89,0.08);
+flex-wrap:wrap;gap:1rem;
+}
+.footer-bottom p{
+font-size:0.78rem;
+color:var(--color-text-subtle);
+}
+.footer-bottom-links{display:flex;gap:2rem}
+.footer-bottom-links a{
+font-size:0.78rem;
+color:var(--color-text-subtle);
+transition:color 0.3s;
+}
+.footer-bottom-links a:hover{color:var(--color-cream)}
+/* ============ HORIZONTAL RULE GRADIENT ============ */
+.gradient-hr{
+border:none;height:1px;
+background:linear-gradient(90deg,transparent,rgba(193,127,89,0.3),transparent);
+margin:0;
+}
+/* ============ RESPONSIVE ============ */
+@media(max-height:800px){
+.hero{padding-top:clamp(5rem,10vh,7rem);padding-bottom:clamp(2rem,4vh,3rem)}
+.hero-title{font-size:clamp(2.4rem,5.5vw,4.5rem)}
+.hero-tag{margin-bottom:0.75rem}
+.hero-description{margin-top:0.75rem}
+.hero-actions{margin-top:1.25rem}
+.hero-stats{margin-top:1.25rem;padding-top:1rem;gap:2.5rem}
+.hero-stat-number{font-size:clamp(1.5rem,2.5vw,2rem)}
+}
+@media(max-width:1024px){
+.services-grid{grid-template-columns:repeat(2,1fr)}
+.projects-grid{grid-template-columns:1fr;grid-template-rows:auto}
+.project-card:nth-child(1){grid-row:auto}
+.project-card-image{min-height:320px}
+.process-steps{grid-template-columns:repeat(2,1fr);gap:3rem}
+.process-steps::before{display:none}
+.testimonials-grid{grid-template-columns:1fr 1fr}
+.blog-grid{grid-template-columns:repeat(2,1fr)}
+.footer-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:768px){
+.nav-links{display:none}
+.nav-toggle{display:flex}
+.hero{padding-top:5.5rem;padding-bottom:2.5rem}
+.hero-title{font-size:clamp(2rem,8vw,3rem)}
+.hero-description{font-size:0.9rem;margin-top:0.75rem}
+.hero-actions{margin-top:1.25rem}
+.hero-stats{gap:2rem;flex-wrap:wrap;margin-top:1.5rem;padding-top:1rem}
+.hero-stat-number{font-size:1.5rem}
+.hero-stat-label{font-size:0.65rem}
+.philosophy-grid{grid-template-columns:1fr;gap:2.5rem}
+.philosophy-image{aspect-ratio:16/10}
+.services-grid{grid-template-columns:1fr}
+.services-header{flex-direction:column;align-items:flex-start}
+.testimonials-grid{grid-template-columns:1fr}
+.process-steps{grid-template-columns:1fr;gap:2.5rem}
+.blog-grid{grid-template-columns:1fr}
+.blog-header{flex-direction:column;align-items:flex-start}
+.footer-grid{grid-template-columns:1fr;gap:2.5rem}
+.awards-grid{gap:2rem}
+}
+@media(max-width:480px){
+.hero{padding-top:5rem;padding-bottom:2rem}
+.hero-tag{font-size:0.6rem;padding:0.35rem 0.75rem;margin-bottom:0.5rem}
+.hero-title{font-size:clamp(1.8rem,7vw,2.4rem)}
+.hero-description{font-size:0.85rem;line-height:1.55}
+.hero-actions{flex-direction:column;margin-top:1rem}
+.hero-actions .btn,.hero-actions .btn-hero-webgl{width:100%;justify-content:center}
+.hero-stats{gap:1.5rem}
+.btn-hero-webgl{width:100%;justify-content:center}
+.cta-actions{flex-direction:column;align-items:center}
+}
+/* ============ SMOOTH ENTRANCE STAGGER ============ */
+.stagger-children > *{
+opacity:0;transform:translateY(30px);
+transition:opacity 0.7s var(--ease-out-expo),transform 0.7s var(--ease-out-expo);
+}
+.stagger-children.visible > *:nth-child(1){transition-delay:0s}
+.stagger-children.visible > *:nth-child(2){transition-delay:0.08s}
+.stagger-children.visible > *:nth-child(3){transition-delay:0.16s}
+.stagger-children.visible > *:nth-child(4){transition-delay:0.24s}
+.stagger-children.visible > *:nth-child(5){transition-delay:0.32s}
+.stagger-children.visible > *:nth-child(6){transition-delay:0.4s}
+.stagger-children.visible > *{opacity:1;transform:translateY(0)}
+/* Stagger variants... */
+.stagger-scale > *{
+opacity:0;transform:scale(0.82) translateY(25px);
+transition:opacity 0.7s var(--ease-out-expo),transform 0.85s var(--ease-out-expo);
+}
+.stagger-scale.visible > *:nth-child(1){transition-delay:0s}
+.stagger-scale.visible > *:nth-child(2){transition-delay:0.07s}
+.stagger-scale.visible > *:nth-child(3){transition-delay:0.14s}
+.stagger-scale.visible > *:nth-child(4){transition-delay:0.21s}
+.stagger-scale.visible > *:nth-child(5){transition-delay:0.28s}
+.stagger-scale.visible > *:nth-child(6){transition-delay:0.35s}
+.stagger-scale.visible > *{opacity:1;transform:scale(1) translateY(0)}
+.stagger-blur > *{
+opacity:0;filter:blur(8px);transform:translateY(15px);
+transition:opacity 0.8s var(--ease-out-expo),filter 1s var(--ease-out-expo),transform 0.8s var(--ease-out-expo);
+}
+.stagger-blur.visible > *:nth-child(1){transition-delay:0s}
+.stagger-blur.visible > *:nth-child(2){transition-delay:0.12s}
+.stagger-blur.visible > *:nth-child(3){transition-delay:0.24s}
+.stagger-blur.visible > *{opacity:1;filter:blur(0);transform:translateY(0)}
+.stagger-pop > *{
+opacity:0;transform:scale(0.5);
+transition:opacity 0.5s var(--ease-out-expo),transform 0.7s cubic-bezier(0.34,1.56,0.64,1);
+}
+.stagger-pop.visible > *:nth-child(1){transition-delay:0s}
+.stagger-pop.visible > *:nth-child(2){transition-delay:0.06s}
+.stagger-pop.visible > *:nth-child(3){transition-delay:0.12s}
+.stagger-pop.visible > *:nth-child(4){transition-delay:0.18s}
+.stagger-pop.visible > *:nth-child(5){transition-delay:0.24s}
+.stagger-pop.visible > *{opacity:1;transform:scale(1)}
+.stagger-draw > *{
+opacity:0;transform:translateY(40px) scale(0.95);
+transition:opacity 0.8s var(--ease-out-expo),transform 0.9s var(--ease-out-expo);
+}
+.stagger-draw.visible > *:nth-child(1){transition-delay:0s}
+.stagger-draw.visible > *:nth-child(2){transition-delay:0.15s}
+.stagger-draw.visible > *:nth-child(3){transition-delay:0.3s}
+.stagger-draw.visible > *:nth-child(4){transition-delay:0.45s}
+.stagger-draw.visible > *{opacity:1;transform:translateY(0) scale(1)}
+.stagger-soft > *{
+opacity:0;transform:translateY(20px);
+transition:opacity 0.9s ease,transform 0.9s ease;
+}
+.stagger-soft.visible > *:nth-child(1){transition-delay:0s}
+.stagger-soft.visible > *:nth-child(2){transition-delay:0.1s}
+.stagger-soft.visible > *:nth-child(3){transition-delay:0.2s}
+.stagger-soft.visible > *:nth-child(4){transition-delay:0.3s}
+.stagger-soft.visible > *{opacity:1;transform:translateY(0)}
+.stagger-clip > *{
+opacity:0;transform:translateY(30px) scale(0.97);
+transition:opacity 0.8s var(--ease-out-expo),transform 1.1s var(--ease-out-expo);
+}
+.stagger-clip.visible > *:nth-child(1){transition-delay:0s}
+.stagger-clip.visible > *:nth-child(2){transition-delay:0.15s}
+.stagger-clip.visible > *:nth-child(3){transition-delay:0.3s}
+.stagger-clip.visible > *{opacity:1;transform:translateY(0) scale(1)}
+/* ============ TEXT GRADIENT SHIMMER ============ */
+.shimmer{
+background:linear-gradient(
+110deg,
+var(--color-copper-light) 0%,
+var(--color-gold-light) 20%,
+var(--color-copper-light) 40%,
+var(--color-copper-light) 100%
+);
+background-size:200% 100%;
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+animation:shimmer 3s ease-in-out infinite;
+}
+@keyframes shimmer{
+0%{background-position:200% 0}
+100%{background-position:-200% 0}
+}
+/* ============ NOISE TEXTURE OVERLAY ============ */
+body::before{
+content:'';position:fixed;inset:0;z-index:9998;
+pointer-events:none;
+opacity:var(--noise-opacity);
+background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+background-repeat:repeat;
+transition:opacity 0.4s;
+}
+</style>
+<script src="https://cdn.tailwindcss.com"></script>
+
+</head>
+  <body class="">
+    <!-- Cursor Glow -->
+    <div class="cursor-glow" id="cursorGlow" style="left: 1040px; top: 634px;"></div>
+
+    <!-- Navigation -->
+    <nav class="nav" id="nav">
+      <div class="container nav-inner">
+        <a href="#" class="nav-logo">VOLNA Residences</a>
+
+        <div class="nav-links">
+          <a href="#philosophy" class="nav-link">О проекте</a>
+          <a href="#services" class="nav-link">Инфраструктура</a>
+          <a href="#projects" class="nav-link">Планировки</a>
+          <a href="#process" class="nav-link">Инвестиции</a>
+
+          <a href="#journal" class="nav-link">Отделка</a>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <a href="#contact" class="nav-cta hidden md:block">
+            <i class="nav-cta-shimmer"></i>
+            <span class="">Узнать цены</span>
+          </a>
+
+          <!-- Theme Toggle Button -->
+          <button id="themeToggle" class="w-[38px] h-[38px] flex items-center justify-center rounded-full border border-[rgba(193,127,89,0.3)] text-[var(--color-copper-light)] hover:border-[var(--color-copper)] hover:bg-[rgba(193,127,89,0.08)] transition-all cursor-pointer z-10" aria-label="Toggle Theme">
+            <iconify-icon icon="solar:sun-linear" class="text-lg hidden" id="iconSun"></iconify-icon>
+            <iconify-icon icon="solar:moon-linear" class="text-lg" id="iconMoon"></iconify-icon>
+          </button>
+
+          <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Mobile Overlay -->
+    <div class="nav-mobile-overlay" id="navMobile">
+      <a href="#philosophy" class="nav-link">О проекте</a>
+      <a href="#services" class="nav-link">Инфраструктура</a>
+      <a href="#projects" class="nav-link">Планировки</a>
+      <a href="#process" class="nav-link">Инвестиции</a>
+
+      <a href="#journal" class="nav-link">Отделка</a>
+      <a href="#contact" class="nav-cta" style="margin-top:1rem">
+        <span>Узнать цены</span>
+      </a>
+    </div>
+
+    <!-- Hero -->
+    <section class="hero" id="hero" style="align-items: flex-start; padding-top: clamp(8rem, 18vh, 12rem);">
+      <div class="hero-bg">
+        <div class="hero-bg-image" role="img" aria-label="Luxury Resort Pool and Modern Architecture Rendering" style="background: url('https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/c0b79ccc-3862-4252-a096-18b0ad95f225_1600w.jpg') center/cover no-repeat;"></div>
+        <div class="hero-bg-overlay"></div>
+      </div>
+      <div class="container hero-content">
+        <div class="hero-tag">
+          <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:buildings-bold" class="iconify iconify--solar">
+            <path fill="currentColor" fill-rule="evenodd" d="M15 2h2c1.886 0 2.828 0 3.414.586S21 4.114 21 6v15.25h1a.75.75 0 0 1 0 1.5H2a.75.75 0 0 1 0-1.5h1V9c0-1.886 0-2.828.586-3.414S5.114 5 7 5h4c1.886 0 2.828 0 3.414.586S15 7.114 15 9v12.25h1.5V8.91c0-.865 0-1.659-.087-2.304c-.095-.711-.32-1.463-.938-2.08c-.618-.619-1.37-.844-2.08-.94c-.637-.085-1.418-.086-2.269-.086c.084-.387.225-.68.46-.914C12.172 2 13.114 2 15 2M5.25 8A.75.75 0 0 1 6 7.25h6a.75.75 0 0 1 0 1.5H6A.75.75 0 0 1 5.25 8m0 3a.75.75 0 0 1 .75-.75h6a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75m0 3a.75.75 0 0 1 .75-.75h6a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75M9 18.25a.75.75 0 0 1 .75.75v2.25h-1.5V19a.75.75 0 0 1 .75-.75" clip-rule="evenodd"></path>
+          </svg>
+          Премиальный курорт в Сочи
+        </div>
+        <h1 class="hero-title">
+          Первая береговая линия
+          <br class="">
+          в
+          <em style="filter: drop-shadow(0 5px 12px rgba(0,0,0,1))" class="">
+            Сочи
+          </em>
+        </h1>
+        <p class="hero-description">VOLNA Residences — масштабный курортный проект. <br class=""> Готовые сервисные апартаменты с пассивным доходом от 5 000 000 ₽ в год.
+</p>
+        <div class="hero-actions">
+          <a href="#projects" class="btn-hero-webgl" id="heroBtn">
+            <canvas id="heroBtnCanvas" width="220" height="51"></canvas>
+            <span class="btn-hero-webgl-text">
+              Получить планировки
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:arrow-right-linear" class="iconify iconify--solar">
+                <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 12h16m0 0l-6-6m6 6l-6 6"></path>
+              </svg>
+            </span>
+          </a>
+          <a href="#philosophy" class="btn btn-outline">
+            <span class="">Скачать презентацию</span>
+          </a>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <div class="hero-stat-number">50 м</div>
+            <div class="hero-stat-label">До берега моря</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat-number">6</div>
+            <div class="hero-stat-label">Отелей на территории</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat-number">10 га</div>
+            <div class="hero-stat-label">Площадь курорта</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Philosophy -->
+    <section class="philosophy section" id="philosophy">
+      <div class="container">
+        <div class="philosophy-grid">
+          <div class="philosophy-image reveal-clip-left">
+            <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/fd94331e-d343-42f7-a761-6a4ff8236725_1600w.webp" alt="Sustainable building with living green wall and natural stone facade" loading="lazy" class="bg-center object-cover">
+          </div>
+          <div class="philosophy-text">
+            <div class="section-label reveal-slide-right">О проекте</div>
+            <h2 class="section-title reveal-slide-right reveal-delay-1">
+              Новый уровень
+              <em>курортной жизни</em>
+            </h2>
+            <p class="philosophy-quote reveal-slide-right reveal-delay-2">
+              "Истинная роскошь — это
+              <span>безупречный сервис</span>
+              и гармония с окружающей природой."
+            </p>
+            <p class="philosophy-desc reveal-slide-right reveal-delay-3">
+              VOLNA Residences — масштабный инвестиционный проект на первой
+              береговой линии. Комплекс спроектирован для тех, кто ценит
+              эстетику, приватность и высочайший уровень отельного обслуживания.
+            </p>
+            <div class="philosophy-features reveal-slide-right reveal-delay-4">
+              <div class="philosophy-feature">
+                <div class="philosophy-feature-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:leaf-bold" class="iconify iconify--solar">
+                    <path fill="currentColor" d="M11.25 2.083a3.5 3.5 0 0 0-.713.243C6.553 4.188 4 9.395 4 13.856c0 4.24 3.183 7.724 7.25 8.109zm1.5 19.882c4.067-.385 7.25-3.868 7.25-8.108q0-.61-.063-1.234l-7.187 7.188zM18.26 7.18a13.4 13.4 0 0 0-1.34-2.04l-4.17 4.17v3.38zm-2.352-3.15a9.2 9.2 0 0 0-2.445-1.704a3.5 3.5 0 0 0-.713-.243v5.106zm3.028 4.594l-6.186 6.187v2.878l6.75-6.75l.132-.132a15 15 0 0 0-.696-2.183"></path>
+                  </svg>
+                </div>
+                <div class="philosophy-feature-text">
+                  <h4 class="">Рассрочка 0%</h4>
+                  <p class="">
+                    Уникальные условия покупки напрямую от застройщика. Плановая
+                    сдача комплекса в 2027 году.
+                  </p>
+                </div>
+              </div>
+              <div class="philosophy-feature">
+                <div class="philosophy-feature-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:pallete-2-bold" class="iconify iconify--solar">
+                    <path fill="currentColor" fill-rule="evenodd" d="M10.847 21.934C5.867 21.362 2 17.133 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10c0 5.157-3.283 4.733-6.086 4.37c-1.618-.209-3.075-.397-3.652.518c-.395.626.032 1.406.555 1.929a1.673 1.673 0 0 1 0 2.366c-.523.523-1.235.836-1.97.751M11.085 7a1.5 1.5 0 1 1-3 0a1.5 1.5 0 0 1 3 0M6.5 13a1.5 1.5 0 1 0 0-3a1.5 1.5 0 0 0 0 3m11 0a1.5 1.5 0 1 0 0-3a1.5 1.5 0 0 0 0 3m-3-4.5a1.5 1.5 0 1 0 0-3a1.5 1.5 0 0 0 0 3" clip-rule="evenodd"></path>
+                  </svg>
+                </div>
+                <div class="philosophy-feature-text">
+                  <h4 class="">Готовая отделка</h4>
+                  <p class="">
+                    Апартаменты сдаются с премиальным ремонтом, меблировкой и
+                    встроенной бытовой техникой.
+                  </p>
+                </div>
+              </div>
+              <div class="philosophy-feature">
+                <div class="philosophy-feature-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:compass-big-bold" class="iconify iconify--solar">
+                    <path fill="currentColor" fill-rule="evenodd" d="M3.554 21.529c1.797 1.221 4.943-.038 11.236-2.554c1.342-.537 2.013-.806 2.54-1.267q.201-.177.378-.378c.461-.527.73-1.198 1.267-2.54c2.515-6.293 3.775-9.44 2.554-11.236a4.1 4.1 0 0 0-1.083-1.083c-1.797-1.221-4.944.037-11.236 2.554c-1.342.537-2.013.806-2.54 1.267q-.201.177-.378.378c-.461.527-.73 1.198-1.267 2.54c-2.517 6.292-3.775 9.439-2.554 11.236c.29.426.657.793 1.083 1.083M8.25 12a3.75 3.75 0 1 1 7.5 0a3.75 3.75 0 0 1-7.5 0m1.5 0a2.25 2.25 0 1 1 4.5 0a2.25 2.25 0 0 1-4.5 0" clip-rule="evenodd" class=""></path>
+                  </svg>
+                </div>
+                <div class="philosophy-feature-text">
+                  <h4 class="">Круглогодичный спрос</h4>
+                  <p class="">
+                    Мягкий климат Сочи и развитая инфраструктура обеспечивают
+                    стабильный арендный доход.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="gradient-hr">
+
+    <!-- Services -->
+    <section class="services section" id="services">
+      <div class="container">
+        <div class="services-header reveal">
+          <div class="">
+            <div class="section-label">Инфраструктура</div>
+            <h2 class="section-title">
+              Курорт
+              <em class="">внутри</em>
+              курорта
+            </h2>
+          </div>
+          <p class="">
+            Вам не придется покидать территорию комплекса, чтобы насладиться
+            идеальным отдыхом на побережье.
+          </p>
+        </div>
+        <div class="services-grid stagger-scale">
+          <div class="service-card reveal-child">
+            <div class="service-card-number">01</div>
+            <div class="service-card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:buildings-2-bold" class="iconify iconify--solar">
+                <path fill="currentColor" fill-rule="evenodd" d="M21.25 8.5c0-1.404 0-2.107-.337-2.611a2 2 0 0 0-.552-.552c-.441-.295-1.034-.332-2.115-.336q.005.438.004.91V7.25h1a.75.75 0 0 1 0 1.5h-1v1.5h1a.75.75 0 0 1 0 1.5h-1v1.5h1a.75.75 0 0 1 0 1.5h-1v6.5h-1.5V6c0-1.886 0-2.828-.586-3.414S14.636 2 12.75 2h-2c-1.886 0-2.828 0-3.414.586S6.75 4.114 6.75 6v15.25h-1.5v-6.5h-1a.75.75 0 0 1 0-1.5h1v-1.5h-1a.75.75 0 0 1 0-1.5h1v-1.5h-1a.75.75 0 0 1 0-1.5h1V5.91q-.001-.47.004-.91c-1.081.005-1.674.042-2.115.337a2 2 0 0 0-.552.552C2.25 6.393 2.25 7.096 2.25 8.5v12.75h-.5a.75.75 0 0 0 0 1.5h20a.75.75 0 0 0 0-1.5h-.5zM9 11.75a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1-.75-.75m0 3a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1-.75-.75m2.75 3.5a.75.75 0 0 1 .75.75v2.25H11V19a.75.75 0 0 1 .75-.75M9 6.25a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 0 1.5h-4A.75.75 0 0 1 9 6.25m0 3a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 0 1.5h-4A.75.75 0 0 1 9 9.25" clip-rule="evenodd"></path>
+              </svg>
+            </div>
+            <h3>SPA и Бани</h3>
+            <p>
+              Панорамная баня с видом на море, премиальные спа-ритуалы и
+              просторные массажные кабинеты.
+            </p>
+          </div>
+          <div class="service-card reveal-child" style="--mouse-x: 395px; --mouse-y: 241.21875px;">
+            <div class="service-card-number">02</div>
+            <div class="service-card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:sofa-2-bold" class="iconify iconify--solar">
+                <path fill="currentColor" d="M7 13v-1a3 3 0 0 0-2.993-3c.008-.328.027-.566.07-.78A4 4 0 0 1 7.22 5.077C7.606 5 8.07 5 9 5h2.25v8zm5.75 0H17v-1a3 3 0 0 1 2.993-3a4.6 4.6 0 0 0-.07-.78a4 4 0 0 0-3.143-3.143C16.394 5 15.93 5 15 5h-2.25z"></path>
+                <path fill="currentColor" d="M18.444 18H5.556a3.6 3.6 0 0 1-.806-.092V19a.75.75 0 0 1-1.5 0v-1.849A3.55 3.55 0 0 1 2 14.444V12a2 2 0 1 1 4 0v1.2a.8.8 0 0 0 .8.8h10.4a.8.8 0 0 0 .8-.8V12a2 2 0 1 1 4 0v2.444a3.55 3.55 0 0 1-1.25 2.707V19a.75.75 0 0 1-1.5 0v-1.092a3.6 3.6 0 0 1-.806.092"></path>
+              </svg>
+            </div>
+            <h3 class="">5 Открытых бассейнов</h3>
+            <p class="">
+              Круглогодичные инфинити-бассейны с подогревом и морской водой,
+              окруженные лаунж-зонами.
+            </p>
+          </div>
+          <div class="service-card reveal-child" style="--mouse-x: 5px; --mouse-y: 207.21875px;">
+            <div class="service-card-number">03</div>
+            <div class="service-card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:streets-map-point-bold" class="iconify iconify--solar">
+                <path fill="currentColor" d="M21.89 7.172C22 8.433 22 10.006 22 12c0 4.134 0 6.455-.987 7.951L15.06 14zm-1.938 13.84L14 15.06l-6.828 6.83C8.433 22 10.006 22 12 22c4.134 0 6.456 0 7.952-.988"></path>
+                <path fill="currentColor" fill-rule="evenodd" d="M12 2c4.714 0 7.071 0 8.535 1.464c.504.504.835 1.114 1.052 1.889L5.353 21.587c-.775-.217-1.385-.548-1.889-1.052C2 19.072 2 16.714 2 12s0-7.071 1.464-8.536C4.93 2 7.286 2 12 2M5.5 8.757c0 1.785 1.117 3.868 2.86 4.613c.406.173.874.173 1.28 0c1.743-.745 2.86-2.828 2.86-4.613C12.5 6.958 10.933 5.5 9 5.5S5.5 6.958 5.5 8.757" clip-rule="evenodd"></path>
+                <path fill="currentColor" d="M10.5 9a1.5 1.5 0 1 1-3 0a1.5 1.5 0 0 1 3 0"></path>
+              </svg>
+            </div>
+            <h3 class="">Рестораны и Бары</h3>
+            <p class="">
+              Авторская кухня, винная комната и закрытый сигарный клуб
+              исключительно для резидентов.
+            </p>
+          </div>
+          <div class="service-card reveal-child" style="--mouse-x: 433px; --mouse-y: 224px;">
+            <div class="service-card-number">04</div>
+            <div class="service-card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:lightbulb-bolt-bold" class="iconify iconify--solar">
+                <path fill="currentColor" fill-rule="evenodd" d="M11.5 2C7.358 2 4 5.436 4 9.674c0 2.273.966 4.315 2.499 5.72c.51.467.889.814 1.157 1.066a15 15 0 0 1 .4.39l.033.036c.237.3.288.376.318.446s.053.16.112.54c.024.15.026.406.026 1.105v.03c0 .409 0 .762.026 1.051c.027.306.087.61.248.895c.18.319.438.583.75.767c.278.165.575.226.874.254c.283.026.628.026 1.028.026h.058c.4 0 .745 0 1.028-.026c.3-.028.595-.09.875-.254a2.07 2.07 0 0 0 .749-.767c.16-.285.22-.588.248-.895c.026-.29.026-.642.025-1.051v-.03c0-.699.003-.955.026-1.105c.06-.38.082-.47.113-.54c.03-.07.081-.147.318-.446l.008-.01l.025z" clip-rule="evenodd"></path>
+              </svg>
+            </div>
+            <h3 class="">Медицинский центр</h3>
+            <p class="">
+              Передовые оздоровительные программы и премиум-диагностика на
+              современном оборудовании.
+            </p>
+          </div>
+          <div class="service-card reveal-child" style="--mouse-x: 193px; --mouse-y: 217px;">
+            <div class="service-card-number">05</div>
+            <div class="service-card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:home-angle-bold" class="iconify iconify--solar">
+                <path fill="currentColor" d="M12 2.25a.75.75 0 0 1 .453.153l9 7A.75.75 0 0 1 21 10.59V20.5a1.5 1.5 0 0 1-1.5 1.5H15a.75.75 0 0 1-.75-.75v-4.5a1.5 1.5 0 0 0-1.5-1.5h-1.5a1.5 1.5 0 0 0-1.5 1.5v4.5A.75.75 0 0 1 9 22H4.5A1.5 1.5 0 0 1 3 20.5V10.59a.75.75 0 0 1 .297-.587l9-7A.75.75 0 0 1 12 2.25"></path>
+              </svg>
+            </div>
+            <h3 class="">Спорт и Серфинг</h3>
+            <p class="">
+              Фитнес-клубы, теннисные корты, зоны для йоги и профессиональная
+              школа серфинга.
+            </p>
+          </div>
+          <div class="service-card reveal-child">
+            <div class="service-card-number">06</div>
+            <div class="service-card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" width="1em" height="1em" viewBox="0 0 24 24" data-icon="solar:armchair-bold" class="iconify iconify--solar">
+                <path fill="currentColor" d="M7.75 4.5a3.25 3.25 0 0 1 6.5 0v3.75h-6.5zm8 0a4.75 4.75 0 0 0-9.5 0v4.25H4v1.5a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5v-1.5h-2.25zM5.5 13.25v2.333a2.417 2.417 0 0 0 2.417 2.417h8.166A2.417 2.417 0 0 0 18.5 15.583v-2.333H20v2.333A3.917 3.917 0 0 1 16.083 19.5H7.917A3.917 3.917 0 0 1 4 15.583v-2.333zM6.5 210m13 0a1 1 0 1 1-2 0a1 1 0 0 1 2 0"></path>
+              </svg>
+            </div>
+            <h3 class="">Детский клуб</h3>
+            <p class="">
+              Развивающие интерактивные пространства, кинотеатр и ежедневная
+              анимация для детей.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Marquee Divider -->
+    <div class="marquee-section">
+      <div class="marquee-track">
+        <div class="marquee-item">
+          <span>5-Звездочный Сервис</span>
+          <div class="marquee-dot"></div>
+          <span>Первая Линия</span>
+          <div class="marquee-dot"></div>
+          <span>Сдача в 2027</span>
+          <div class="marquee-dot"></div>
+          <span>Доход от 5 млн ₽</span>
+          <div class="marquee-dot"></div>
+          <span>Рассрочка 0%</span>
+          <div class="marquee-dot"></div>
+        </div>
+        <div class="marquee-item">
+          <span>5-Звездочный Сервис</span>
+          <div class="marquee-dot"></div>
+          <span>Первая Линия</span>
+          <div class="marquee-dot"></div>
+          <span>Сдача в 2027</span>
+          <div class="marquee-dot"></div>
+          <span>Доход от 5 млн ₽</span>
+          <div class="marquee-dot"></div>
+          <span>Рассрочка 0%</span>
+          <div class="marquee-dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Featured Projects -->
+    <section class="projects section" id="projects">
+      <div class="container">
+        <div class="projects-header reveal">
+          <div class="section-label">Выбор планировок</div>
+          <h2 class="section-title">
+            Коллекция
+            <em>апартаментов</em>
+          </h2>
+          <p class="projects-subtitle">
+            20 видов планировочных решений: от эргономичных студий до роскошных
+            пентхаусов с террасами.
+          </p>
+        </div>
+
+        <div class="projects-grid stagger-clip">
+          <a href="#" class="project-card">
+            <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&q=80" alt="Modern woodland home" loading="lazy" class="project-card-image">
+            <div class="project-card-overlay"></div>
+            <div class="project-card-content">
+              <div class="project-card-tags">
+                <span class="project-card-tag">Студия</span>
+                <span class="project-card-tag">С отделкой</span>
+              </div>
+              <h3 class="">Студия De Luxe</h3>
+              <p>
+                35 м², балкон с видом на горы. Эргономичное пространство для
+                комфортного отдыха и сдачи в аренду.
+              </p>
+            </div>
+            <div class="project-card-arrow">
+              <iconify-icon icon="solar:arrow-right-up-linear"></iconify-icon>
+            </div>
+          </a>
+
+          <a href="#" class="project-card">
+            <img src="https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=800&q=80" alt="Minimalist interior" loading="lazy" class="project-card-image">
+            <div class="project-card-overlay"></div>
+            <div class="project-card-content">
+              <div class="project-card-tags">
+                <span class="project-card-tag">1 Спальня</span>
+                <span class="project-card-tag">С мебелью</span>
+              </div>
+              <h3>Апартамент 1-Bedroom</h3>
+              <p>
+                55 м², просторная спальня и кухня-гостиная с панорамными окнами
+                и прямым видом на море.
+              </p>
+            </div>
+            <div class="project-card-arrow">
+              <iconify-icon icon="solar:arrow-right-up-linear"></iconify-icon>
+            </div>
+          </a>
+
+          <a href="#" class="project-card">
+            <img src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80" alt="Coastal retreat" loading="lazy" class="project-card-image">
+            <div class="project-card-overlay"></div>
+            <div class="project-card-content">
+              <div class="project-card-tags">
+                <span class="project-card-tag">Пентхаус</span>
+                <span class="project-card-tag">Терраса</span>
+              </div>
+              <h3>Пентхаус с террасой</h3>
+              <p>
+                120 м², эксклюзивный лот на верхнем этаже с приватным бассейном
+                и обзором на 360°.
+              </p>
+            </div>
+            <div class="project-card-arrow">
+              <iconify-icon icon="solar:arrow-right-up-linear"></iconify-icon>
+            </div>
+          </a>
+        </div>
+
+        <div class="text-center mt-12 reveal">
+          <a href="#" class="btn btn-outline">
+            <span>Каталог планировок</span>
+            <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Process -->
+    <section class="process section" id="process">
+      <div class="container">
+        <div class="process-header reveal">
+          <div class="section-label">Инвестиции</div>
+          <h2 class="section-title">
+            Прозрачная
+            <em>модель</em>
+          </h2>
+        </div>
+
+        <div class="process-steps stagger-soft">
+          <div class="process-step">
+            <div class="process-step-number"><span>01</span></div>
+            <h4>Покупка лота</h4>
+            <p>
+              Приобретение премиальной недвижимости на стадии строительства с
+              максимальным потенциалом роста.
+            </p>
+          </div>
+          <div class="process-step">
+            <div class="process-step-number"><span>02</span></div>
+            <h4>Отельное управление</h4>
+            <p>
+              Профессиональный оператор полностью берет на себя поиск
+              арендаторов, клининг и обслуживание.
+            </p>
+          </div>
+          <div class="process-step">
+            <div class="process-step-number"><span>03</span></div>
+            <h4 class="">Стабильный доход</h4>
+            <p>
+              Выплаты от 5 000 000 ₽ в год на ваш счет без личного участия в
+              операционном процессе.
+            </p>
+          </div>
+          <div class="process-step">
+            <div class="process-step-number"><span>04</span></div>
+            <h4>Личный отдых</h4>
+            <p>
+              Возможность бесплатно проживать в своих апартаментах с 5★ сервисом
+              до 4 недель в году.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Floor Plans Section -->
+    <section class="layouts section" style="background-color: var(--color-bg)" id="layouts">
+      <div class="container">
+        <div class="text-center mb-12 md:mb-16">
+          <h2 class="section-title" style="font-size: clamp(1.8rem, 3.5vw, 2.8rem);">
+            Объект отличается большим разнообразием
+            <br class="hidden md:block">
+            <em style="color: var(--color-sage) !important;" class="">
+              планировок
+            </em>
+          </h2>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+          <div class="md:p-8 flex flex-col transition-all duration-500 hover:-translate-y-2 hover:border-[rgba(193,127,89,0.3)] text-center border-[rgba(193,127,89,0.1)] border rounded-2xl pt-6 pr-6 pb-6 pl-6 shadow-xl items-center">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/de56c056-170f-4237-b7e0-f1f4cce4bf7f_1600w.png" alt="План этажа" class="transition-all duration-400 opacity-70 w-full h-full object-cover grayscale" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №1
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span class="">Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span class="">50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span class="">Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span class="">УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/00827de4-f15c-4943-b6fc-1316c15983ea_800w.jpg" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №2
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="flex flex-col gap-3 transition-colors duration-400 text-left w-full border-[rgba(193,127,89,0.15)] border-t mb-8 pt-6 gap-x-3 gap-y-3">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full mt-auto justify-center">
+              <span class="">УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/e36fa4d5-9b4a-4ed8-b170-609052531ba7_800w.jpg" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №3
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=500&q=80" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №4
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=500&q=80" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №5
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=500&q=80" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №6
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/00e8379a-0514-43c1-99c9-94cdf37e0728_1600w.jpg" alt="План этажа" class="transition-all duration-400 opacity-70 w-full h-full object-cover grayscale" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №7
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/00827de4-f15c-4943-b6fc-1316c15983ea_800w.jpg" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №8
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+
+          <div class="bg-[var(--color-bg-elevated)] rounded-2xl p-6 md:p-8 flex flex-col items-center text-center shadow-xl transition-all duration-500 hover:-translate-y-2 border border-[rgba(193,127,89,0.1)] hover:border-[rgba(193,127,89,0.3)]">
+            <div class="bg-[var(--color-sage)] text-[#F5F0EB] text-[0.65rem] font-medium tracking-widest uppercase py-1.5 px-4 rounded-full mb-6">
+              Лучший выбор
+            </div>
+            <div class="w-full mb-6 flex items-center justify-center overflow-hidden rounded-lg aspect-[5/4]">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/e36fa4d5-9b4a-4ed8-b170-609052531ba7_800w.jpg" alt="План этажа" class="w-full h-full object-cover grayscale opacity-70 transition-all duration-400" loading="lazy">
+            </div>
+            <h3 class="text-[var(--color-cream)] text-xl mb-3 transition-colors duration-400" style="font-family: var(--font-display);">
+              ВАРИАНТ №9
+            </h3>
+            <p class="text-[var(--color-text-muted)] text-sm leading-relaxed mb-6 transition-colors duration-400">
+              Пассивный доход от сдачи номера в управление с возможностью
+              проживания 4 недели в году
+            </p>
+            <div class="w-full flex flex-col gap-3 mb-8 text-left border-t border-[rgba(193,127,89,0.15)] pt-6 transition-colors duration-400">
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:buildings-2-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Корпус №2, Этаж №3</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:map-point-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>50 м до моря</span>
+              </div>
+              <div class="flex items-center gap-3 text-[var(--color-text-muted)] text-sm font-medium transition-colors duration-400">
+                <iconify-icon icon="solar:ruler-bold" class="text-[var(--color-sage)] text-lg flex-shrink-0 transition-colors duration-400"></iconify-icon>
+                <span>Площадь: 41.63 м²</span>
+              </div>
+            </div>
+            <button class="btn btn-outline w-full justify-center mt-auto">
+              <span>УЗНАТЬ СТОИМОСТЬ</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials -->
+
+    <!-- Awards Strip -->
+    <div class="awards">
+      <div class="container awards-grid stagger-pop">
+        <div class="award-item">
+          <iconify-icon icon="solar:cup-first-bold-duotone" class="award-icon"></iconify-icon>
+          <span>
+            Высокая
+            <br>
+            Ликвидность
+          </span>
+        </div>
+        <div class="award-item">
+          <iconify-icon icon="solar:leaf-bold-duotone" class="award-icon"></iconify-icon>
+          <span>
+            Надежный
+            <br>
+            Застройщик
+          </span>
+        </div>
+        <div class="award-item">
+          <iconify-icon icon="solar:medal-star-circle-bold-duotone" class="award-icon"></iconify-icon>
+          <span>
+            Отельный
+            <br>
+            Оператор 5★
+          </span>
+        </div>
+        <div class="award-item">
+          <iconify-icon icon="solar:global-bold-duotone" class="award-icon"></iconify-icon>
+          <span>
+            Первая
+            <br>
+            Береговая Линия
+          </span>
+        </div>
+        <div class="award-item">
+          <iconify-icon icon="solar:buildings-3-bold-duotone" class="award-icon"></iconify-icon>
+          <span>
+            Рост Капитала
+            <br>
+            до 30%
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Journal -->
+    <section class="blog section" id="journal">
+      <div class="container">
+        <div class="blog-header reveal">
+          <div>
+            <div class="section-label">Внутреннее пространство</div>
+            <h2 class="section-title">
+              Безупречная
+              <em>отделка</em>
+            </h2>
+          </div>
+          <a href="#" class="btn btn-outline hidden md:inline-flex">
+            <span>Скачать дизайн-проект</span>
+          </a>
+        </div>
+
+        <div class="blog-grid stagger-scale">
+          <article class="blog-card">
+            <div class="blog-card-image-wrap">
+              <img src="https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=600&q=80" alt="Timber architecture detail" class="blog-card-image" loading="lazy">
+            </div>
+            <div class="blog-card-content">
+              <div class="blog-card-meta">
+                <span class="blog-card-tag">Материалы</span>
+                <span class="blog-card-date">Премиум</span>
+              </div>
+              <h3>Премиальные отделочные материалы</h3>
+              <p>
+                Использование натурального камня, массива ценных пород дерева и
+                экологичных покрытий. Дизайн-проект разработан ведущим
+                архитектурным бюро.
+              </p>
+              <a href="#" class="blog-card-link">
+                Смотреть детали
+                <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+              </a>
+            </div>
+          </article>
+
+          <article class="blog-card">
+            <div class="blog-card-image-wrap">
+              <img src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80" alt="Office building interior" class="blog-card-image" loading="lazy">
+            </div>
+            <div class="blog-card-content">
+              <div class="blog-card-meta">
+                <span class="blog-card-tag">Мебель</span>
+                <span class="blog-card-date">Под ключ</span>
+              </div>
+              <h3>Полная меблировка и комплектация</h3>
+              <p>
+                Апартаменты полностью готовы к проживанию или сдаче.
+                Комплектуются дизайнерской мебелью, текстилем премиум-класса и
+                бытовой техникой.
+              </p>
+              <a href="#" class="blog-card-link">
+                Смотреть детали
+                <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+              </a>
+            </div>
+          </article>
+
+          <article class="blog-card">
+            <div class="blog-card-image-wrap">
+              <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/917d6f93-fb36-439a-8c48-884b67b35381_1600w.jpg" alt="Abstract architectural shapes" class="blog-card-image" loading="lazy">
+            </div>
+            <div class="blog-card-content">
+              <div class="blog-card-meta">
+                <span class="blog-card-tag">Технологии</span>
+                <span class="blog-card-date">Smart</span>
+              </div>
+              <h3>Система «Умный Дом»</h3>
+              <p>
+                Интегрированное управление климатом, многоуровневым освещением,
+                шторами и системами безопасности напрямую с вашего смартфона.
+              </p>
+              <a href="#" class="blog-card-link">
+                Смотреть детали
+                <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+              </a>
+            </div>
+          </article>
+        </div>
+
+        <div class="text-center mt-10 md:hidden reveal">
+          <a href="#" class="btn btn-outline">
+            <span>Скачать дизайн-проект</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" id="contact">
+      <div class="cta-bg">
+        <div class="cta-bg-image"></div>
+      </div>
+      <div class="container cta-content reveal-zoom">
+        <div class="section-label" style="margin-bottom:2rem;justify-content:center;">
+          Готовы инвестировать?
+        </div>
+        <h2 class="cta-title">
+          Инвестируйте в
+          <em>курорт будущего</em>
+        </h2>
+        <p class="cta-text">
+          Оставьте заявку, чтобы получить бизнес-план доходности, закрытый
+          каталог планировок и индивидуальные условия покупки.
+        </p>
+        <div class="mt-4">
+          <form class="flex flex-col gap-4 max-w-md mx-auto w-full" onsubmit="event.preventDefault()">
+            <div class="flex flex-col gap-4 sm:flex-row">
+              <input type="text" placeholder="Имя" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-lg px-4 py-3 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+              <input type="tel" placeholder="Телефон" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-lg px-4 py-3 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+            </div>
+            <input type="email" placeholder="Email" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-lg px-4 py-3 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+            <button type="submit" class="btn-glow w-full justify-center mt-2 border-none cursor-pointer flex items-center">
+              <span class="w-full text-center">Получить расчет доходности</span>
+            </button>
+            <p class="text-[0.7rem] text-[var(--color-text-subtle)] mt-2 text-center">
+              Нажимая кнопку, вы соглашаетесь с политикой конфиденциальности.
+            </p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-grid reveal-soft">
+          <div class="footer-brand">
+            <div class="footer-logo">VOLNA Residences</div>
+            <p>
+              Масштабный инвестиционный проект в Сочи. Готовые сервисные
+              апартаменты премиум-класса с доходом от 5 000 000 ₽ в год.
+            </p>
+            <div class="footer-social">
+              <a href="#" aria-label="Instagram">
+                <iconify-icon icon="fa6-brands:instagram"></iconify-icon>
+              </a>
+              <a href="#" aria-label="LinkedIn">
+                <iconify-icon icon="fa6-brands:linkedin-in"></iconify-icon>
+              </a>
+              <a href="#" aria-label="Pinterest">
+                <iconify-icon icon="fa6-brands:pinterest-p"></iconify-icon>
+              </a>
+              <a href="#" aria-label="Twitter">
+                <iconify-icon icon="fa6-brands:x-twitter"></iconify-icon>
+              </a>
+            </div>
+          </div>
+
+          <div class="footer-column">
+            <h4>Меню</h4>
+            <ul>
+              <li><a href="#philosophy">О проекте</a></li>
+              <li><a href="#services">Инфраструктура</a></li>
+              <li><a href="#projects">Планировки</a></li>
+              <li><a href="#process">Модель дохода</a></li>
+              <li><a href="#journal">Отделка</a></li>
+            </ul>
+          </div>
+
+          <div class="footer-column">
+            <h4>Контакты</h4>
+            <ul>
+              <li>
+                <a href="mailto:hello@volna-sochi.ru">hello@volna-sochi.ru</a>
+              </li>
+              <li><a href="tel:+78000000000">+7 (800) 000-00-00</a></li>
+              <li>
+                <a href="#">
+                  г. Сочи,
+                  <br>
+                  Курортный проспект, 1
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="footer-column">
+            <h4>Презентация</h4>
+            <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.6;">
+              Оставьте свои контакты, чтобы получить подробную презентацию
+              проекта и прайс-лист.
+            </p>
+            <form class="flex flex-col gap-3" onsubmit="event.preventDefault()">
+              <input type="text" placeholder="Имя" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-md px-4 py-2.5 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+              <input type="tel" placeholder="Телефон" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-md px-4 py-2.5 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+              <input type="email" placeholder="Email" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-md px-4 py-2.5 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+              <button type="submit" class="bg-[var(--color-copper)] hover:bg-[var(--color-terracotta)] rounded-md px-4 py-3 flex items-center justify-center transition-colors text-xs tracking-widest uppercase font-medium border-none cursor-pointer mt-1 text-black">
+                <span>Получить презентацию</span>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="footer-bottom reveal-soft">
+          <p>© 2024 VOLNA Residences. Все права защищены.</p>
+          <div class="footer-bottom-links">
+            <a href="#">Политика конфиденциальности</a>
+            <a href="#">Оферта</a>
+            <a href="#">Файлы Cookie</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Mobile Navigation Toggle
+      const navToggle = document.getElementById('navToggle');
+      const navMobile = document.getElementById('navMobile');
+      const navLinks = document.querySelectorAll('.nav-mobile-overlay .nav-link, .nav-mobile-overlay .nav-cta');
+
+      navToggle.addEventListener('click', () => {
+        navMobile.classList.toggle('active');
+        document.body.style.overflow = navMobile.classList.contains('active') ? 'hidden' : '';
+      });
+
+      navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+          navMobile.classList.remove('active');
+          document.body.style.overflow = '';
+        });
+      });
+
+      // Navigation Background on Scroll
+      const nav = document.getElementById('nav');
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 50) {
+          nav.classList.add('scrolled');
+        } else {
+          nav.classList.remove('scrolled');
+        }
+      });
+
+      // Theme Toggle Functionality
+      const themeToggle = document.getElementById('themeToggle');
+      const iconSun = document.getElementById('iconSun');
+      const iconMoon = document.getElementById('iconMoon');
+      const htmlEl = document.documentElement;
+
+      // Check local storage or system preference on load
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'light' || (!savedTheme && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+        htmlEl.setAttribute('data-theme', 'light');
+        iconSun.classList.remove('hidden');
+        iconMoon.classList.add('hidden');
+      }
+
+      themeToggle.addEventListener('click', () => {
+        const currentTheme = htmlEl.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+        htmlEl.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+
+        if (newTheme === 'light') {
+          iconSun.classList.remove('hidden');
+          iconMoon.classList.add('hidden');
+        } else {
+          iconSun.classList.add('hidden');
+          iconMoon.classList.remove('hidden');
+        }
+      });
+
+      // Cursor Glow Effect
+      const cursorGlow = document.getElementById('cursorGlow');
+      let mouseX = window.innerWidth / 2;
+      let mouseY = window.innerHeight / 2;
+
+      document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+      });
+
+      // Smooth animate cursor to avoid lag
+      function animateCursor() {
+        cursorGlow.style.left = `${mouseX}px`;
+        cursorGlow.style.top = `${mouseY}px`;
+        requestAnimationFrame(animateCursor);
+      }
+      animateCursor();
+
+      // Service Card Hover Effect (Light passing over)
+      document.querySelectorAll('.service-card').forEach(card => {
+        card.addEventListener('mousemove', e => {
+          const rect = card.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          card.style.setProperty('--mouse-x', `${x}px`);
+          card.style.setProperty('--mouse-y', `${y}px`);
+        });
+      });
+
+      // WebGL-like Canvas Animation on Hero Button
+      const canvas = document.getElementById('heroBtnCanvas');
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        let time = 0;
+
+        function drawCanvas() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Draw subtle animated wave/gradient
+          const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+          const stop1 = (Math.sin(time * 0.05) + 1) * 0.5; // Oscillates 0 to 1
+
+          // Using theme-based transparent colors
+          gradient.addColorStop(0, `rgba(193, 127, 89, ${0.1 + stop1 * 0.15})`);
+          gradient.addColorStop(0.5, `rgba(201, 169, 110, ${0.1 + (1-stop1) * 0.15})`);
+          gradient.addColorStop(1, `rgba(193, 127, 89, ${0.1 + stop1 * 0.15})`);
+
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Draw subtle moving particles
+          ctx.fillStyle = 'rgba(245, 240, 235, 0.2)';
+          for(let i = 0; i < 5; i++) {
+            const px = (Math.sin(time * 0.02 + i) * 0.5 + 0.5) * canvas.width;
+            const py = (Math.cos(time * 0.03 + i) * 0.5 + 0.5) * canvas.height;
+            ctx.beginPath();
+            ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          time++;
+          requestAnimationFrame(drawCanvas);
+        }
+        drawCanvas();
+      }
+
+      // Scroll Reveal Intersection Observer
+      const revealElements = document.querySelectorAll(
+        '.reveal, .reveal-clip-left, .reveal-slide-right, .reveal-clip-up, .reveal-pop, .reveal-zoom, .reveal-soft, .stagger-children, .stagger-scale, .stagger-blur, .stagger-pop, .stagger-draw, .stagger-soft, .stagger-clip'
+      );
+
+      const revealOptions = {
+        threshold: 0.15,
+        rootMargin: "0px 0px -50px 0px"
+      };
+
+      const revealObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, revealOptions);
+
+      revealElements.forEach(el => {
+        revealObserver.observe(el);
+      });
+    </script>
+
+    <!-- Lead Capture Modal -->
+    <div id="leadModal" class="fixed inset-0 z-[1000] hidden items-center justify-center opacity-0 transition-all duration-300">
+      <div class="absolute inset-0 bg-[#0F0F0E]/80 backdrop-blur-sm" id="modalOverlay"></div>
+      <div class="relative bg-[var(--color-bg-elevated)] border border-[rgba(193,127,89,0.2)] rounded-2xl max-w-4xl w-full mx-4 shadow-2xl transform scale-95 transition-all duration-300 flex flex-col md:flex-row overflow-hidden" id="modalContent">
+        <button id="closeModal" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] text-[var(--color-copper-light)] hover:bg-[rgba(193,127,89,0.15)] hover:border-[rgba(193,127,89,0.4)] transition-all cursor-pointer z-20">
+          <iconify-icon icon="solar:close-square-linear" class="text-xl"></iconify-icon>
+        </button>
+        <div class="hidden md:block md:w-5/12 relative bg-[var(--color-bg)]">
+          <img src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/c0b79ccc-3862-4252-a096-18b0ad95f225_1600w.jpg" alt="Инвестиции в Сочи" class="absolute inset-0 w-full h-full object-cover">
+          <div class="absolute inset-0 bg-gradient-to-t from-[var(--color-bg-elevated)] via-[rgba(26,25,23,0.4)] to-transparent"></div>
+          <div class="absolute bottom-0 left-0 right-0 p-8 z-10">
+            <h4 class="text-xl font-display text-[var(--color-cream)] mb-3 drop-shadow-lg">
+              Что вы получите:
+            </h4>
+            <ul class="text-[rgba(245,240,235,0.95)] text-sm leading-relaxed drop-shadow-md flex flex-col gap-3">
+              <li class="flex items-start gap-2.5">
+                <iconify-icon icon="solar:check-circle-bold" class="text-[var(--color-copper-light)] text-lg mt-0.5 flex-shrink-0"></iconify-icon>
+                <span>Каталог планировок с актуальными ценами</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <iconify-icon icon="solar:check-circle-bold" class="text-[var(--color-copper-light)] text-lg mt-0.5 flex-shrink-0"></iconify-icon>
+                <span>Подробная финансовая модель (доходность от 5 млн ₽)</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <iconify-icon icon="solar:check-circle-bold" class="text-[var(--color-copper-light)] text-lg mt-0.5 flex-shrink-0"></iconify-icon>
+                <span>Условия беспроцентной рассрочки от застройщика</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center relative">
+          <h3 class="text-2xl font-display text-[var(--color-cream)] mb-2">
+            Получить материалы проекта
+          </h3>
+          <p class="text-[var(--color-text-muted)] text-sm mb-8 leading-relaxed">
+            Оставьте контакты, и мы отправим вам презентацию, планировки и
+            расчет доходности удобным для вас способом. Никакого спама и
+            навязчивых звонков.
+          </p>
+          <form class="flex flex-col gap-4" onsubmit="event.preventDefault(); window.closeLeadModal();">
+            <input type="text" placeholder="Ваше имя" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-lg px-4 py-3.5 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+            <input type="tel" placeholder="Номер телефона" class="w-full bg-[rgba(193,127,89,0.06)] border border-[rgba(193,127,89,0.2)] rounded-lg px-4 py-3.5 text-[var(--color-cream)] text-sm outline-none focus:border-[var(--color-copper)] transition-colors placeholder-[var(--color-text-muted)]" required="">
+            <button type="submit" class="btn btn-primary w-full justify-center mt-2 border-none py-3.5">
+              <span class="font-medium tracking-wide">Запросить материалы</span>
+            </button>
+            <p class="text-[0.7rem] text-[var(--color-text-subtle)] mt-3 text-center">
+              Нажимая кнопку, вы соглашаетесь с политикой конфиденциальности.
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const leadModal = document.getElementById('leadModal');
+      const modalOverlayObj = document.getElementById('modalOverlay');
+      const closeModalBtnObj = document.getElementById('closeModal');
+      const modalContentObj = document.getElementById('modalContent');
+
+      window.openLeadModal = function(e) {
+        if(e) e.preventDefault();
+        leadModal.classList.remove('hidden');
+        leadModal.classList.add('flex');
+        // Trigger reflow
+        void leadModal.offsetWidth;
+        leadModal.classList.remove('opacity-0');
+        modalContentObj.classList.remove('scale-95');
+        document.body.style.overflow = 'hidden';
+      };
+
+      window.closeLeadModal = function() {
+        leadModal.classList.add('opacity-0');
+        modalContentObj.classList.add('scale-95');
+        setTimeout(() => {
+          leadModal.classList.remove('flex');
+          leadModal.classList.add('hidden');
+          document.body.style.overflow = '';
+        }, 300);
+      };
+
+      if(modalOverlayObj) modalOverlayObj.addEventListener('click', window.closeLeadModal);
+      if(closeModalBtnObj) closeModalBtnObj.addEventListener('click', window.closeLeadModal);
+
+      // Attach modal to buttons dynamically
+      document.querySelectorAll('.btn, .nav-cta, .btn-hero-webgl').forEach(btn => {
+        // Exclude actual submit buttons from taking this generic click handler just in case
+        if (btn.type !== 'submit') {
+          btn.addEventListener('click', window.openLeadModal);
+        }
+      });
+    </script>
+  
+</body></html>
